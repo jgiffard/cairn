@@ -250,6 +250,39 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('Deleted.'), '400': errorResponse },
       },
     },
+    '/projects/{id}/repos': {
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string' },
+          description: 'Project key (CAI) or uuid.' },
+      ],
+      get: { summary: 'List the repositories claimed by a project', responses: { '200': okResponse('Repositories.') } },
+      post: {
+        summary: 'Claim a repository for this project',
+        description:
+          'How `/context` resolves a project without anything stored on the machine ' +
+          'asking. The remote is normalised server-side, so ssh and https spellings of ' +
+          'one repository reach one row. Idempotent, so a fresh clone can re-run it.',
+        requestBody: body({
+          type: 'object',
+          properties: {
+            remote: { type: 'string', description: 'Origin remote, any spelling.' },
+            rootCommit: {
+              type: 'string',
+              description:
+                'Optional. Repairs a claim after a rename or transfer. Never an identity ' +
+                'on its own: a fork shares it, and a shallow clone reports the wrong one.',
+            },
+          },
+          required: ['remote'],
+        }),
+        responses: { '200': okResponse('Claimed.'), '400': errorResponse },
+      },
+      delete: {
+        summary: 'Release a repository claim',
+        parameters: [{ name: 'remote', in: 'query', required: true, schema: { type: 'string' } }],
+        responses: { '200': okResponse('Released.'), '400': errorResponse },
+      },
+    },
     '/projects/{id}/tasks': {
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Project key or UUID.' },
@@ -588,6 +621,10 @@ export const openapiSpec = () => ({
           { name: 'cwd', in: 'query', schema: { type: 'string' } },
           { name: 'project', in: 'query', schema: { type: 'string' } },
           { name: 'file', in: 'query', schema: { type: 'string' } },
+          { name: 'repo', in: 'query', schema: { type: 'string' },
+            description:
+              'Origin remote. Resolves the project where a path cannot: a second clone, ' +
+              'a moved directory, a worktree. Outranks `cwd`, yields to `project`.' },
         ],
         responses: { '200': okResponse('The briefing.') },
       },
