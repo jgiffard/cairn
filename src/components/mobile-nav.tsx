@@ -53,7 +53,7 @@ export const MobileNav = ({
             role="presentation"
           />
           <aside
-            className="bg-bg-elevated border-border relative flex w-[270px] max-w-[82vw] flex-col border-r shadow-2xl"
+            className="bg-bg-elevated border-border relative flex w-[270px] max-w-[82vw] flex-col border-r raised-lg"
             /* Keyed on the path so a navigation rebuilds it collapsed, rather
                than leaving a filter box half-typed from the last visit. */
             key={pathname}

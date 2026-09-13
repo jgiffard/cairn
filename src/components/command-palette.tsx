@@ -111,7 +111,7 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
       onClick={() => setOpen(false)}
     >
       <Command
-        className="bg-surface border-border pop w-full max-w-[560px] overflow-hidden rounded-lg border shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
+        className="bg-surface border-border pop w-full max-w-[560px] overflow-hidden rounded-lg border raised-lg"
         onClick={(e) => e.stopPropagation()}
         shouldFilter={!searchable}
         loop

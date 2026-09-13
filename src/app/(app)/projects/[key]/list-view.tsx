@@ -37,7 +37,7 @@ const GROUP_LABEL: Record<GroupKey, string> = {
   cancelled: 'Cancelled',
 }
 
-type Tab = 'active' | 'backlog' | 'all' | 'recent' | 'held'
+type Tab = 'active' | 'backlog' | 'all' | 'recent' | 'held' | 'closed'
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   backlog: 'Backlog',
@@ -82,11 +82,16 @@ const Row = ({
   return (
     <div
       className={cn(
-        'group relative flex h-[36px] items-center transition-colors duration-75',
+        'group relative flex h-[36px] items-center transition-colors duration-100 ease-[var(--ease)]',
         // Shift-click paints a text selection across the rows it passes
         // otherwise, which looks like a mistake on every range.
         'select-none',
-        selected ? 'bg-accent-subtle' : 'hover:bg-surface-hover',
+        // A selected row gets an edge as well as a tint. On a list of three
+        // hundred, a background one step off the ground is easy to lose
+        // track of when scrolling; the 2px rule is not.
+        selected
+          ? 'bg-accent-subtle before:bg-accent before:absolute before:inset-y-0 before:left-0 before:w-[2px]'
+          : 'hover:bg-surface-hover',
       )}
     >
       {/* The whole row navigates, but the badges on it are controls. An
@@ -309,12 +314,19 @@ const Row = ({
 
 export const ListView = ({
   tasks,
+  recentlyClosed = [],
   projectKey,
   showProject,
   projects = [],
   toolbarExtra,
 }: {
   tasks: (TaskListItem & { project_key?: string })[]
+  /**
+   * Fetched separately and bounded, not filtered out of `tasks`: almost
+   * everything here is closed, so loading it all to show the last forty would
+   * mean paying for two thousand rows to render forty.
+   */
+  recentlyClosed?: (TaskListItem & { project_key?: string })[]
   projectKey: string
   showProject?: boolean
   /** Offered when a row shows its project, so it can be moved from the list. */
@@ -367,13 +379,20 @@ export const ListView = ({
       if (e.key === '2') setTab('backlog')
       if (e.key === '3') setTab('all')
       if (e.key === '4') setTab('recent')
+      if (e.key === '5') setTab('closed')
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
+  // The closed tab reads from its own list. Every other tab is a view of the
+  // open work, and mixing finished tasks into "All" would change what that has
+  // always meant.
+  const source = tab === 'closed' ? recentlyClosed : tasks
+
   const filtered = useMemo(() => {
-    const byTab = tasks.filter((t) => {
+    const byTab = source.filter((t) => {
+      if (tab === 'closed') return true
       if (tab === 'active')
         return t.status === 'doing' || t.status === 'in-review' || t.status === 'todo'
       if (tab === 'backlog') return t.status === 'backlog'
@@ -387,7 +406,7 @@ export const ListView = ({
         .toLowerCase()
         .includes(q),
     )
-  }, [tasks, tab, query])
+  }, [source, tab, query])
 
   const groups = useMemo(() => {
     if (tab === 'recent') {
@@ -405,10 +424,10 @@ export const ListView = ({
       TASK_STATUSES.map((status) => ({
         status: status as GroupKey,
         items: filtered.filter((t) => t.status === status),
-        total: tasks.filter((t) => t.status === status).length,
+        total: source.filter((t) => t.status === status).length,
       })).filter((g) => g.items.length > 0)
     )
-  }, [filtered, tasks, tab])
+  }, [filtered, source, tab])
 
   // The rows in display order, which is what a shift-click range means.
   const ordered = useMemo(() => groups.flatMap((g) => g.items.map((t) => t.id)), [groups])
@@ -460,6 +479,11 @@ export const ListView = ({
           <button type="button" onClick={() => setTab('recent')} className={tabClass('recent')}>
             Recent
           </button>
+          {recentlyClosed.length > 0 && (
+            <button type="button" onClick={() => setTab('closed')} className={tabClass('closed')}>
+              Recently closed
+            </button>
+          )}
           {tasks.some((t) => t.claimed_by) && (
             <button type="button" onClick={() => setTab('held')} className={tabClass('held')}>
               Held

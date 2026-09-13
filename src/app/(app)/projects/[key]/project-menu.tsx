@@ -61,7 +61,7 @@ const DeleteDialog = ({
       role="presentation"
     >
       <div
-        className="border-border bg-surface w-full max-w-[420px] rounded-lg border p-5 shadow-2xl"
+        className="border-border bg-surface w-full max-w-[420px] rounded-lg border p-5 raised-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-fg text-[14px] font-medium">Delete {projectKey}?</h2>
@@ -200,7 +200,7 @@ export const ProjectMenu = ({
         <MoreHorizontal size={15} aria-hidden />
       </button>
       {open && (
-        <div className="border-border bg-surface absolute right-0 top-[28px] z-40 w-[180px] overflow-hidden rounded-md border py-1 shadow-xl">
+        <div className="border-border bg-surface absolute right-0 top-[28px] z-40 w-[180px] overflow-hidden rounded-md border py-1 raised">
           <button
             type="button"
             onClick={() => {

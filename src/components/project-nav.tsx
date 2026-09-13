@@ -52,9 +52,13 @@ export const ProjectNav = ({
                 href={href}
                 onClick={onNavigate}
                 className={cn(
-                  'flex h-[28px] items-center gap-2 rounded-md px-2 text-[13px] transition-colors duration-75',
+                  'relative flex h-[28px] items-center gap-2 rounded-md px-2 text-[13px]',
+                  'transition-colors duration-100 ease-[var(--ease)]',
+                  // The active item gets a marker as well as a fill: a raised
+                  // background alone is a very quiet way to answer "where am
+                  // I" on a sidebar of twenty-odd entries.
                   active
-                    ? 'bg-surface-raised text-fg'
+                    ? 'bg-surface-raised text-fg before:bg-accent before:absolute before:inset-y-[6px] before:-left-[2px] before:w-[2px] before:rounded-full'
                     : 'text-fg-muted hover:bg-surface-hover hover:text-fg',
                 )}
               >
@@ -105,9 +109,10 @@ export const ProjectNav = ({
                 href={href}
                 onClick={onNavigate}
                 className={cn(
-                  'group flex h-[28px] items-center gap-2 rounded-md px-2 transition-colors duration-75',
+                  'group relative flex h-[28px] items-center gap-2 rounded-md px-2',
+                  'transition-colors duration-100 ease-[var(--ease)]',
                   active
-                    ? 'bg-surface-raised text-fg'
+                    ? 'bg-surface-raised text-fg before:bg-accent before:absolute before:inset-y-[6px] before:-left-[2px] before:w-[2px] before:rounded-full'
                     : 'text-fg-muted hover:bg-surface-hover hover:text-fg',
                 )}
               >

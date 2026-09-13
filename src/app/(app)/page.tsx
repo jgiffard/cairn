@@ -22,7 +22,7 @@ const Home = async ({ searchParams }: { searchParams: Promise<{ closed?: string 
   if (!user) redirect('/login')
 
   const includeClosed = closed === '1'
-  const [projects, { tasks, closedHidden }, counts] = await Promise.all([
+  const [projects, { tasks, closedHidden, recentlyClosed }, counts] = await Promise.all([
     listProjects(user.id),
     listAllTasks(user.id, { includeClosed }),
     admin()
@@ -75,6 +75,7 @@ const Home = async ({ searchParams }: { searchParams: Promise<{ closed?: string 
             the per-project list — one list implementation, not two. */}
         <ListView
           tasks={tasks}
+          recentlyClosed={recentlyClosed}
           projectKey=""
           showProject
           projects={projects.map((p) => ({ key: p.key, title: p.title }))}

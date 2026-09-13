@@ -13,9 +13,11 @@ import type { TaskListItem } from '@/lib/data'
  */
 export const ViewSwitch = ({
   tasks,
+  recentlyClosed,
   projectKey,
 }: {
   tasks: TaskListItem[]
+  recentlyClosed: TaskListItem[]
   projectKey: string
 }) => {
   const [view, setView] = useState<'board' | 'list'>(() => {
@@ -44,7 +46,7 @@ export const ViewSwitch = ({
       className={cn(
         'grid size-[22px] place-items-center rounded transition-all duration-100',
         view === value
-          ? 'bg-surface text-fg shadow-[0_1px_2px_rgba(0,0,0,0.10)]'
+          ? 'bg-surface text-fg raised-sm'
           : 'text-fg-subtle hover:text-fg',
       )}
     >
@@ -69,6 +71,11 @@ export const ViewSwitch = ({
       </div>
     </div>
   ) : (
-    <ListView tasks={tasks} projectKey={projectKey} toolbarExtra={toggle} />
+    <ListView
+      tasks={tasks}
+      recentlyClosed={recentlyClosed}
+      projectKey={projectKey}
+      toolbarExtra={toggle}
+    />
   )
 }

@@ -276,7 +276,7 @@ export const CrossProjectBoard = ({
 
           <DragOverlay>
             {dragging ? (
-              <div className="bg-surface border-accent w-64 rounded-md border p-2.5 shadow-lg">
+              <div className="bg-surface border-accent w-64 rounded-md border p-2.5 raised-lg">
                 <p className="text-[13px] font-medium">{dragging.title}</p>
               </div>
             ) : null}

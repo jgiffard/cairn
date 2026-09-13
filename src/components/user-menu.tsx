@@ -85,7 +85,7 @@ export const UserMenu = ({ email, onNavigate }: { email: string; onNavigate?: ()
       {open && (
         <div
           role="menu"
-          className="border-border bg-surface absolute bottom-[calc(100%-2px)] left-1.5 right-1.5 z-50 overflow-hidden rounded-md border py-1 shadow-xl"
+          className="border-border bg-surface absolute bottom-[calc(100%-2px)] left-1.5 right-1.5 z-50 overflow-hidden rounded-md border py-1 raised"
         >
           <Link
             href="/settings"

@@ -98,7 +98,7 @@ const Action = <T extends string>({
       {open && (
         <div
           role="menu"
-          className="border-border bg-surface absolute bottom-[32px] left-0 z-50 w-[168px] overflow-hidden rounded-md border py-1 shadow-xl"
+          className="border-border bg-surface absolute bottom-[32px] left-0 z-50 w-[168px] overflow-hidden rounded-md border py-1 raised"
         >
           {options.map((o) => (
             <button
@@ -155,7 +155,7 @@ export const BulkBar = ({
             a scroll container in both directions and clipped its own Status
             and Priority menus — which open *above* it — out of existence.
             The content is ~300px; it wraps rather than scrolls. */}
-        <div className="border-border bg-surface pointer-events-auto flex max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-1 rounded-lg border px-2 py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
+        <div className="border-border bg-surface pointer-events-auto flex max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-1 rounded-lg border px-2 py-1.5 raised-lg">
           <span className="text-fg tabular px-1.5 text-[12px] font-medium">
             {progress === null
               ? `${ids.length} selected`

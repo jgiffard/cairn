@@ -47,7 +47,7 @@ export const LiveUpdates = ({ projectKey }: { projectKey?: string }) => {
         setStale(false)
         router.refresh()
       }}
-      className="bg-accent text-accent-fg pop fixed bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-full px-3 py-1.5 text-[12px] font-medium shadow-lg"
+      className="bg-accent text-accent-fg pop fixed bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-full px-3 py-1.5 text-[12px] font-medium raised"
     >
       Updated elsewhere — refresh
     </button>

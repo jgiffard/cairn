@@ -88,7 +88,7 @@ const FilterMenu = ({
       {open && (
         <div
           role="menu"
-          className="border-border bg-surface absolute top-[32px] left-0 z-50 max-h-[240px] w-[200px] overflow-y-auto rounded-md border py-1 shadow-xl"
+          className="border-border bg-surface absolute top-[32px] left-0 z-50 max-h-[240px] w-[200px] overflow-y-auto rounded-md border py-1 raised"
         >
           {options.map((o) => (
             <button

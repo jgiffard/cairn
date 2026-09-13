@@ -35,7 +35,7 @@ const Row = ({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number) => vo
   return (
     <div
       role="status"
-      className="border-danger/40 bg-surface pointer-events-auto flex max-w-[min(420px,calc(100vw-2rem))] items-start gap-2 rounded-lg border px-3 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+      className="border-danger/40 bg-surface pointer-events-auto flex max-w-[min(420px,calc(100vw-2rem))] items-start gap-2 rounded-lg border px-3 py-2 raised-lg"
     >
       <span className="bg-danger mt-[5px] size-[6px] shrink-0 rounded-full" aria-hidden />
       <p className="text-fg min-w-0 flex-1 text-[12.5px] leading-relaxed break-words">

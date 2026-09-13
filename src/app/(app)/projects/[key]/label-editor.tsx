@@ -87,7 +87,7 @@ export const LabelEditor = ({
 
       {open && (
         <div
-          className="border-border bg-surface absolute top-[24px] right-0 z-50 w-[190px] overflow-hidden rounded-md border py-1 shadow-xl"
+          className="border-border bg-surface absolute top-[24px] right-0 z-50 w-[190px] overflow-hidden rounded-md border py-1 raised"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="max-h-[190px] overflow-y-auto">

@@ -118,7 +118,37 @@ export type TaskListItem = Pick<
   guest?: boolean
 }
 
-export type TaskPage = { tasks: TaskListItem[]; total: number; closedHidden: number }
+export type TaskPage = {
+  tasks: TaskListItem[]
+  total: number
+  closedHidden: number
+  recentlyClosed: TaskListItem[]
+}
+
+/**
+ * The last few things finished, for the tab that asks "what just got done".
+ *
+ * Bounded and fetched separately rather than folded into the list: 94% of
+ * tasks here are closed, so loading them to filter them client-side would mean
+ * paying for two thousand rows to show forty. Ordered by when they were
+ * actually resolved — `updated_at` moves when anything at all is touched, which
+ * puts a task edited today above one finished this morning.
+ */
+const RECENTLY_CLOSED = 40
+const CLOSED = ['done', 'cancelled']
+
+/**
+ * Ordered by when the work was actually finished.
+ *
+ * `updated_at` moves when anything at all is touched, so ordering by it puts a
+ * task somebody edited today above one that was genuinely completed this
+ * morning. Imported rows have no `resolved_at`, hence the fallback.
+ */
+const byWhenFinished = <T extends { order: (c: string, o?: { ascending?: boolean; nullsFirst?: boolean }) => T; limit: (n: number) => unknown }>(q: T) =>
+  q
+    .order('resolved_at', { ascending: false, nullsFirst: false })
+    .order('updated_at', { ascending: false })
+    .limit(RECENTLY_CLOSED)
 
 const PREVIEW_CHARS = 280
 
@@ -142,7 +172,7 @@ export const listTasks = async (
     .eq('project_id', projectId)
   const guestIds = (links ?? []).map((l) => l.task_id as string)
 
-  const [openRows, guestRows, totals] = await Promise.all([
+  const [openRows, guestRows, totals, closedRows] = await Promise.all([
     (() => {
       let q = admin()
         .from('tasks')
@@ -164,6 +194,9 @@ export const listTasks = async (
       .from('tasks')
       .select('status', { count: 'exact', head: false })
       .eq('project_id', projectId),
+    byWhenFinished(
+      admin().from('tasks').select(LIST_COLUMNS).eq('project_id', projectId).in('status', CLOSED),
+    ),
   ])
 
   const all = (totals.data ?? []) as { status: string }[]
@@ -190,6 +223,7 @@ export const listTasks = async (
     tasks,
     total: all.length + guests.length,
     closedHidden: includeClosed ? 0 : all.filter((t) => closedFilter.includes(t.status)).length,
+    recentlyClosed: (((closedRows as { data?: unknown }).data ?? []) as TaskListItem[]).map(clip),
   }
 }
 
@@ -383,7 +417,11 @@ export const listAllTasks = async (
     includeClosed = false,
     limit = 500,
   }: { includeClosed?: boolean; limit?: number } = {},
-): Promise<{ tasks: (TaskListItem & { project_key: string })[]; closedHidden: number }> => {
+): Promise<{
+  tasks: (TaskListItem & { project_key: string })[]
+  closedHidden: number
+  recentlyClosed: (TaskListItem & { project_key: string })[]
+}> => {
   const closed = ['done', 'cancelled']
 
   let q = admin()
@@ -393,13 +431,20 @@ export const listAllTasks = async (
 
   if (!includeClosed) q = q.not('status', 'in', `(${closed.join(',')})`)
 
-  const [rows, totals] = await Promise.all([
+  const [rows, totals, closedRows] = await Promise.all([
     q.order('updated_at', { ascending: false }).limit(limit),
     admin()
       .from('tasks')
       .select('id, project:projects!project_id!inner(owner_user_id)', { count: 'exact', head: true })
       .eq('projects.owner_user_id', userId)
       .in('status', closed),
+    byWhenFinished(
+      admin()
+        .from('tasks')
+        .select(`${LIST_COLUMNS}, project:projects!project_id!inner(key, owner_user_id)`)
+        .eq('projects.owner_user_id', userId)
+        .in('status', closed),
+    ),
   ])
 
   type Row = TaskListItem & { project: { key: string } | { key: string }[] }
@@ -409,7 +454,17 @@ export const listAllTasks = async (
     project_key: (Array.isArray(t.project) ? t.project[0]?.key : t.project?.key) ?? '',
   }))
 
-  return { tasks, closedHidden: includeClosed ? 0 : (totals.count ?? 0) }
+  const withKey = (t: Row) => ({
+    ...t,
+    preview: t.preview ? t.preview.slice(0, PREVIEW_CHARS) : null,
+    project_key: (Array.isArray(t.project) ? t.project[0]?.key : t.project?.key) ?? '',
+  })
+
+  return {
+    tasks,
+    closedHidden: includeClosed ? 0 : (totals.count ?? 0),
+    recentlyClosed: (((closedRows as { data?: unknown }).data ?? []) as Row[]).map(withKey),
+  }
 }
 
 

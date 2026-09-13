@@ -73,7 +73,7 @@ export const ResolutionDialog = ({
       onClick={onCancel}
     >
       <div
-        className="bg-surface border-border w-full max-w-md rounded-lg border p-4 shadow-2xl"
+        className="bg-surface border-border w-full max-w-md rounded-lg border p-4 raised-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-sm font-semibold">

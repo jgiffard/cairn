@@ -28,7 +28,7 @@ const ProjectPage = async ({
   if (!project) notFound()
 
   const includeClosed = closed === '1'
-  const [{ tasks, closedHidden }, entities] = await Promise.all([
+  const [{ tasks, closedHidden, recentlyClosed }, entities] = await Promise.all([
     listTasks(project.id, { includeClosed }),
     entitiesForProject(user.id, project.key),
   ])
@@ -95,7 +95,7 @@ const ProjectPage = async ({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <ViewSwitch tasks={tasks} projectKey={project.key} />
+        <ViewSwitch tasks={tasks} recentlyClosed={recentlyClosed} projectKey={project.key} />
       </div>
       <LiveUpdates projectKey={project.key} />
     </div>
