@@ -1122,8 +1122,13 @@ const commands = {
       // This used to write whatever it was handed. A mistyped key produced a
       // map that resolved to nothing, silently, for as long as it took someone
       // to wonder why the briefing had gone quiet.
-      await request('GET', `/api/v1/projects/${key.toUpperCase()}`)
-      map[dir] = key.toUpperCase()
+      //
+      // Store the key the server came back with rather than the spelling we
+      // were given: this route resolves a uuid too, and a uuid in the map is 36
+      // characters that every later /context rejects outright — which is the
+      // same silence, reached by a route that looks like it validated.
+      const project = await request('GET', `/api/v1/projects/${encodeURIComponent(key)}`)
+      map[dir] = project.key
 
       // Claim the repository too, so a second clone, a moved directory and a
       // worktree all resolve without being mapped again. Soft: an older server
@@ -1132,7 +1137,7 @@ const commands = {
       if (repo) {
         await request(
           'POST',
-          `/api/v1/projects/${key.toUpperCase()}/repos`,
+          `/api/v1/projects/${project.key}/repos`,
           { remote: repo, rootCommit: gitRootCommit(dir) },
           { soft: true },
         )
