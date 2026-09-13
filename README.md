@@ -624,6 +624,23 @@ CI runs all four. The domain vocabulary lives in
 and resolution kinds are defined there once and flow into the API, the OpenAPI document,
 the CLI and the UI.
 
+## Thanks
+
+Cairn is a personal tool, so every contribution from outside it is worth naming.
+
+- **[@webcoder31](https://github.com/webcoder31)** — found that project identity was keyed
+  on a filesystem path, so the briefing went silent in a `git worktree` or a second clone,
+  and sent the fix ([#2](https://github.com/montytorr/cairn/issues/2),
+  [#3](https://github.com/montytorr/cairn/pull/3)); that a key rename orphaned every task
+  ref already written into commits and notes
+  ([#4](https://github.com/montytorr/cairn/issues/4)); and that `next dev` was quietly
+  eating the agent guide's byte budget
+  ([#1](https://github.com/montytorr/cairn/issues/1)).
+
+A report that leads to a fix is credited here the same way a patch is. Finding the problem
+is most of the work — all three of the above were invisible from the inside, because the
+machine that wrote the code had already been set up in a way that hid them.
+
 ## Licence
 
 MIT

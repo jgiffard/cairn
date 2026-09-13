@@ -48,7 +48,7 @@ const fileEnv = () => {
  * old was found writing under the wrong identity exactly once, which was
  * enough.
  */
-const VERSION = '0.1.0'
+const VERSION = '0.2.0'
 
 const FILE_ENV = fileEnv()
 const BASE = (process.env.CAIRN_BASE_URL || FILE_ENV.CAIRN_BASE_URL || 'http://localhost:3000')

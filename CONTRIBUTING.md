@@ -6,8 +6,12 @@ because it is not needed here.
 
 ## Running it
 
-See [`README.md`](./README.md#self-hosting). You need Docker and a Supabase stack
-(Postgres, Auth, Storage).
+See [`README.md`](./README.md#self-hosting). You need Node 22+, Docker and PostgreSQL 17+.
+
+Cairn used to run on Supabase and no longer does — the runtime moved to the native
+PostgreSQL driver, and `migrations/` used to be `supabase/migrations/`. If you find a
+reference to Supabase that reads as a requirement rather than as history, it is stale and
+a PR fixing it is welcome.
 
 ## Before opening a PR
 
@@ -37,9 +41,19 @@ absent from the search vector.
 ProseMirror, so writing an untouched body can rewrite what an agent authored. See
 [`docs/tiptap-markdown-spike.md`](./docs/tiptap-markdown-spike.md).
 
-**The service-role Supabase client bypasses RLS.** Every query made with it must filter
-by owner explicitly. RLS is the browser-side boundary and defence in depth, not what
-protects server-side reads.
+**The `admin()` client bypasses RLS.** It is a PostgREST-compatible adapter over the
+`pg` driver (`src/lib/db/client.ts`) and it connects as the owner, so every query made
+with it must filter by owner explicitly — `.eq('owner_user_id', …)`, or through the
+embedded relation for a join. RLS is the browser-side boundary and defence in depth, not
+what protects server-side reads.
+
+## Credit
+
+Contributions keep their authorship: a PR is merged rather than squashed into a
+maintainer commit, so your commits stay yours in the history and in GitHub's contributor
+graph. Anything that lands is credited by name and issue number in
+[`CHANGELOG.md`](./CHANGELOG.md), and a report that leads to a fix is credited the same
+way as a patch — finding the problem is most of the work.
 
 ## Versions and releases
 

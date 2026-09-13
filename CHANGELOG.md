@@ -7,7 +7,7 @@ Cairn is pre-1.0: the schema, API and CLI are in daily use and stable in practic
 minor bump may still change them. Anything that would break an existing install is called
 out under **Breaking** with what to do about it.
 
-## [Unreleased]
+## [0.2.0] — 2026-09-13
 
 ### Added
 
@@ -111,5 +111,6 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/montytorr/cairn/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/montytorr/cairn/releases/tag/v0.1.0
