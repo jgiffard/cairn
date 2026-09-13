@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react'
 import { currentUser, listProjects } from '@/lib/data'
 import { listSessionAgents, listSessions, projectKeysById } from '@/lib/api/sessions'
 import { groupByDay } from '@/lib/session-grouping'
+import { isMachinePrompt } from '@/lib/session-title'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { PendingLink } from '@/components/pending-link'
 import { SessionControls } from './session-controls'
@@ -18,9 +19,14 @@ const PAGE_SIZE = 40
 const SessionsPage = async ({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string; agent?: string; before?: string }>
+  searchParams: Promise<{
+    project?: string
+    agent?: string
+    before?: string
+    scheduled?: string
+  }>
 }) => {
-  const { project = '', agent = '', before } = await searchParams
+  const { project = '', agent = '', before, scheduled } = await searchParams
   const user = await currentUser()
   if (!user) redirect('/login')
 
@@ -54,7 +60,17 @@ const SessionsPage = async ({
     taskRefs: r.task_refs ?? [],
   }))
 
-  const groups = groupByDay(items)
+  /**
+   * A runtime that wakes itself every few hours fills this page with rows
+   * nobody reads: fourteen of twenty said only "Scheduled run". They are not
+   * worthless — most touched files — but they are not browsable material
+   * either, so they sit behind a count, the way closed tasks do.
+   */
+  const showScheduled = scheduled === '1'
+  const scheduledCount = items.filter((i) => isMachinePrompt(i.request)).length
+  const visible = showScheduled ? items : items.filter((i) => !isMachinePrompt(i.request))
+
+  const groups = groupByDay(visible)
   const oldest = rows.at(-1)?.ended_at
   const hasMore = rows.length === PAGE_SIZE
 
@@ -103,9 +119,30 @@ const SessionsPage = async ({
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {items.length === 0 ? (
+        {scheduledCount > 0 && (
+          <Link
+            href={(() => {
+              const params = new URLSearchParams()
+              if (project) params.set('project', project)
+              if (agent) params.set('agent', agent)
+              if (before) params.set('before', before)
+              if (!showScheduled) params.set('scheduled', '1')
+              const query = params.toString()
+              return query ? `/sessions?${query}` : '/sessions'
+            })()}
+            className="border-border text-fg-subtle hover:text-fg block border-b px-4 py-1.5 text-[11.5px] transition-colors"
+          >
+            {showScheduled
+              ? `Hide ${scheduledCount} scheduled run${scheduledCount === 1 ? '' : 's'}`
+              : `${scheduledCount} scheduled run${scheduledCount === 1 ? '' : 's'} hidden — show`}
+          </Link>
+        )}
+
+        {visible.length === 0 ? (
           <p className="text-fg-subtle px-4 py-12 text-center text-[13px]">
-            No sessions recorded {project || agent ? 'for these filters' : 'yet'}.
+            {scheduledCount > 0
+              ? 'Only scheduled runs on this page.'
+              : `No sessions recorded ${project || agent ? 'for these filters' : 'yet'}.`}
           </p>
         ) : (
           <>
