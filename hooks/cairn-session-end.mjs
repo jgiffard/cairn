@@ -84,12 +84,17 @@ const textOf = (content) => {
 const isHumanTurn = (text) =>
   text &&
   !text.startsWith('<') &&
-  // A runtime talking to itself is not a person asking for something.
-  // OpenClaw prefixes every turn with its own context ("runtime context",
-  // "assembled context"), and wakes the agent on a schedule to check it is
-  // alive. Taking the first user turn recorded those as the request.
+  // A runtime talking to itself is not a person asking for something, and
+  // the session list had become mostly machinery talking to machinery: the
+  // same cron prompt every three hours, context blobs of raw JSON, and the
+  // instruction file being reloaded. None of it is a session anybody will ever
+  // want to read, and each one crowded out the few that were.
   !/^OpenClaw \w+ context for this turn/i.test(text) &&
   !/^Reply with exactly one word/i.test(text) &&
+  !/^\[cron:[0-9a-f-]{8,}/i.test(text) &&
+  !/^Conversation info:/i.test(text) &&
+  !/^#+\s*AGENTS\.md instructions/i.test(text) &&
+  !text.startsWith('<INSTRUCTIONS>') &&
   !text.includes('<system-reminder>') &&
   !text.includes('<command-name>') &&
   !text.includes('<local-command') &&

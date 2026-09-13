@@ -51,7 +51,9 @@ export const AlsoIn = ({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-fg-subtle text-[11px] tracking-wide uppercase">Also in</span>
+        {/* Matches every other label down this sidebar. Uppercase here made
+            one heading shout among six that do not. */}
+        <span className="text-fg-subtle text-[11px] font-medium">Also in</span>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}

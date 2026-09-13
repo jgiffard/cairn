@@ -6,6 +6,7 @@ import { ChevronRight, FileText, ListChecks } from 'lucide-react'
 import { Avatar, ProjectIcon } from '@/components/icons'
 import { MarkdownView } from '@/components/markdown'
 import { timeOfDay } from '@/lib/dates'
+import { sessionTitle } from '@/lib/session-title'
 import { cn, taskRefHref } from '@/lib/utils'
 import type { DayGroup } from '@/lib/session-grouping'
 
@@ -62,9 +63,22 @@ const Row = ({ item }: { item: SessionItem }) => {
             {item.project}
           </span>
         )}
-        <span className="text-fg min-w-0 flex-1 truncate text-[13px]">
-          {item.request ?? <span className="text-fg-subtle italic">No request recorded.</span>}
-        </span>
+        {(() => {
+          const { text, machine } = sessionTitle(item)
+          return (
+            <span
+              className={cn(
+                'min-w-0 flex-1 truncate text-[13px]',
+                machine ? 'text-fg-muted' : 'text-fg',
+              )}
+              // The machine prompt is still what opened the session, so it stays
+              // reachable rather than being hidden outright.
+              title={machine ? (item.request ?? undefined) : undefined}
+            >
+              {text}
+            </span>
+          )
+        })()}
         <span className="text-fg-subtle flex shrink-0 items-center gap-2.5 text-[11px]">
           {item.files.length > 0 && (
             <span className="inline-flex items-center gap-1" title={`${item.files.length} files touched`}>
