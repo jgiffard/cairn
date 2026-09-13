@@ -341,7 +341,7 @@ schemas the routes validate against, so it cannot drift. Browsable at `/api-docs
 
 ```
 /health                         unauthenticated probe; reports the commit it was built from
-/vitals                         whether the memory is still being written, and what looks wrong
+/vitals?hours=24                whether the memory is still being written, and what looks wrong
 /search                         the read half of Cairn-as-memory
 /projects  /projects/{id}       list, create, read, rename, delete
 /projects/{id}/tasks            list and create within a project
