@@ -1,17 +1,40 @@
 import Link from 'next/link'
-import { BookMarked, FileText, ListTodo, MessageSquare, Radio, Shuffle } from 'lucide-react'
+import {
+  BookMarked,
+  CirclePlus,
+  GitCommitHorizontal,
+  ListTodo,
+  MessageSquare,
+  PenLine,
+  Terminal,
+} from 'lucide-react'
 import { Avatar, ProjectIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import type { ActivityRow } from '@/lib/api/activity-feed'
 import { groupActivity, type ActivityGroup } from '@/lib/activity-grouping'
 
-const KIND: Record<ActivityRow['kind'], { label: string; Icon: typeof ListTodo; tone: string }> = {
-  task: { label: 'filed', Icon: ListTodo, tone: 'text-accent' },
-  event: { label: 'changed', Icon: Shuffle, tone: 'text-fg-subtle' },
-  note: { label: 'note', Icon: FileText, tone: 'text-fg-muted' },
-  comment: { label: 'comment', Icon: MessageSquare, tone: 'text-fg-muted' },
-  session: { label: 'session', Icon: Radio, tone: 'text-fg-subtle' },
-  knowledge: { label: 'knowledge', Icon: BookMarked, tone: 'text-status-done' },
+/**
+ * One glyph and one colour per kind, so a mixed feed can be scanned by shape.
+ *
+ * The previous set was picked for availability rather than meaning: Shuffle —
+ * which means reorder — stood for a status change, and Radio, which means
+ * broadcast, stood for an agent working in a terminal. At 13px in a single
+ * grey they were six versions of "something happened".
+ *
+ * `GitCommitHorizontal` is the timeline glyph for a thing that occurred at a
+ * point; `PenLine` is someone writing as they work; `Terminal` is a session.
+ * Each keeps a fixed colour, which is what makes the column sortable by eye.
+ */
+const KIND: Record<
+  ActivityRow['kind'],
+  { label: string; Icon: typeof ListTodo; color: string }
+> = {
+  task: { label: 'filed', Icon: CirclePlus, color: 'var(--accent)' },
+  event: { label: 'changed', Icon: GitCommitHorizontal, color: 'var(--fg-subtle)' },
+  note: { label: 'note', Icon: PenLine, color: 'var(--status-todo)' },
+  comment: { label: 'comment', Icon: MessageSquare, color: 'var(--status-in-review)' },
+  session: { label: 'session', Icon: Terminal, color: 'var(--status-doing)' },
+  knowledge: { label: 'knowledge', Icon: BookMarked, color: 'var(--status-done)' },
 }
 
 /** Where a row leads. A session has no page of its own, and its useful content
@@ -25,7 +48,7 @@ const hrefFor = (row: ActivityRow): string | null => {
 }
 
 const Row = ({ row }: { row: ActivityGroup }) => {
-  const { label, Icon, tone } = KIND[row.kind]
+  const { label, Icon, color } = KIND[row.kind]
   const href = hrefFor(row)
   const time = row.at.slice(11, 16)
 
@@ -34,7 +57,16 @@ const Row = ({ row }: { row: ActivityGroup }) => {
       <span className="text-fg-subtle w-[38px] shrink-0 pt-[2px] text-[11px] tabular-nums">
         {time}
       </span>
-      <Icon size={13} className={cn('mt-[3px] shrink-0', tone)} aria-hidden />
+      {/* A tinted tile rather than a bare glyph: at 13px on a near-black
+          ground a line icon has almost no presence, and the column is the
+          only thing telling twelve identical-looking rows apart. */}
+      <span
+        className="mt-[1px] grid size-[20px] shrink-0 place-items-center rounded-md"
+        style={{ backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`, color }}
+        aria-hidden
+      >
+        <Icon size={12} />
+      </span>
 
       {/* What happened, then the particulars.
           The other way round — a line of avatar, kind, sub-kinds and ref above
@@ -45,7 +77,7 @@ const Row = ({ row }: { row: ActivityGroup }) => {
         <p className="text-fg line-clamp-2 text-[13px] leading-snug">{row.title}</p>
 
         <div className="text-fg-subtle mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px]">
-          <span className={tone}>{label}</span>
+          <span style={{ color }}>{label}</span>
           {row.details
             .filter((d) => d !== label)
             .map((d) => (

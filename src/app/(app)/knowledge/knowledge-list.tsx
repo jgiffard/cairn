@@ -78,59 +78,72 @@ export const KnowledgeList = ({ items }: { items: KnowledgeListItem[] }) => (
           aria-label={item.title}
           className="absolute inset-0 z-0"
         />
-        <div className="hover:bg-surface-hover flex min-w-0 flex-col gap-1 px-3 py-2.5 transition-colors sm:px-4">
-          <div className="pointer-events-none flex min-w-0 items-center gap-2">
-            <span
-              className={cn(
-                'min-w-0 flex-1 truncate text-[13px]',
-                item.superseded ? 'text-fg-muted line-through decoration-1' : 'text-fg',
-              )}
-            >
-              {item.title}
-            </span>
-            {item.verified && (
-              <span title="Verified" className="text-status-in-review shrink-0">
-                <ShieldCheck size={13} aria-hidden />
-              </span>
+        {/* One line, like a task row.
+            Two lines per entry made this the only list in the product with its
+            own rhythm — a knowledge list beside a task list read as two
+            different applications. Everything after the title is metadata and
+            belongs on the same line, ranked right. */}
+        <div className="hover:bg-surface-hover flex h-[40px] min-w-0 items-center gap-2 px-3 transition-colors sm:px-4">
+          <span
+            className={cn(
+              'pointer-events-none min-w-0 flex-1 truncate text-[13px]',
+              item.superseded ? 'text-fg-muted line-through decoration-1' : 'text-fg',
             )}
-            <time
-              dateTime={item.updatedAt}
-              title={fullDateTime(item.updatedAt)}
-              className="text-fg-subtle tabular hidden shrink-0 text-[12px] sm:block"
-            >
-              {shortDate(item.updatedAt)}
-            </time>
-          </div>
+          >
+            {item.title}
+          </span>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-            <span className="pointer-events-none">
-              <Scope item={item} />
+          {item.verified && (
+            <span title="Verified" className="text-status-in-review pointer-events-none shrink-0">
+              <ShieldCheck size={13} aria-hidden />
             </span>
-            {item.labels.length > 0 && (
-              <span className="pointer-events-none flex flex-wrap items-center gap-1">
-                {item.labels.slice(0, 4).map((l) => (
-                  <LabelPill key={l}>{l}</LabelPill>
-                ))}
-                {item.labels.length > 4 && (
-                  <span className="text-fg-subtle">+{item.labels.length - 4}</span>
-                )}
+          )}
+
+          {item.loose && (
+            <span className="text-fg-subtle pointer-events-none shrink-0 text-[11px] italic">
+              loose
+            </span>
+          )}
+
+          {item.superseded &&
+            (item.supersededByRef ? (
+              <Link
+                href={`/knowledge/${item.supersededByRef.slug}`}
+                prefetch
+                title={`Superseded by ${item.supersededByRef.title}`}
+                className="text-accent pointer-events-auto relative z-10 hidden shrink-0 items-center gap-1 text-[11px] hover:underline sm:flex"
+              >
+                <ArrowRight size={11} aria-hidden />
+                superseded
+              </Link>
+            ) : (
+              <span className="text-fg-subtle pointer-events-none shrink-0 text-[11px] italic">
+                superseded
               </span>
-            )}
-            {item.loose && <span className="text-fg-subtle italic">loose match</span>}
-            {item.superseded &&
-              (item.supersededByRef ? (
-                <Link
-                  href={`/knowledge/${item.supersededByRef.slug}`}
-                  prefetch
-                  className="text-accent pointer-events-auto relative z-10 inline-flex items-center gap-1 hover:underline"
-                >
-                  <ArrowRight size={11} aria-hidden />
-                  superseded by {item.supersededByRef.title}
-                </Link>
-              ) : (
-                <span className="text-fg-subtle pointer-events-none italic">superseded</span>
+            ))}
+
+          {item.labels.length > 0 && (
+            <span className="pointer-events-none hidden shrink-0 items-center gap-1 lg:flex">
+              {item.labels.slice(0, 3).map((l) => (
+                <LabelPill key={l}>{l}</LabelPill>
               ))}
-          </div>
+              {item.labels.length > 3 && (
+                <span className="text-fg-subtle text-[11px]">+{item.labels.length - 3}</span>
+              )}
+            </span>
+          )}
+
+          <span className="pointer-events-none hidden shrink-0 sm:block">
+            <Scope item={item} />
+          </span>
+
+          <time
+            dateTime={item.updatedAt}
+            title={fullDateTime(item.updatedAt)}
+            className="text-fg-subtle tabular hidden w-[46px] shrink-0 text-right text-[12px] md:block"
+          >
+            {shortDate(item.updatedAt)}
+          </time>
         </div>
       </li>
     ))}
