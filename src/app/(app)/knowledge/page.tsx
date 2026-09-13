@@ -140,13 +140,13 @@ const KnowledgePage = async ({
           and "entity" means nothing to someone meeting it here for the first
           time. Said once, at the top, rather than in a tooltip nobody opens. */}
       {!query && (
-        <p className="border-border text-fg-subtle border-b px-4 py-2 text-[12px] leading-relaxed">
+        <p className="border-border text-fg-subtle bg-bg-elevated border-b px-4 py-2 text-[11.5px] leading-relaxed">
           Scope is how widely a fact applies:{' '}
           <span className="text-fg-muted">a project</span> (true of that codebase),{' '}
           <span className="text-fg-muted">an entity</span> — a grouping a fact can be true
           of, like a business, a stack or a subsystem — or{' '}
-          <span className="text-fg-muted">global</span>, true everywhere. Narrower wins, so
-          a project fact is shown ahead of one that merely applies to it.
+          <span className="text-fg-muted">everywhere</span>. Narrower wins, so a project
+          fact is shown ahead of one that merely applies to it.
         </p>
       )}
 

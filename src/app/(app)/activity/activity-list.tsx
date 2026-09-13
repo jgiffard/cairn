@@ -36,25 +36,40 @@ const Row = ({ row }: { row: ActivityGroup }) => {
       </span>
       <Icon size={13} className={cn('mt-[3px] shrink-0', tone)} aria-hidden />
 
+      {/* What happened, then the particulars.
+          The other way round — a line of avatar, kind, sub-kinds and ref above
+          the content — meant every row opened with five pieces of chrome in the
+          same grey before saying anything, and a timeline you cannot skim by
+          content is a list of timestamps. */}
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {row.actor && <Avatar name={row.actor} size={14} />}
-          <span className="text-fg-subtle text-[11px]">{label}</span>
+        <p className="text-fg line-clamp-2 text-[13px] leading-snug">{row.title}</p>
+
+        <div className="text-fg-subtle mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px]">
+          <span className={tone}>{label}</span>
           {row.details
             .filter((d) => d !== label)
             .map((d) => (
-              <span key={d} className="text-fg-subtle text-[11px]">
-                · {d.replace(/_/g, ' ')}
-              </span>
+              <span key={d}>· {d.replace(/_/g, ' ')}</span>
             ))}
           {row.project_key && (
             <span className="flex shrink-0 items-center gap-1">
+              <span aria-hidden>·</span>
               <ProjectIcon size={10} projectKey={row.project_key.split(',')[0]} />
-              <span className="text-fg-subtle font-mono text-[11px]">{row.ref}</span>
+              <span className="text-fg-muted font-mono">{row.ref}</span>
+            </span>
+          )}
+          {row.actor && (
+            <span className="flex shrink-0 items-center gap-1">
+              <span aria-hidden>·</span>
+              {/* Small enough to identify without announcing itself: on a feed
+                  where one agent writes most rows, a filled avatar on every
+                  line is the loudest thing on the page and the least
+                  informative. */}
+              <Avatar name={row.actor} size={11} />
+              <span className="truncate">{row.actor}</span>
             </span>
           )}
         </div>
-        <p className="text-fg mt-0.5 line-clamp-2 text-[13px] leading-snug">{row.title}</p>
       </div>
     </div>
   )
@@ -81,7 +96,7 @@ export const ActivityList = ({ rows }: { rows: ActivityRow[] }) => {
     <div>
       {[...days].map(([day, items]) => (
         <section key={day}>
-          <h2 className="border-border bg-surface text-fg-muted sticky top-0 z-10 border-y px-4 py-1.5 text-[12px]">
+          <h2 className="border-border bg-bg-elevated text-fg sticky top-0 z-10 border-y px-4 py-2 text-[12px] font-medium">
             {new Date(`${day}T12:00:00Z`).toLocaleDateString('en-GB', {
               weekday: 'long',
               day: 'numeric',

@@ -22,23 +22,50 @@ export type KnowledgeListItem = {
   loose?: boolean
 }
 
+/**
+ * How widely a fact applies, in one shape.
+ *
+ * A project used to render as an icon and a key, an entity as bare text, and
+ * global as a grey italic word — three treatments for one field, so the column
+ * read as three unrelated things rather than one answer at three widths.
+ */
+const Chip = ({ children }: { children: React.ReactNode }) => (
+  <span className="border-border bg-surface text-fg-muted inline-flex h-[18px] shrink-0 items-center gap-1 rounded-full border px-1.5 text-[10.5px] whitespace-nowrap">
+    {children}
+  </span>
+)
+
 const Scope = ({ item }: { item: KnowledgeListItem }) => {
   if (item.projects.length > 0) {
     return (
       <span className="inline-flex flex-wrap items-center gap-1">
         {item.projects.map((p) => (
-          <span key={p} className="text-fg-muted inline-flex items-center gap-1">
-            <ProjectIcon size={11} projectKey={p} />
+          <Chip key={p}>
+            <ProjectIcon size={10} projectKey={p} />
             {p}
-          </span>
+          </Chip>
         ))}
       </span>
     )
   }
   if (item.entities.length > 0) {
-    return <span className="text-fg-muted">{item.entities.join(', ')}</span>
+    return (
+      <span className="inline-flex flex-wrap items-center gap-1">
+        {item.entities.map((e) => (
+          <Chip key={e}>
+            <span className="bg-fg-subtle size-[5px] rounded-full" aria-hidden />
+            {e}
+          </Chip>
+        ))}
+      </span>
+    )
   }
-  return <span className="text-fg-subtle italic">global</span>
+  return (
+    <Chip>
+      <span className="bg-fg-subtle size-[5px] rounded-full opacity-60" aria-hidden />
+      everywhere
+    </Chip>
+  )
 }
 
 export const KnowledgeList = ({ items }: { items: KnowledgeListItem[] }) => (

@@ -31,9 +31,15 @@ const Row = ({ label, value, hint }: { label: string; value: string; hint?: stri
   </div>
 )
 
+/**
+ * Headings outrank their rows.
+ *
+ * These were the faintest text on a page whose rows are near-white, so the
+ * sections read as an undifferentiated column of numbers with some grey in it.
+ */
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <section className="mb-6">
-    <h2 className="text-fg-subtle mb-1.5 text-[11px] font-medium tracking-[0.04em] uppercase">
+  <section className="mb-7">
+    <h2 className="text-fg-muted mb-2 text-[11px] font-semibold tracking-[0.07em] uppercase">
       {title}
     </h2>
     {children}
