@@ -317,16 +317,36 @@ const projectForDir = (dir) => {
   return best?.[1] ?? null
 }
 
-const gitRoot = (dir) => {
+const git = (dir, args) => {
   try {
-    return execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
+    return (
+      execFileSync('git', ['-C', dir, ...args], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim() || null
+    )
   } catch {
     return null
   }
 }
+
+const gitRoot = (dir) => git(dir, ['rev-parse', '--show-toplevel'])
+
+/**
+ * The repository this directory belongs to, as the server will know it.
+ *
+ * `origin` because that is what a clone writes. Sent raw: reducing spellings
+ * to one repository is the server's rule, so the CLI, the MCP facade and an
+ * import cannot drift apart on it.
+ */
+const gitRemote = (dir) => git(dir, ['remote', 'get-url', 'origin'])
+
+/**
+ * Deliberately not read on the resolution path: `rev-list --max-parents=0`
+ * walks the whole history, which is milliseconds here and seconds on a large
+ * repository, and the briefing hook can afford neither.
+ */
+const gitRootCommit = (dir) => git(dir, ['rev-list', '--max-parents=0', 'HEAD'])?.split('\n').pop()
 
 const splitList = (v) => {
   if (v === undefined || v === true) return []
@@ -1080,6 +1100,10 @@ const commands = {
     params.set('cwd', cwd)
     const project = flags.project ?? projectForDir(cwd)
     if (project) params.set('project', project)
+    // Costs one local git call and answers where the map cannot: a second
+    // clone, a moved directory, a worktree.
+    const repo = gitRemote(cwd)
+    if (repo) params.set('repo', repo)
     if (flags.file) params.set('file', flags.file)
     const data = await request('GET', `/api/v1/context?${params}`)
     if (FORMAT === 'json') return emit(data)
@@ -1100,12 +1124,39 @@ const commands = {
     }
 
     const map = readProjectMap()
-    if (key === 'none') delete map[dir]
-    else map[dir] = key.toUpperCase()
+    let repo = null
+
+    if (key === 'none') {
+      delete map[dir]
+    } else {
+      // This used to write whatever it was handed. A mistyped key produced a
+      // map that resolved to nothing, silently, for as long as it took someone
+      // to wonder why the briefing had gone quiet.
+      //
+      // Store the key the server came back with rather than the spelling we
+      // were given: this route resolves a uuid too, and a uuid in the map is 36
+      // characters that every later /context rejects outright — which is the
+      // same silence, reached by a route that looks like it validated.
+      const project = await request('GET', `/api/v1/projects/${encodeURIComponent(key)}`)
+      map[dir] = project.key
+
+      // Claim the repository too, so a second clone, a moved directory and a
+      // worktree all resolve without being mapped again. Soft: an older server
+      // has no such route, and that is no reason to refuse the local mapping.
+      repo = gitRemote(dir)
+      if (repo) {
+        await request(
+          'POST',
+          `/api/v1/projects/${project.key}/repos`,
+          { remote: repo, rootCommit: gitRootCommit(dir) },
+          { soft: true },
+        )
+      }
+    }
 
     mkdirSync(dirname(PROJECT_MAP_PATH), { recursive: true })
     writeFileSync(PROJECT_MAP_PATH, `${JSON.stringify(map, null, 2)}\n`)
-    emit({ path: dir, project: map[dir] ?? null })
+    emit({ path: dir, project: map[dir] ?? null, repo })
   },
 
   /**

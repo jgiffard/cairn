@@ -9,6 +9,9 @@ const contextQuery = z.object({
   cwd: z.string().max(500).optional(),
   project: z.string().max(10).optional(),
   file: z.string().max(500).optional(),
+  // The origin remote, unnormalised: the rule for reducing spellings to one
+  // repository lives on the server, so every caller reaches the same row.
+  repo: z.string().max(500).optional(),
 })
 
 /**

@@ -2,6 +2,7 @@ import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { listKnowledge } from './knowledge'
 import { contextForFile, type FileContext } from './files'
+import { normaliseRemote, projectKeyFromRepoRows } from './repos'
 
 /**
  * The briefing a session opens with.
@@ -111,12 +112,36 @@ const projectForCwd = async (userId: string, cwd: string): Promise<string | null
   return key ?? null
 }
 
+/**
+ * Which project a repository belongs to.
+ *
+ * Preferred over the cwd heuristic below because it is evidence rather than
+ * inference: the remote is the same string in every clone and every worktree,
+ * where a path is true of one machine only.
+ */
+const projectForRepo = async (userId: string, remote: string): Promise<string | null> => {
+  const { data, error } = await admin()
+    .from('project_repos')
+    .select('project:projects(key)')
+    .eq('owner_user_id', userId)
+    .eq('remote', normaliseRemote(remote))
+    // Two is enough to know it is ambiguous, and cheaper than counting.
+    .limit(2)
+
+  if (error) throw new Error(error.message)
+  // Same cast as projectForCwd below: the embed's shape depends on how the
+  // relationship is inferred, and the client types it loosely either way.
+  return projectKeyFromRepoRows((data ?? []) as unknown as Parameters<typeof projectKeyFromRepoRows>[0])
+}
+
 export const buildContext = async (
   actor: Actor,
-  input: { cwd?: string; project?: string; file?: string },
+  input: { cwd?: string; project?: string; file?: string; repo?: string },
 ): Promise<ContextPayload> => {
   const project =
-    input.project?.toUpperCase() ?? (input.cwd ? await projectForCwd(actor.userId, input.cwd) : null)
+    input.project?.toUpperCase() ??
+    (input.repo ? await projectForRepo(actor.userId, input.repo) : null) ??
+    (input.cwd ? await projectForCwd(actor.userId, input.cwd) : null)
 
   // --- what this agent is still holding ---------------------------------
   const held: ContextPayload['held'] = []
