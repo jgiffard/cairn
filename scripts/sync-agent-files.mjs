@@ -71,6 +71,22 @@ const ARTEFACTS = [
     ],
   },
   {
+    // The repairer, which was the one file it never repaired. It is copied out
+    // of the checkout to a stable path so a scheduled job does not depend on a
+    // working tree that can be moved or checked out to a branch, and that copy
+    // then goes stale exactly like every other copy here did.
+    name: 'maintenance',
+    file: 'scripts/sync-agent-files.mjs',
+    mode: 0o755,
+    targets: [
+      at('/opt/cairn-maintenance/sync-agent-files.mjs', '/opt/cairn-maintenance/sync-agent-files.mjs'),
+      at(
+        join(home, '.cairn/maintenance/sync-agent-files.mjs'),
+        join(home, '.cairn/maintenance/sync-agent-files.mjs'),
+      ),
+    ],
+  },
+  {
     name: 'hook:context',
     file: 'hooks/cairn-context.mjs',
     mode: 0o755,

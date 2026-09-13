@@ -514,17 +514,31 @@ own problems and one that waits to be asked, and each is independent: install no
 or all.
 
 ```bash
-node scripts/install-cron.mjs              # print the block, change nothing
-node scripts/install-cron.mjs --install    # write it into the crontab
+node scripts/install-cron.mjs              # print what would be installed, change nothing
+node scripts/install-cron.mjs --install    # install it
 node scripts/install-cron.mjs --only vitals --install
 node scripts/install-cron.mjs --remove
 ```
 
-Printing is the default on purpose. The lines live between two markers and the installer
-only ever touches what is between them, so it can be re-run without duplicating and
-without disturbing anything else in the crontab — it backs the whole thing up first
-regardless. Any job whose prerequisites are missing on that machine is skipped rather than
-installed broken.
+**cron on Linux, launchd on macOS**, chosen by platform and overridable with `--cron` or
+`--launchd`. The jobs are defined once — a schedule, an environment and a command — and
+each backend renders that, so the two cannot drift apart. macOS gets LaunchAgents in
+`~/Library/LaunchAgents` rather than a crontab: cron still exists there but is deprecated
+and runs outside the user session, where a job cannot reach a per-user PATH and nobody is
+present to answer a privacy prompt.
+
+Printing is the default on purpose. On Linux the lines live between two markers and the
+installer only ever touches what is between them, so it can be re-run without duplicating
+and without disturbing anything else in the crontab — it backs the whole thing up first
+regardless. On macOS each job is its own agent, torn down before being rewritten, because
+launchd does not notice a plist that changed underneath a loaded agent.
+
+Any job whose prerequisites are missing on that machine is skipped rather than installed
+broken, and `--install` places the maintenance script itself if it is not there yet.
+
+Install only what that machine is for. A laptop beside a server usually wants
+`--only agent-files`: `reconcile` and `vitals` are about the instance rather than the
+machine, and running `vitals` in two places reports the same findings twice.
 
 | Job | What it is for |
 |---|---|
@@ -536,7 +550,9 @@ installed broken.
 Host-specific paths come from the environment, because a machine's layout does not belong
 in this repository: `CAIRN_CLI_PATH`, `CAIRN_NODE_PATH`, `CAIRN_LOG_DIR`,
 `CAIRN_SYNC_SCRIPT`, `CAIRN_RAW_BASE`, `CAIRN_HOOKS_DIR`, `CAIRN_OPENCLAW_SESSIONS`, and
-`CAIRN_SYNC_ALSO` for copies outside the running user's home. `CAIRN_NOTIFY_VITALS` and
+`CAIRN_SYNC_ALSO` for copies outside the running user's home. The defaults describe the
+machine rather than one host: on macOS the CLI is looked for in `~/.local/bin`, logs go to
+`~/Library/Logs`, and node is the one running the installer. `CAIRN_NOTIFY_VITALS` and
 `CAIRN_NOTIFY_FILES` name a task to report into; leave them unset and the jobs stay quiet.
 
 Run the jobs under an identity of their own — `CAIRN_AGENT=maintenance` with a matching

@@ -7,6 +7,27 @@ Cairn is pre-1.0: the schema, API and CLI are in daily use and stable in practic
 minor bump may still change them. Anything that would break an existing install is called
 out under **Breaking** with what to do about it.
 
+## [0.3.0] — 2026-09-13
+
+### Added
+
+- Scheduled maintenance installs on macOS, as LaunchAgents rather than a crontab. The jobs
+  were defined as cron lines and the defaults named one host's layout, so on a laptop every
+  one of them skipped — correctly, and uselessly. They are now defined once as a schedule,
+  an environment and a command, rendered by whichever backend the platform calls for, and
+  the defaults describe the machine: `~/.local/bin` for the CLI, `~/Library/Logs` for logs,
+  and the node running the installer. Verified byte-identical against the live Linux
+  crontab before anything else changed.
+
+- `sync-agent-files.mjs` repairs itself. It was the one file it never checked, so the
+  repairer could sit stale indefinitely while reporting everything else healthy.
+
+### Fixed
+
+- A job whose prerequisite was never configured reported `skipping <job>: no  on this
+  machine`, with an empty path where a filename should be — it reads as a bug in the
+  installer rather than as a job this machine was never meant to run.
+
 ## [0.2.0] — 2026-09-13
 
 ### Added
@@ -111,6 +132,7 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/montytorr/cairn/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/montytorr/cairn/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/montytorr/cairn/releases/tag/v0.1.0
