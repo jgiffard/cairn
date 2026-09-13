@@ -27,11 +27,19 @@ describe('the bulk bar is not a scroll container', () => {
     'utf8',
   )
 
-  // The bar itself, identified by its drop shadow.
+  // The bar itself. It used to be identified by a hand-written drop shadow,
+  // which stopped existing the moment the seventeen scattered shadows in the
+  // product were centralised into one class — the guard then passed by finding
+  // nothing, which is the worst way for a guard to fail. `pointer-events-auto`
+  // is structural: the bar sits inside a `pointer-events-none` overlay
+  // precisely so the page beneath stays usable, and it cannot lose that
+  // without ceasing to be the bar.
   const barClasses = source
     .split('\n')
-    .filter((line) => line.includes('shadow-[0_12px_40px') && line.includes('className'))
+    .filter((line) => line.includes('pointer-events-auto') && line.includes('className'))
 
+  // Without this the suite would go green after the bar was renamed, deleted
+  // or restyled, having quietly stopped checking anything at all.
   it('has a bar to check', () => {
     expect(barClasses).toHaveLength(1)
   })
