@@ -11,6 +11,16 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- Renaming a project key is additive: the former key is retained and keeps resolving, so a
+  ref already written into a commit message, a PR title or another agent's note still finds
+  the task. Old links redirect to the live ref, retired keys still linkify in prose, and the
+  task shows what it used to be called — resolution alone would let the lookup succeed while
+  the screen showed a ref the reader had never seen. Reusing a key another project retired is
+  refused, because every `ACME-n` would then point at two tasks. The rename and the record of
+  the old key happen in one statement, so they cannot half-happen.
+
+  Reported by [@webcoder31](https://github.com/webcoder31) in #4.
+
 - The briefing resolves a project from the **repository**, not the path. `~/.cairn/projects.json`
   keyed identity on an absolute path, and the server's fallback on a recorded `cwd` — both
   describe where one machine keeps a checkout, which is not what was being identified. A
@@ -22,6 +32,16 @@ out under **Breaking** with what to do about it.
 
   Thanks to [@webcoder31](https://github.com/webcoder31), who reported it in #2 and sent
   the implementation in #3.
+
+### Fixed
+
+- `next dev` no longer appends a generated block to `AGENTS.md`. The guide is hand-written,
+  read by every agent at session start, and held under 8KB by CI; the block took it to within
+  107 bytes of that budget, so the failure would have landed on an unrelated pull request for
+  a reason appearing nowhere in its diff. `agentRules: false` in `next.config.ts`, with a test
+  pinning both the setting and the upstream switch it depends on.
+
+  Reported by [@webcoder31](https://github.com/webcoder31) in #1.
 
 ### Changed
 

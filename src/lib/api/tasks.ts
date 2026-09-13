@@ -1,5 +1,6 @@
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
+import { projectIdForFormerKey } from './project-keys'
 
 /** Columns returned by `show`. Kept explicit so responses stay predictable. */
 export const TASK_FIELDS =
@@ -61,8 +62,31 @@ export const findTask = async (actor: Actor, raw: string, fields = TASK_FIELDS) 
   // the product into "No task CAIRN-64." for a PGRST201 ambiguity that named
   // its own fix in the response body.
   if (error) throw new Error(`task lookup failed: ${error.message}`)
-  if (!data) return null
-  return data as unknown as Record<string, unknown> & { id: string }
+  if (data) return data as unknown as Record<string, unknown> & { id: string }
+
+  // Not found under that key — but the key may be one the project used to
+  // have. Refs escape into commit messages and other agents' notes, which a
+  // rename cannot reach, so a retired key still resolves. Tried second rather
+  // than first: a live key is never also a retired one, and the common path
+  // should not pay for the rare one.
+  if ('id' in ref) return null
+  const projectId = await projectIdForFormerKey(actor.userId, ref.key)
+  if (!projectId) return null
+
+  const { data: byFormer, error: formerError } = await admin()
+    .from('tasks')
+    .select(select)
+    // The retired key was already resolved within this owner's projects, so
+    // this filter is redundant — and stated anyway, because every read in this
+    // file applies it explicitly and an exception is how one gets forgotten.
+    .eq('projects.owner_user_id', actor.userId)
+    .eq('project_id', projectId)
+    .eq('number', ref.number)
+    .maybeSingle()
+
+  if (formerError) throw new Error(`task lookup failed: ${formerError.message}`)
+  if (!byFormer) return null
+  return byFormer as unknown as Record<string, unknown> & { id: string }
 }
 
 /**

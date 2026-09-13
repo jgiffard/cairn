@@ -18,6 +18,7 @@ import { AttachmentsPanel } from './attachments-panel'
 import { ActivityPanel } from './activity-panel'
 import { ChildrenPanel } from './children-panel'
 import { MobileNavButton } from '@/components/mobile-nav-context'
+import { formerKeysFor, listFormerKeys } from '@/lib/api/project-keys'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,17 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
   if (!Number.isInteger(parsed)) notFound()
 
   const task = await getTask(user.id, key, parsed)
-  if (!task) notFound()
+
+  // The key may be one this project used to have. Refs escape into commit
+  // messages and PR titles, which a rename cannot reach, so an old link lands
+  // on the task and the address bar corrects itself to the live ref.
+  if (!task) {
+    const retired = (await listFormerKeys(user.id)).find(
+      (row) => row.key === key.toUpperCase() && row.current,
+    )
+    if (retired) redirect(`/projects/${retired.current}/tasks/${parsed}`)
+    notFound()
+  }
 
   const [
     notes, comments, attachments, relations, duplicateOf, activity, children, parent,
@@ -47,6 +58,12 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
     listAlsoProjects(task.id),
     listProjects(user.id),
   ])
+
+  // What this task used to be called. An alias that only resolves is half an
+  // answer: the lookup would succeed and the screen would show CAI-42, so a
+  // reader holding ACME-42 from a commit message still could not tell they had
+  // found the right task. Showing both is what lets them connect it by eye.
+  const formerKeys = await formerKeysFor(user.id, task.project.id)
 
   const ref = task.external_ref ?? `${task.project.key}-${task.number}`
 
@@ -83,6 +100,16 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
           </>
         ) : null}
         <span className="text-fg-subtle shrink-0 text-[13px] tabular">{ref}</span>
+        {formerKeys.length > 0 && !task.external_ref ? (
+          <span
+            className="text-fg-subtle hidden shrink-0 text-[11px] tabular sm:inline"
+            title={`This project was renamed. ${formerKeys
+              .map((k) => `${k}-${task.number}`)
+              .join(' and ')} still resolve${formerKeys.length === 1 ? 's' : ''} here.`}
+          >
+            (was {formerKeys.map((k) => `${k}-${task.number}`).join(', ')})
+          </span>
+        ) : null}
         <span className="text-fg hidden max-w-[38ch] truncate text-[13px] sm:block">
           {task.title}
         </span>

@@ -50,17 +50,45 @@ export const PATCH = route<{ id: string }, z.infer<typeof updateProject>>({
       return fail('validation_failed', 'No fields to update.')
     }
 
+    // A key change is not a field update. Every ref already issued under the
+    // old key — in commit messages, PR titles, other agents' notes — has to go
+    // on resolving, so the rename and the record of what the key used to be
+    // happen in one statement rather than two round trips that can half-fail.
+    const { key, ...fields } = body
+    const renaming = key !== undefined && key !== project.key
+
+    if (renaming) {
+      const { error } = await admin().rpc('project_rename_key', {
+        p_project: project.id,
+        p_new_key: key,
+      })
+      if (error) {
+        return failFromDb(error, {
+          '23505':
+            `${key} is already in use, or was retired by another project. ` +
+            `Reusing a retired key would leave every ${key}-n ref pointing at two tasks.`,
+        })
+      }
+    }
+
+    if (Object.keys(fields).length === 0) {
+      const { data } = await admin()
+        .from('projects')
+        .select('id, key, title, description, status')
+        .eq('id', project.id)
+        .single()
+      return ok({ ...(data as object), former_key: renaming ? project.key : undefined })
+    }
+
     const { data, error } = await admin()
       .from('projects')
-      .update(body)
+      .update(fields)
       .eq('id', project.id)
       .select('id, key, title, description, status')
       .single()
 
-    if (error) {
-      return failFromDb(error, { '23505': `A project with key ${body.key} already exists.` })
-    }
-    return ok(data)
+    if (error) return failFromDb(error)
+    return ok({ ...(data as object), former_key: renaming ? project.key : undefined })
   },
 })
 

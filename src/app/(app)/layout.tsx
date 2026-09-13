@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { currentUser, listProjects } from '@/lib/data'
+import { listFormerKeys } from '@/lib/api/project-keys'
 import { CommandPalette } from '@/components/command-palette'
 import { AppSidebar } from '@/components/app-sidebar'
 import { TaskCreationProvider } from '@/components/task-creation'
@@ -15,13 +16,22 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
   // the guard ran.
   if (!user) redirect('/login')
 
-  const projects = await listProjects(user.id)
+  const [projects, formerKeys] = await Promise.all([
+    listProjects(user.id),
+    listFormerKeys(user.id),
+  ])
   const email = user.email ?? 'you'
   const projectList = projects.map((p) => ({ key: p.key, title: p.title }))
 
+  // Retired keys linkify too. A bare `ACME-42` in a task body or an agent's
+  // note is matched by pattern against this list, so after a rename it still
+  // looked like a ref, was still a link, and led nowhere — the memory store
+  // breaking its own cross-references.
+  const refKeys = [...projectList.map((p) => p.key), ...formerKeys.map((f) => f.key)]
+
   return (
     <ToastHost>
-      <ProjectKeysProvider keys={projectList.map((p) => p.key)}>
+      <ProjectKeysProvider keys={refKeys}>
         <TaskCreationProvider projects={projectList}>
           <MobileNavProvider email={email} projects={projectList}>
             <div className="bg-bg flex h-dvh">

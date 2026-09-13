@@ -234,7 +234,11 @@ export const openapiSpec = () => ({
           properties: {
             title: { type: 'string' },
             description: { type: ['string', 'null'] },
-            key: { type: 'string', description: 'Changing this changes every task ref.' },
+            key: {
+              type: 'string',
+              description:
+                'Changing this changes every task ref. The former key is retained and keeps resolving, so refs already written into commits and notes still find the task; the response carries `former_key`. A key retired by another project is refused, because reusing it would make those refs ambiguous.',
+            },
             status: { type: 'string', enum: ['active', 'archived'] },
           },
         }),
