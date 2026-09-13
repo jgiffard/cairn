@@ -63,13 +63,37 @@ export const POST = route<{ ref: string }, z.infer<typeof claimBody>>({
       )
     }
 
-    await admin().from('task_activity_events').insert({
-      task_id: task.id,
-      actor_type: actor.actorType,
-      actor_id: actor.actorId,
-      event: 'claimed',
-      data: { agent, attempt: patch.attempt },
-    })
+    /**
+     * Claiming moves the task to `doing`, and that move has to be recorded
+     * like any other.
+     *
+     * It was not, so history showed a task going straight from `backlog` to
+     * `done` with a claim somewhere in the middle, and any question of the
+     * form "do agents ever start their work" came back wrong. Measured on
+     * seven days of real data, the honest answer turned out to be the reverse
+     * of what the events implied.
+     */
+    const events: Record<string, unknown>[] = [
+      {
+        task_id: task.id,
+        actor_type: actor.actorType,
+        actor_id: actor.actorId,
+        event: 'claimed',
+        data: { agent, attempt: patch.attempt },
+      },
+    ]
+
+    if (patch.status && patch.status !== task.status) {
+      events.push({
+        task_id: task.id,
+        actor_type: actor.actorType,
+        actor_id: actor.actorId,
+        event: 'status_changed',
+        data: { from: task.status, to: patch.status, via: 'claim' },
+      })
+    }
+
+    await admin().from('task_activity_events').insert(events)
 
     return ok(data[0])
   },

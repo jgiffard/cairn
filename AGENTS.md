@@ -74,6 +74,8 @@ cairn checkpoint ACME-42 --summary "migration written, tests not yet run"
 cairn release ACME-42      # or: cairn done ACME-42 --resolution "..."
 ```
 
+- **`claim` sets the status to `doing`.** One command, not two — and claim the task you
+  just filed if you are about to do it, or the work is invisible while it happens.
 - A claim is **execution state** and is independent of `status`. A task can be `doing` and
   unclaimed (a human is on it), or `todo` and claimed.
 - If `claim` fails, another agent holds it — **pick different work**, do not force it.

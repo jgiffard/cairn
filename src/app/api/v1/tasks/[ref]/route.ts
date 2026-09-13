@@ -132,6 +132,32 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       patch.heartbeat_at = null
     }
 
+    /**
+     * Reopening drops the answer with it.
+     *
+     * A resolution is the claim "this is settled, and here is how" — so a task
+     * that is open again while still carrying one is lying twice: the list
+     * shows its answered dot, and `check` offers it as prior work that was
+     * resolved. OD-36 sat in backlog for two days carrying a resolution about
+     * an entirely different task, because an agent corrected a mis-filed close
+     * by reverting the status and the API kept the text.
+     *
+     * The old text is not destroyed — it goes into the activity event, where
+     * the history can still show what was withdrawn.
+     */
+    const reopening =
+      body.status &&
+      !isTerminal(body.status) &&
+      isTerminal(task.status as never) &&
+      body.resolution === undefined
+
+    if (reopening) {
+      patch.resolution = null
+      patch.resolution_kind = null
+      patch.resolved_at = null
+      patch.resolved_by = null
+    }
+
     // Moving happens before the field update so a failure here does not leave
     // half a change applied. It is its own operation, not a column: the
     // number comes from the target project's counter.
@@ -228,6 +254,22 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
     }
 
     await recordActivity(diffTaskEvents(actor, task.id, task, patch))
+
+    // The withdrawn answer, kept where history can still show it.
+    if (reopening && task.resolution) {
+      await recordActivity([
+        {
+          task_id: task.id,
+          actor_type: actor.actorType,
+          actor_id: actor.actorId ?? 'unknown',
+          event: 'resolution_withdrawn',
+          data: {
+            kind: task.resolution_kind ?? null,
+            resolution: String(task.resolution).slice(0, 2000),
+          },
+        },
+      ])
+    }
 
     return ok(alsoProjects ? { ...data, alsoProjects } : data)
   },

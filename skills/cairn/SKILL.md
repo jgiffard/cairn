@@ -117,6 +117,14 @@ checkpoint. `--kind fixed | wont-fix | duplicate | not-reproducible | superseded
 
 A closed task with no recorded answer is invisible to everyone who comes later.
 
+**Check the ref before you close.** A resolution written onto the wrong task is worse than
+no resolution at all: that task now looks answered, and `check` will offer it as prior
+work. It has happened — an audit's findings landed on an unrelated task because the ref
+was one digit out. `cairn show <ref>` costs nothing.
+
+Reopening a task clears its resolution. An open task carrying one claims to be settled
+while it is not; the withdrawn text stays in `cairn history`.
+
 ## 5. Claiming, so agents don't collide
 
 ```bash
@@ -126,9 +134,16 @@ cairn checkpoint ACME-42 --summary "migration written, tests not run"
 cairn release ACME-42
 ```
 
+- **Claiming starts the task.** `claim` sets the status to `doing` for you — there is no
+  second command to remember, and no reason to skip it because it looks like ceremony.
+- **Claim the task you just filed, if you are about to do it.** Filing and closing without
+  claiming leaves the work invisible while it happens; on a machine running more than one
+  agent that is exactly when a second one picks up the same thing.
 - **Exit 9 means pick different work.** Do not force it.
-- A claim is independent of `status` — a task can be `doing` and unclaimed.
-- A lease goes stale after 15 minutes of silence and can then be taken over.
+- A claim is independent of `status` — a task can be `doing` and unclaimed, which is what a
+  human working on it looks like.
+- A lease goes stale after 15 minutes of silence and can then be taken over. Two hours of
+  silence releases it and returns the task to `todo`.
 - Leave a checkpoint before you stop; it is how another agent resumes without your
   transcript.
 
