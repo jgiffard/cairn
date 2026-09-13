@@ -349,6 +349,41 @@
 }
 
 @layer base {
+  /*
+   * Anything that can be clicked says so.
+   *
+   * Tailwind v4 dropped the opinionated `cursor: pointer` on buttons and
+   * follows the browser default instead, which is an arrow. This product has
+   * 73 buttons and had cursor-pointer written on twelve of them, so the rest
+   * — every tab, menu item, filter, toggle and icon action — looked inert
+   * under the mouse while being perfectly clickable.
+   *
+   * Applied once here rather than as a class on every control, because the
+   * failure mode is forgetting, and a rule cannot forget. Backdrops that
+   * dismiss a dialog are deliberately not included: they are an escape hatch,
+   * not a control, and the arrow is the convention.
+   */
+  button:not(:disabled),
+  summary,
+  select:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='menuitem'],
+  [role='option'],
+  [cmdk-item],
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  label:has(> input[type='checkbox']:not(:disabled)) {
+    cursor: pointer;
+  }
+
+  /* And anything that cannot says that too. */
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
   /* Thin, themed, and out of the way.
      The platform scrollbar on a dark surface is a bright slab that draws the
      eye to the edge of the page rather than the content in it. */
