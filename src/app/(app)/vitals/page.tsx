@@ -203,7 +203,10 @@ const VitalsPage = async ({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-5 md:px-6">
+        {/* Left-aligned, like every other page. Centring a dashboard inside a
+              shell that already has a sidebar leaves a dead column beside it
+              and makes the content look unmoored. */}
+          <div className="flex max-w-4xl flex-col gap-5 px-4 py-5 md:px-6">
           {failure ? <p className="text-danger text-[13px]">{failure}</p> : null}
 
           {vitals ? (
