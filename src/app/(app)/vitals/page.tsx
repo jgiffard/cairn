@@ -1,29 +1,100 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { AlertTriangle, Info } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info } from 'lucide-react'
 import { currentUser } from '@/lib/data'
 import {
   assess,
   readMemoryUseFor,
   readVitalsFor,
   readWorkShapeFor,
+  type Finding,
   type MemoryUse,
   type Vitals,
   type WorkShape,
 } from '@/lib/api/vitals'
 import { MobileNavButton } from '@/components/mobile-nav-context'
+import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
+const WINDOWS = [
+  { hours: 24, label: '24h' },
+  { hours: 168, label: '7d' },
+  { hours: 720, label: '30d' },
+]
+
 /**
- * Whether the memory is still being written.
+ * A number worth looking at, at a size that says so.
  *
- * Deliberately uncached, unlike the banner: someone who has opened this page is
- * asking the question now, and a five-minute-old answer is the wrong one to
- * give them.
+ * The page used to render every figure at 12.5px in a column of hairlines, so
+ * "28 sessions recorded" and "18 knowledge written" carried identical weight
+ * and the eye had nowhere to land. Four numbers answer "is this thing well"
+ * and they are the four that get scale.
  */
-const Row = ({ label, value, hint }: { label: string; value: string; hint?: string }) => (
+const Stat = ({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string
+  value: number | string
+  hint?: string
+  tone?: 'good' | 'warn' | 'bad'
+}) => (
+  <div className="border-border bg-surface raised-sm flex flex-col gap-0.5 rounded-lg border px-3.5 py-3">
+    <span className="text-fg-subtle text-[10.5px] font-medium tracking-[0.06em] uppercase">
+      {label}
+    </span>
+    <span
+      className={cn(
+        'tabular text-[26px] leading-none font-semibold',
+        tone === 'bad' && 'text-danger',
+        tone === 'warn' && 'text-status-doing',
+        tone === 'good' && 'text-status-in-review',
+        !tone && 'text-fg',
+      )}
+    >
+      {value}
+    </span>
+    {hint ? <span className="text-fg-subtle text-[11px]">{hint}</span> : null}
+  </div>
+)
+
+/** A section that reads as an object rather than a run of hairlines. */
+const Panel = ({
+  title,
+  note,
+  children,
+}: {
+  title: string
+  note?: string
+  children: React.ReactNode
+}) => (
+  <section className="border-border bg-surface raised-sm overflow-hidden rounded-lg border">
+    <header className="border-border bg-bg-elevated flex items-baseline gap-2 border-b px-3.5 py-2">
+      <h2 className="text-fg text-[12px] font-semibold">{title}</h2>
+      {note ? <span className="text-fg-subtle text-[11px]">{note}</span> : null}
+    </header>
+    <div className="px-3.5 py-1">{children}</div>
+  </section>
+)
+
+const Row = ({
+  label,
+  value,
+  hint,
+  emphasis,
+}: {
+  label: string
+  value: string
+  hint?: string
+  emphasis?: boolean
+}) => (
   <div className="border-border flex items-baseline justify-between gap-4 border-b py-2 last:border-0">
-    <span className="text-fg-muted text-[12.5px]">{label}</span>
+    <span className={cn('min-w-0 truncate text-[12.5px]', emphasis ? 'text-fg' : 'text-fg-muted')}>
+      {label}
+    </span>
     <span className="text-fg tabular shrink-0 text-[12.5px]">
       {value}
       {hint ? <span className="text-fg-subtle"> {hint}</span> : null}
@@ -32,23 +103,66 @@ const Row = ({ label, value, hint }: { label: string; value: string; hint?: stri
 )
 
 /**
- * Headings outrank their rows.
+ * The answer to the only question this page exists for, said once and loudly.
  *
- * These were the faintest text on a page whose rows are near-white, so the
- * sections read as an undifferentiated column of numbers with some grey in it.
+ * Previously a grey sentence indistinguishable from the rows beneath it, which
+ * is a strange way to report that everything is fine — and a worse one to
+ * report that it is not.
  */
-const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <section className="mb-7">
-    <h2 className="text-fg-muted mb-2 text-[11px] font-semibold tracking-[0.07em] uppercase">
-      {title}
-    </h2>
-    {children}
-  </section>
-)
+const Verdict = ({ findings }: { findings: Finding[] }) => {
+  const alarms = findings.filter((f) => f.severity === 'alarm')
+  const warnings = findings.filter((f) => f.severity === 'warning')
 
-const VitalsPage = async () => {
+  if (findings.length === 0) {
+    return (
+      <div className="border-status-in-review/35 bg-status-in-review/8 flex items-start gap-2.5 rounded-lg border px-4 py-3.5">
+        <CheckCircle2 size={16} className="text-status-in-review mt-[1px] shrink-0" aria-hidden />
+        <div className="min-w-0">
+          <p className="text-fg text-[13.5px] font-medium">The memory is being written</p>
+          <p className="text-fg-muted mt-0.5 text-[12.5px] leading-relaxed">
+            Sessions are being recorded, work is being closed, and every agent that wrote last
+            week has written today.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {[...alarms, ...warnings].map((f) => (
+        <div
+          key={f.code}
+          className={cn(
+            'flex items-start gap-2.5 rounded-lg border px-4 py-3',
+            f.severity === 'alarm'
+              ? 'border-danger/40 bg-danger-subtle'
+              : 'border-status-doing/35 bg-status-doing/8',
+          )}
+        >
+          {f.severity === 'alarm' ? (
+            <AlertTriangle size={15} className="text-danger mt-[2px] shrink-0" aria-hidden />
+          ) : (
+            <Info size={15} className="text-status-doing mt-[2px] shrink-0" aria-hidden />
+          )}
+          <p className="text-fg min-w-0 text-[12.5px] leading-relaxed">{f.message}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const VitalsPage = async ({
+  searchParams,
+}: {
+  searchParams: Promise<{ hours?: string }>
+}) => {
   const user = await currentUser()
   if (!user) redirect('/login')
+
+  const requested = Number((await searchParams).hours)
+  const hours = WINDOWS.some((w) => w.hours === requested) ? requested : 24
+  const window = WINDOWS.find((w) => w.hours === hours)?.label ?? '24h'
 
   let vitals: Vitals | null = null
   let work: WorkShape | null = null
@@ -56,190 +170,169 @@ const VitalsPage = async () => {
   let failure: string | null = null
   try {
     ;[vitals, work, memory] = await Promise.all([
-      readVitalsFor(user.id),
-      readWorkShapeFor(user.id),
-      readMemoryUseFor(user.id),
+      readVitalsFor(user.id, hours),
+      readWorkShapeFor(user.id, hours),
+      readMemoryUseFor(user.id, hours),
     ])
   } catch (error) {
     failure = error instanceof Error ? error.message : 'Could not read the vital signs.'
   }
 
   const findings = vitals ? assess(vitals) : []
-  const window = vitals ? `${vitals.windowHours}h` : '24h'
+  const busiest = Math.max(1, ...(vitals?.agents ?? []).map((a) => a.recent))
 
   return (
     <div className="flex h-dvh flex-col">
       <header className="border-border flex h-[44px] shrink-0 items-center gap-2 border-b px-2.5 md:px-4">
         <MobileNavButton />
         <span className="text-fg text-[13px] font-medium">Vitals</span>
-        <span className="text-fg-subtle text-[13px]">· last {window}</span>
+        <span className="bg-surface-raised ml-auto flex items-center gap-0.5 rounded-md p-0.5">
+          {WINDOWS.map((w) => (
+            <Link
+              key={w.hours}
+              href={w.hours === 24 ? '/vitals' : `/vitals?hours=${w.hours}`}
+              className={cn(
+                'rounded px-2 py-0.5 text-[11.5px] transition-colors',
+                w.hours === hours ? 'bg-surface text-fg' : 'text-fg-muted hover:text-fg',
+              )}
+            >
+              {w.label}
+            </Link>
+          ))}
+        </span>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="max-w-3xl px-4 py-5 md:px-6">
+        <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-5 md:px-6">
           {failure ? <p className="text-danger text-[13px]">{failure}</p> : null}
 
           {vitals ? (
             <>
-              <Section title="What looks wrong">
-                {findings.length === 0 ? (
-                  <p className="text-fg-muted text-[13px]">
-                    Nothing. Sessions are being recorded, work is being closed, and every agent
-                    that wrote last week has written today.
-                  </p>
-                ) : (
-                  <ul className="flex flex-col gap-2">
-                    {findings.map((f) => (
-                      <li
-                        key={f.code}
-                        className={`flex items-start gap-2 rounded-md border px-3 py-2 ${
-                          f.severity === 'alarm'
-                            ? 'border-danger/40 bg-danger-subtle'
-                            : 'border-border bg-surface'
-                        }`}
-                      >
-                        {f.severity === 'alarm' ? (
-                          <AlertTriangle size={13} className="text-danger mt-[3px] shrink-0" aria-hidden />
-                        ) : (
-                          <Info size={13} className="text-fg-subtle mt-[3px] shrink-0" aria-hidden />
-                        )}
-                        <span className="text-fg text-[12.5px] leading-relaxed">{f.message}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Section>
+              <Verdict findings={findings} />
 
-              <Section title="Sessions">
-                <Row
-                  label="recorded"
-                  value={String(vitals.sessions.recent)}
-                  hint={`(${vitals.sessions.baseline} the week before)`}
+              <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+                <Stat
+                  label="Sessions"
+                  value={vitals.sessions.recent}
+                  hint={`${vitals.sessions.recentWithFiles} named a file`}
+                  tone={vitals.sessions.recent === 0 ? 'bad' : undefined}
                 />
-                {/* The count alone stayed healthy through a two-day outage in
-                    which every session that touched a file was rejected. */}
-                <Row
-                  label="naming at least one file"
-                  value={String(vitals.sessions.recentWithFiles)}
-                  hint={`(${vitals.sessions.baselineWithFiles})`}
+                <Stat
+                  label="Closed"
+                  value={vitals.tasks.closed}
+                  hint={`of ${vitals.tasks.opened} opened`}
                 />
-              </Section>
+                <Stat
+                  label="Stuck"
+                  value={work?.stalledTotal ?? vitals.tasks.stalled}
+                  hint={`of ${work?.openTotal ?? '—'} open`}
+                  tone={(work?.stalledTotal ?? vitals.tasks.stalled) > 5 ? 'warn' : undefined}
+                />
+                <Stat label="Held" value={vitals.tasks.held} hint="right now" />
+              </div>
 
-              <Section title="Work">
-                <Row label="tasks opened" value={String(vitals.tasks.opened)} />
-                <Row label="tasks closed" value={String(vitals.tasks.closed)} />
-                <Row label="in progress, nobody holding" value={String(vitals.tasks.stalled)} />
-                <Row label="held right now" value={String(vitals.tasks.held)} />
-                <Row label="claims released automatically" value={String(vitals.autoReleased)} />
-                <Row label="knowledge written" value={String(vitals.knowledgeWritten)} />
-              </Section>
-
-              <Section title="Who wrote">
+              <Panel title="Who wrote" note={`last ${window}, against the week before`}>
                 {vitals.agents.length === 0 ? (
-                  <p className="text-fg-muted text-[13px]">Nobody, in the window or the week before.</p>
+                  <p className="text-fg-muted py-2 text-[12.5px]">Nobody, either window.</p>
                 ) : (
                   vitals.agents.map((a) => (
-                    <Row
-                      key={a.agent}
-                      label={a.agent}
-                      value={String(a.recent)}
-                      hint={`(${a.baseline} the week before)`}
-                    />
+                    <div key={a.agent} className="border-border border-b py-2 last:border-0">
+                      <div className="flex items-baseline justify-between gap-4">
+                        <span className="text-fg text-[12.5px]">{a.agent}</span>
+                        <span className="text-fg tabular shrink-0 text-[12.5px]">
+                          {a.recent}
+                          <span className="text-fg-subtle"> ({a.baseline})</span>
+                        </span>
+                      </div>
+                      {/* Relative volume, which a column of numbers does not
+                          show: one agent writing ten times another is the
+                          shape of the week, not a detail. */}
+                      <div className="bg-surface-raised mt-1.5 h-[3px] overflow-hidden rounded-full">
+                        <div
+                          className="bg-accent h-full rounded-full"
+                          style={{ width: `${Math.max(2, (a.recent / busiest) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
                   ))
                 )}
-              </Section>
+              </Panel>
 
               {work ? (
-                <>
-                  <Section title={`Where work is stuck · ${work.openTotal} open`}>
-                    {work.projects.length === 0 ? (
-                      <p className="text-fg-muted text-[13px]">Nothing open.</p>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-[12.5px]">
-                          <thead>
-                            <tr className="text-fg-subtle border-border border-b text-left text-[11px]">
-                              <th className="py-1.5 font-medium">project</th>
-                              <th className="py-1.5 text-right font-medium">open</th>
-                              <th className="py-1.5 text-right font-medium">stalled</th>
-                              <th className="py-1.5 text-right font-medium">never touched</th>
-                              <th className="py-1.5 text-right font-medium">oldest</th>
+                <Panel
+                  title="Where work is stuck"
+                  note="never touched is filed and not edited since; stalled is in progress with nobody on it"
+                >
+                  {work.projects.length === 0 ? (
+                    <p className="text-fg-muted py-2 text-[12.5px]">Nothing open.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[12.5px]">
+                        <thead>
+                          <tr className="text-fg-subtle border-border border-b text-left text-[10.5px] tracking-[0.05em] uppercase">
+                            <th className="py-1.5 font-medium">project</th>
+                            <th className="py-1.5 text-right font-medium">open</th>
+                            <th className="py-1.5 text-right font-medium">stalled</th>
+                            <th className="py-1.5 text-right font-medium">never touched</th>
+                            <th className="py-1.5 text-right font-medium">oldest</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {work.projects.map((p) => (
+                            <tr key={p.key} className="border-border border-b last:border-0">
+                              <td className="text-fg py-1.5 font-medium">{p.key}</td>
+                              <td className="text-fg tabular py-1.5 text-right">{p.open}</td>
+                              <td
+                                className={cn(
+                                  'tabular py-1.5 text-right',
+                                  p.stalled > 0 ? 'text-danger' : 'text-fg-subtle',
+                                )}
+                              >
+                                {p.stalled}
+                              </td>
+                              <td
+                                className={cn(
+                                  'tabular py-1.5 text-right',
+                                  p.neverTouched > 0 ? 'text-status-doing' : 'text-fg-subtle',
+                                )}
+                              >
+                                {p.neverTouched}
+                              </td>
+                              <td className="text-fg-muted tabular py-1.5 text-right">
+                                {p.oldestDays}d
+                              </td>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {work.projects.map((p) => (
-                              <tr key={p.key} className="border-border border-b last:border-0">
-                                <td className="text-fg py-1.5">{p.key}</td>
-                                <td className="text-fg tabular py-1.5 text-right">{p.open}</td>
-                                <td
-                                  className={`tabular py-1.5 text-right ${p.stalled > 0 ? 'text-danger' : 'text-fg-subtle'}`}
-                                >
-                                  {p.stalled}
-                                </td>
-                                <td className="text-fg-muted tabular py-1.5 text-right">
-                                  {p.neverTouched}
-                                </td>
-                                <td className="text-fg-muted tabular py-1.5 text-right">
-                                  {p.oldestDays}d
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                    <p className="text-fg-subtle mt-2 text-[11px] leading-relaxed">
-                      <strong className="font-medium">Never touched</strong> is filed and not
-                      edited since — nobody has picked it up at all.{' '}
-                      <strong className="font-medium">Stalled</strong> is in progress with nobody
-                      holding it.
-                    </p>
-                  </Section>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Panel>
+              ) : null}
 
-                  <Section title="Held right now">
-                    {work.holding.length === 0 ? (
-                      <p className="text-fg-muted text-[13px]">Nothing is claimed.</p>
-                    ) : (
-                      work.holding.map((h) => (
-                        <Row
-                          key={h.ref}
-                          label={`${h.ref} · ${h.title}`}
-                          value={
-                            h.heldMinutes >= 120
-                              ? `${Math.round(h.heldMinutes / 60)}h`
-                              : `${h.heldMinutes}m`
-                          }
-                          hint={h.agent}
-                        />
-                      ))
-                    )}
-                  </Section>
-
-                  {work.dropped.length > 0 ? (
-                    <Section title="Started and walked away from">
-                      {work.dropped.map((d) => (
-                        <Row key={d.agent} label={d.agent} value={String(d.count)} hint="tasks" />
-                      ))}
-                    </Section>
-                  ) : null}
-
-                  <Section title="Work that came back">
-                    <Row label="reopened after being closed" value={String(work.rework.reopened)} />
+              {work && work.holding.length > 0 ? (
+                <Panel title="Held right now" note={`${work.holding.length} claimed`}>
+                  {work.holding.map((h) => (
                     <Row
-                      label="resolutions revised"
-                      value={String(work.rework.resolutionsRevised)}
+                      key={h.ref}
+                      emphasis
+                      label={`${h.ref} · ${h.title}`}
+                      value={
+                        h.heldMinutes >= 120
+                          ? `${Math.round(h.heldMinutes / 60)}h`
+                          : `${h.heldMinutes}m`
+                      }
+                      hint={h.agent}
                     />
-                    <Row label="filed as a duplicate" value={String(work.rework.duplicatesFiled)} />
-                    <p className="text-fg-subtle mt-2 text-[11px] leading-relaxed">
-                      The one quality signal here that is hard to game: moving it means not
-                      making a mess in the first place.
-                    </p>
-                  </Section>
-                </>
+                  ))}
+                </Panel>
               ) : null}
 
               {memory ? (
-                <Section title="Is the memory being read">
+                <Panel
+                  title="Is the memory being read"
+                  note="a search that widened is one the precise question could not answer"
+                >
                   <Row label="searches" value={String(memory.searches)} />
                   <Row
                     label="that had to guess"
@@ -254,15 +347,9 @@ const VitalsPage = async () => {
                     label="tasks filed without checking first"
                     value={`${memory.tasksFiledWithoutChecking} of ${memory.tasksFiled}`}
                   />
-                  {memory.byAgent.map((a) => (
-                    <Row key={a.agent} label={a.agent} value={String(a.searches)} hint="searches" />
-                  ))}
-
                   {memory.recentMisses.length > 0 ? (
-                    <div className="mt-3">
-                      <p className="text-fg-subtle mb-1 text-[11px] font-medium">
-                        Asked for and not found
-                      </p>
+                    <div className="py-2">
+                      <p className="text-fg-subtle mb-1 text-[11px]">Asked for and not held</p>
                       <ul className="flex flex-col gap-0.5">
                         {memory.recentMisses.map((q) => (
                           <li key={q} className="text-fg-muted truncate text-[12px]">
@@ -272,25 +359,50 @@ const VitalsPage = async () => {
                       </ul>
                     </div>
                   ) : null}
-
-                  <p className="text-fg-subtle mt-2 text-[11px] leading-relaxed">
-                    The premise of Cairn is that an agent checks before starting, and until
-                    now nothing recorded whether that happened. The searches that had to guess
-                    are the informative ones: search runs precise first and widens to an OR of
-                    the terms when that matches nothing, so it almost never comes back empty —
-                    a query about something Cairn had never heard of returned twenty loose
-                    matches. Widening, not emptiness, is what &ldquo;we do not have this&rdquo;
-                    looks like. Counting starts from when this shipped, so the first day is
-                    short by construction.
-                  </p>
-                </Section>
+                </Panel>
               ) : null}
 
+              <div className="grid gap-5 md:grid-cols-2">
+                <Panel title="Sessions" note={`last ${window}`}>
+                  <Row
+                    label="recorded"
+                    value={String(vitals.sessions.recent)}
+                    hint={`(${vitals.sessions.baseline} the week before)`}
+                  />
+                  <Row
+                    label="naming at least one file"
+                    value={String(vitals.sessions.recentWithFiles)}
+                    hint={`(${vitals.sessions.baselineWithFiles})`}
+                  />
+                  <Row label="knowledge written" value={String(vitals.knowledgeWritten)} />
+                  <Row
+                    label="claims released automatically"
+                    value={String(vitals.autoReleased)}
+                  />
+                </Panel>
+
+                {work ? (
+                  <Panel title="Work that came back" note="hard to game: moving it means not making a mess">
+                    <Row label="reopened after closing" value={String(work.rework.reopened)} />
+                    <Row label="resolutions revised" value={String(work.rework.resolutionsRevised)} />
+                    <Row label="filed as a duplicate" value={String(work.rework.duplicatesFiled)} />
+                    {work.dropped.length > 0 ? (
+                      work.dropped.map((d) => (
+                        <Row
+                          key={d.agent}
+                          label={`${d.agent} started and walked away from`}
+                          value={String(d.count)}
+                        />
+                      ))
+                    ) : null}
+                  </Panel>
+                ) : null}
+              </div>
+
               <p className="text-fg-subtle text-[11px] leading-relaxed">
-                Counts cover the last {window}, against the week before it. A count on its own
-                says little — every check here compares the two, scaled to the same length.
-                There is deliberately no ranking of agents: Cairn is their working memory, and a
-                visible score would be something to optimise.
+                Counts cover the last {window}, against the week before it, scaled to the same
+                length — a count alone says nothing. There is deliberately no ranking of agents:
+                Cairn is their working memory, and a visible score would be something to optimise.
               </p>
             </>
           ) : null}

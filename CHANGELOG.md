@@ -11,6 +11,10 @@ out under **Breaking** with what to do about it.
 
 ### Changed
 
+- Vitals reads as a dashboard rather than a column of hairlines: a verdict at the top that
+  says plainly whether anything is wrong, four numbers at a size that admits they matter,
+  and sections as panels. Adds a 24h / 7d / 30d window.
+
 - Migrations moved from `supabase/migrations/` to `migrations/`. The directory was named
   after a dependency the project no longer has — the runtime moved to the native
   PostgreSQL driver — and a newcomer reading the tree would reasonably conclude Supabase
