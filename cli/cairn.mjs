@@ -1124,10 +1124,38 @@ const commands = {
     }
 
     const map = readProjectMap()
-    let repo = null
+    const repo = gitRemote(dir)
+    let claimed = null
 
     if (key === 'none') {
+      // Releasing the repository claim too, because `map <KEY>` made one.
+      // Deleting only the local line left every clone of this repository —
+      // including this one — still resolving, so `map none` reported success
+      // and changed nothing observable: the silent failure this command was
+      // just taught to stop producing.
+      //
+      // The claim belongs to a project, so we need the one that holds it: the
+      // local line if there is one, and otherwise whatever the repository
+      // itself currently resolves to, which is the case a fresh clone hits.
+      const holder =
+        map[dir] ??
+        (repo
+          ? (await request('GET', `/api/v1/context?repo=${encodeURIComponent(repo)}`, undefined, {
+              soft: true,
+            }))?.project
+          : null)
+
       delete map[dir]
+
+      if (repo && holder) {
+        const released = await request(
+          'DELETE',
+          `/api/v1/projects/${holder}/repos?remote=${encodeURIComponent(repo)}`,
+          undefined,
+          { soft: true },
+        )
+        if (released) claimed = { released: repo, from: holder }
+      }
     } else {
       // This used to write whatever it was handed. A mistyped key produced a
       // map that resolved to nothing, silently, for as long as it took someone
@@ -1143,20 +1171,20 @@ const commands = {
       // Claim the repository too, so a second clone, a moved directory and a
       // worktree all resolve without being mapped again. Soft: an older server
       // has no such route, and that is no reason to refuse the local mapping.
-      repo = gitRemote(dir)
       if (repo) {
-        await request(
+        const linked = await request(
           'POST',
           `/api/v1/projects/${project.key}/repos`,
           { remote: repo, rootCommit: gitRootCommit(dir) },
           { soft: true },
         )
+        if (linked) claimed = { linked: repo, to: project.key }
       }
     }
 
     mkdirSync(dirname(PROJECT_MAP_PATH), { recursive: true })
     writeFileSync(PROJECT_MAP_PATH, `${JSON.stringify(map, null, 2)}\n`)
-    emit({ path: dir, project: map[dir] ?? null, repo })
+    emit({ path: dir, project: map[dir] ?? null, repo, ...(claimed ?? {}) })
   },
 
   /**

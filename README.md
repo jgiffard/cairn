@@ -330,7 +330,7 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn reconcile` | Release your own claims that went quiet |
 | `cairn vitals [--all]` | Is the memory still being written — counts against the week before, and what looks wrong |
 | `cairn project rename\|archive\|restore\|delete <KEY>` | Deleting takes every task with it, and demands `--confirm <KEY>` |
-| `cairn map <KEY>` | Tell Cairn which project this directory is |
+| `cairn map <KEY>` | Tell Cairn which project this checkout is. Validates the key, and claims the repository so every other clone and worktree resolves too. `cairn map none` releases both |
 
 `cairn --help` is the full reference.
 

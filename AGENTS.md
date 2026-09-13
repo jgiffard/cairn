@@ -128,7 +128,9 @@ same time, so nothing depends on you remembering.
 **The briefing** is `cairn context` — what you hold, what is in flight around you, where
 the last session in this directory stopped, what is known here. A hook runs it at session
 start; run it by hand when you have lost your place. `cairn map <KEY>` tells Cairn which
-project a checkout belongs to.
+project a checkout belongs to — once per repository, not once per directory: it claims the
+repository itself, so a second clone, a moved directory and a `git worktree` all get the
+same briefing without being mapped again.
 
 ## 8. Before you stop
 
@@ -168,13 +170,3 @@ export CAIRN_API_KEY=sk_live_...          # one key per agent, so writes are att
 ```
 
 Full verb reference: `cairn --help`. Machine-readable API: `GET /api/v1/openapi.json`.
-
-<!-- BEGIN:nextjs-agent-rules -->
-
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->

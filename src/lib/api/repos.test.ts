@@ -28,6 +28,24 @@ describe('normaliseRemote', () => {
     )
   })
 
+  it('is not fooled by a path segment that looks like a port', () => {
+    // scp-style has no port: the colon is the path separator, and a group may
+    // legitimately be named in digits. Reading `4242` as a port dropped it and
+    // merged every repo under that group into one identity.
+    expect(normaliseRemote('git@gitlab.com:4242/repo.git')).toBe('gitlab.com/4242/repo')
+    // A URL does have one, and it still goes.
+    expect(normaliseRemote('ssh://git@gitlab.com:2222/4242/repo.git')).toBe('gitlab.com/4242/repo')
+  })
+
+  it('reduces a remote carrying both .git and a trailing slash', () => {
+    // The suffixes were stripped in the order that leaves `.git` behind, so
+    // one repository got two identities depending on a trailing slash.
+    expect(normaliseRemote('git@github.com:montytorr/cairn.git/')).toBe('github.com/montytorr/cairn')
+    expect(normaliseRemote('https://github.com/montytorr/cairn.git/')).toBe(
+      'github.com/montytorr/cairn',
+    )
+  })
+
   it('leaves a host it does not recognise alone rather than guessing', () => {
     expect(normaliseRemote('git@gitlab.com:webcoder31/adhaf.git')).toBe(
       'gitlab.com/webcoder31/adhaf',

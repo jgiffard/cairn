@@ -2,7 +2,7 @@ import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { listKnowledge } from './knowledge'
 import { contextForFile, type FileContext } from './files'
-import { normaliseRemote, projectKeyFromRepoRows } from './repos'
+import { normaliseRemote, projectKeyFromEmbed, projectKeyFromRepoRows, type RepoRow } from './repos'
 
 /**
  * The briefing a session opens with.
@@ -107,9 +107,7 @@ const projectForCwd = async (userId: string, cwd: string): Promise<string | null
     .maybeSingle()
 
   if (error) throw new Error(error.message)
-  const embedded = data?.project as unknown as { key: string } | { key: string }[] | null
-  const key = Array.isArray(embedded) ? embedded[0]?.key : embedded?.key
-  return key ?? null
+  return projectKeyFromEmbed((data as RepoRow | null)?.project ?? null)
 }
 
 /**
@@ -129,9 +127,7 @@ const projectForRepo = async (userId: string, remote: string): Promise<string | 
     .limit(2)
 
   if (error) throw new Error(error.message)
-  // Same cast as projectForCwd below: the embed's shape depends on how the
-  // relationship is inferred, and the client types it loosely either way.
-  return projectKeyFromRepoRows((data ?? []) as unknown as Parameters<typeof projectKeyFromRepoRows>[0])
+  return projectKeyFromRepoRows((data ?? []) as unknown as RepoRow[])
 }
 
 export const buildContext = async (

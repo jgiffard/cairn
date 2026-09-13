@@ -9,7 +9,29 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- The briefing resolves a project from the **repository**, not the path. `~/.cairn/projects.json`
+  keyed identity on an absolute path, and the server's fallback on a recorded `cwd` — both
+  describe where one machine keeps a checkout, which is not what was being identified. A
+  `git worktree` of a mapped repository, a second clone, and a `mv` all resolved to no
+  project, so the briefing went quiet exactly where several agents are most likely to
+  collide. `cairn map` now also claims the origin remote, and `/context` accepts `?repo=`.
+  Resolution order is `--project` → repository → the `cwd` heuristic, so an explicit answer
+  and the local map both still win. One local git call, no network.
+
+  Thanks to [@webcoder31](https://github.com/webcoder31), who reported it in #2 and sent
+  the implementation in #3.
+
 ### Changed
+
+- `cairn map <KEY>` validates the key against the server before writing, and stores the key
+  the server returns. It used to write whatever it was handed, so `cairn map CAl` produced a
+  map that resolved to nothing, silently. It now needs to reach the server, where before it
+  was purely local.
+
+- `cairn map none` releases the repository claim as well as the local line. Removing only
+  the local line would have left every clone — including that one — still resolving.
 
 - Vitals reads as a dashboard rather than a column of hairlines: a verdict at the top that
   says plainly whether anything is wrong, four numbers at a size that admits they matter,
