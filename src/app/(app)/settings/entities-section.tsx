@@ -97,17 +97,17 @@ export const EntitiesSection = ({
   return (
     <section>
       <div className="mb-1 flex items-baseline justify-between gap-3">
-        <h2 className="text-[13px] font-medium">Entities</h2>
+        <h2 className="text-[0.8125rem] font-medium">Entities</h2>
         <button
           type="button"
           onClick={() => setCreating((v) => !v)}
-          className="text-fg-subtle hover:text-fg text-[12px] transition-colors"
+          className="text-fg-subtle hover:text-fg text-[0.75rem] transition-colors"
         >
           {creating ? 'Cancel' : 'New entity'}
         </button>
       </div>
 
-      <p className="text-fg-subtle mb-3 text-[12px] leading-relaxed">
+      <p className="text-fg-subtle mb-3 text-[0.75rem] leading-relaxed">
         A grouping a fact can be true of — a business, a stack, a subsystem. Knowledge filed
         against one is visible from every project in it, which is how something true of all
         of Dispofi stops having to be either filed twenty times or made global.
@@ -119,14 +119,14 @@ export const EntitiesSection = ({
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
             placeholder="key (lowercase-hyphens)"
-            className="w-[200px]"
+            className="w-[12.5rem]"
             aria-label="Entity key"
           />
           <InlineInput
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="Title"
-            className="w-[200px]"
+            className="w-[12.5rem]"
             aria-label="Entity title"
           />
           <Button size="sm" onClick={create} disabled={busy || !newKey.trim()}>
@@ -137,7 +137,7 @@ export const EntitiesSection = ({
 
       <div className="border-border divide-border divide-y rounded-md border">
         {entities.length === 0 && (
-          <p className="text-fg-subtle px-3 py-4 text-[12px]">No entities yet.</p>
+          <p className="text-fg-subtle px-3 py-4 text-[0.75rem]">No entities yet.</p>
         )}
 
         {entities.map((entity) => (
@@ -146,13 +146,13 @@ export const EntitiesSection = ({
               <button
                 type="button"
                 onClick={() => setOpen(open === entity.key ? null : entity.key)}
-                className="text-fg min-w-0 text-left text-[13px]"
+                className="text-fg min-w-0 text-left text-[0.8125rem]"
               >
                 {entity.title}{' '}
-                <span className="text-fg-subtle font-mono text-[11px]">{entity.key}</span>
+                <span className="text-fg-subtle font-mono text-[0.6875rem]">{entity.key}</span>
               </button>
 
-              <span className="text-fg-subtle ml-auto shrink-0 text-[11px] tabular-nums">
+              <span className="text-fg-subtle ml-auto shrink-0 text-[0.6875rem] tabular-nums">
                 {entity.projects.length} project{entity.projects.length === 1 ? '' : 's'} ·{' '}
                 {entity.knowledgeCount} scoped here
               </span>
@@ -161,7 +161,7 @@ export const EntitiesSection = ({
                 type="button"
                 onClick={() => remove(entity)}
                 disabled={busy}
-                className="text-fg-subtle hover:text-danger shrink-0 text-[11px] transition-colors"
+                className="text-fg-subtle hover:text-danger shrink-0 text-[0.6875rem] transition-colors"
               >
                 Delete
               </button>
@@ -172,7 +172,7 @@ export const EntitiesSection = ({
                 {entity.projects.map((key) => (
                   <span
                     key={key}
-                    className="text-fg-muted inline-flex items-center gap-1 text-[11px]"
+                    className="text-fg-muted inline-flex items-center gap-1 text-[0.6875rem]"
                   >
                     <ProjectIcon size={10} projectKey={key} />
                     {key}
@@ -183,7 +183,7 @@ export const EntitiesSection = ({
 
             {open === entity.key && (
               <div className="border-border bg-surface border-t px-3 py-2.5">
-                <p className="text-fg-subtle mb-2 text-[11px]">
+                <p className="text-fg-subtle mb-2 text-[0.6875rem]">
                   Click a project to add or remove it. A project can belong to several
                   entities at once.
                 </p>
@@ -198,7 +198,7 @@ export const EntitiesSection = ({
                         onClick={() => toggleProject(entity, p.key)}
                         aria-pressed={member}
                         className={cn(
-                          'rounded-md border px-1.5 py-0.5 font-mono text-[11px] transition-colors',
+                          'rounded-md border px-1.5 py-0.5 font-mono text-[0.6875rem] transition-colors',
                           member
                             ? 'border-accent text-accent'
                             : 'border-border text-fg-subtle hover:text-fg',
@@ -216,14 +216,14 @@ export const EntitiesSection = ({
       </div>
 
       {unassigned.length > 0 && (
-        <p className="text-fg-subtle mt-2 text-[12px]">
+        <p className="text-fg-subtle mt-2 text-[0.75rem]">
           In no entity at all:{' '}
           <span className="text-fg-muted font-mono">{unassigned.join(' ')}</span> — these see
           only their own knowledge and whatever is global.
         </p>
       )}
 
-      {message && <p className="text-fg-muted mt-2 text-[12px]">{message}</p>}
+      {message && <p className="text-fg-muted mt-2 text-[0.75rem]">{message}</p>}
     </section>
   )
 }

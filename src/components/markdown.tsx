@@ -63,14 +63,14 @@ const components: Components = {
     const isBlock = /language-/.test(className ?? '')
     if (isBlock) {
       return (
-        <code className={cn('font-mono text-[13px] leading-relaxed', className)} {...rest}>
+        <code className={cn('font-mono text-[0.8125rem] leading-relaxed', className)} {...rest}>
           {children}
         </code>
       )
     }
     return (
       <code
-        className="bg-surface-raised border-border rounded border px-1 py-px font-mono text-[12.5px]"
+        className="bg-surface-raised border-border rounded border px-1 py-px font-mono text-[0.78125rem]"
         {...rest}
       >
         {children}
@@ -82,12 +82,12 @@ const components: Components = {
     // Its own scroll container, so a wide table never makes the page body
     // scroll sideways.
     <div className="border-border mb-3 overflow-x-auto rounded-md border">
-      <table className="w-full border-collapse text-[12.5px]" {...p} />
+      <table className="w-full border-collapse text-[0.78125rem]" {...p} />
     </div>
   ),
   th: (p) => (
     <th
-      className="border-border bg-surface-raised text-fg-muted border-b px-2.5 py-1.5 text-left text-[11px] font-medium"
+      className="border-border bg-surface-raised text-fg-muted border-b px-2.5 py-1.5 text-left text-[0.6875rem] font-medium"
       {...p}
     />
   ),
@@ -145,7 +145,7 @@ export const MarkdownView = ({ children }: { children: string }) => {
  */
 export const MarkdownPreview = ({ children, lines = 3 }: { children: string; lines?: number }) => (
   <div
-    className="text-fg-muted overflow-hidden text-[12.5px] leading-snug [&_*]:!mb-0 [&_*]:!mt-0 [&_a]:no-underline [&_code]:border-0 [&_code]:bg-transparent [&_code]:p-0 [&_h1]:text-[12.5px] [&_h1]:font-normal [&_h2]:text-[12.5px] [&_h2]:font-normal [&_h3]:text-[12.5px] [&_h3]:font-normal [&_li]:list-none [&_pre]:border-0 [&_pre]:bg-transparent [&_pre]:p-0 [&_ul]:ml-0"
+    className="text-fg-muted overflow-hidden text-[0.78125rem] leading-snug [&_*]:!mb-0 [&_*]:!mt-0 [&_a]:no-underline [&_code]:border-0 [&_code]:bg-transparent [&_code]:p-0 [&_h1]:text-[0.78125rem] [&_h1]:font-normal [&_h2]:text-[0.78125rem] [&_h2]:font-normal [&_h3]:text-[0.78125rem] [&_h3]:font-normal [&_li]:list-none [&_pre]:border-0 [&_pre]:bg-transparent [&_pre]:p-0 [&_ul]:ml-0"
     style={{
       display: '-webkit-box',
       WebkitLineClamp: lines,

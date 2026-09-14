@@ -75,7 +75,7 @@ const FilterMenu = ({
         aria-haspopup="menu"
         aria-label={`Filter by ${label}`}
         className={cn(
-          'flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[12px] transition-colors',
+          'flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[0.75rem] transition-colors',
           selected.length > 0
             ? 'border-accent text-accent bg-accent-subtle'
             : 'border-border text-fg-muted hover:bg-surface-hover hover:text-fg',
@@ -88,7 +88,7 @@ const FilterMenu = ({
       {open && (
         <div
           role="menu"
-          className="border-border bg-surface absolute top-[32px] left-0 z-50 max-h-[240px] w-[200px] overflow-y-auto rounded-md border py-1 raised"
+          className="border-border bg-surface absolute top-[2rem] left-0 z-50 max-h-[15rem] w-[12.5rem] overflow-y-auto rounded-md border py-1 raised"
         >
           {options.map((o) => (
             <button
@@ -104,13 +104,13 @@ const FilterMenu = ({
                 readOnly
                 tabIndex={-1}
                 checked={selected.includes(o.value)}
-                className="accent-accent size-[12px]"
+                className="accent-accent size-[0.75rem]"
               />
-              <span className="text-fg-muted min-w-0 truncate text-[12px]">{o.label}</span>
+              <span className="text-fg-muted min-w-0 truncate text-[0.75rem]">{o.label}</span>
             </button>
           ))}
           {options.length === 0 && (
-            <p className="text-fg-subtle px-2.5 py-1.5 text-[11px]">Nothing to filter by yet.</p>
+            <p className="text-fg-subtle px-2.5 py-1.5 text-[0.6875rem]">Nothing to filter by yet.</p>
           )}
         </div>
       )}
@@ -158,7 +158,7 @@ export const BoardToolbar = ({
         size="sm"
         value={filters.groupBy}
         onChange={(e) => onChange({ ...filters, groupBy: e.target.value as GroupBy })}
-        className="w-[130px]"
+        className="w-[8.125rem]"
         aria-label="Group columns by"
       >
         {GROUP_BY_VALUES.map((g) => (
@@ -172,7 +172,7 @@ export const BoardToolbar = ({
         size="sm"
         value={filters.swimlane}
         onChange={(e) => onChange({ ...filters, swimlane: e.target.value as Swimlane })}
-        className="w-[130px]"
+        className="w-[8.125rem]"
         aria-label="Swimlanes"
       >
         {SWIMLANE_VALUES.filter((s) => s === 'none' || s !== filters.groupBy).map((s) => (
@@ -182,7 +182,7 @@ export const BoardToolbar = ({
         ))}
       </Select>
 
-      <span className="bg-border mx-0.5 h-[16px] w-px shrink-0" aria-hidden />
+      <span className="bg-border mx-0.5 h-[1rem] w-px shrink-0" aria-hidden />
 
       <FilterMenu
         label="Project"

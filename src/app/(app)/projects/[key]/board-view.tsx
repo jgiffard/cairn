@@ -52,7 +52,7 @@ export const Card = ({
         {showProjectBadge && <ProjectIcon size={11} projectKey={projectKey} />}
         <Link
           href={`/projects/${projectKey}/tasks/${task.number}`}
-          className="text-fg-subtle hover:text-accent shrink-0 font-mono text-[11px]"
+          className="text-fg-subtle hover:text-accent shrink-0 font-mono text-[0.6875rem]"
           onClick={(e) => e.stopPropagation()}
         >
           {projectKey}-{task.number}
@@ -68,7 +68,7 @@ export const Card = ({
 
       <Link
         href={`/projects/${projectKey}/tasks/${task.number}`}
-        className="block text-[13px] leading-snug font-medium"
+        className="block text-[0.8125rem] leading-snug font-medium"
         onClick={(e) => e.stopPropagation()}
       >
         {task.title}
@@ -81,13 +81,13 @@ export const Card = ({
       ) : null}
 
       {task.has_resolution ? (
-        <p className="text-status-done mt-1.5 line-clamp-2 text-[11px] leading-snug">
+        <p className="text-status-done mt-1.5 line-clamp-2 text-[0.6875rem] leading-snug">
           {task.resolution_kind ?? 'resolved'}
         </p>
       ) : null}
 
       {task.blocked_reason ? (
-        <p className="text-danger mt-1.5 line-clamp-1 text-[11px]">blocked: {task.blocked_reason}</p>
+        <p className="text-danger mt-1.5 line-clamp-1 text-[0.6875rem]">blocked: {task.blocked_reason}</p>
       ) : null}
 
       {task.labels.length > 0 && (
@@ -116,7 +116,7 @@ const Column = ({
     <div className="flex w-64 shrink-0 flex-col">
       <div className="mb-2 flex items-center gap-2 px-0.5">
         <span className="text-xs font-medium">{COLUMN_LABEL[status]}</span>
-        <span className="text-fg-subtle tabular text-[11px]">{tasks.length}</span>
+        <span className="text-fg-subtle tabular text-[0.6875rem]">{tasks.length}</span>
       </div>
       <div
         ref={setNodeRef}
@@ -227,7 +227,7 @@ export const BoardView = ({
         <DragOverlay>
           {dragging ? (
             <div className="bg-surface border-accent w-64 rounded-md border p-2.5 raised-lg">
-              <p className="text-[13px] font-medium">{dragging.title}</p>
+              <p className="text-[0.8125rem] font-medium">{dragging.title}</p>
             </div>
           ) : null}
         </DragOverlay>

@@ -25,7 +25,7 @@ const base =
 
 const sizes = {
   sm: 'h-7 px-2 text-xs',
-  md: 'h-8 px-2.5 text-[13px]',
+  md: 'h-8 px-2.5 text-[0.8125rem]',
 } as const
 
 type Size = keyof typeof sizes
@@ -45,7 +45,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, React.ComponentProps<'te
   ({ className, ...props }, ref) => (
     <textarea
       ref={ref}
-      className={cn(base, 'resize-y px-2.5 py-2 text-[13px] leading-relaxed', className)}
+      className={cn(base, 'resize-y px-2.5 py-2 text-[0.8125rem] leading-relaxed', className)}
       {...props}
     />
   ),
@@ -125,7 +125,7 @@ Button.displayName = 'Button'
 /** Label above a control, used down the task-detail sidebar. */
 export const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <label className="flex flex-col gap-1">
-    <span className="text-fg-subtle text-[11px] font-medium">{label}</span>
+    <span className="text-fg-subtle text-[0.6875rem] font-medium">{label}</span>
     {children}
   </label>
 )
@@ -141,7 +141,7 @@ export const InlineInput = forwardRef<HTMLInputElement, React.ComponentProps<'in
     <input
       ref={ref}
       className={cn(
-        'border-border bg-bg text-fg placeholder:text-fg-subtle h-[28px] w-full rounded-md border px-2 text-[12.5px] outline-none',
+        'border-border bg-bg text-fg placeholder:text-fg-subtle h-[1.75rem] w-full rounded-md border px-2 text-[0.78125rem] outline-none',
         'transition-[border-color,box-shadow] duration-100',
         'hover:border-border-strong focus:border-accent focus:ring-ring/30 focus:ring-2',
         'disabled:cursor-not-allowed disabled:opacity-50',

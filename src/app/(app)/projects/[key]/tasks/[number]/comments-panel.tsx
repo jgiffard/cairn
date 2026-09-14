@@ -45,7 +45,7 @@ export const CommentsPanel = ({
 
   return (
     <section>
-      <h2 className="text-fg-muted mb-2.5 flex items-center gap-2 text-[11px] font-medium">
+      <h2 className="text-fg-muted mb-2.5 flex items-center gap-2 text-[0.6875rem] font-medium">
         Comments
         <span className="tabular text-fg-subtle">{comments.length}</span>
       </h2>
@@ -54,7 +54,7 @@ export const CommentsPanel = ({
         <ul className="mb-3 flex flex-col gap-3">
           {comments.map((c) => (
             <li key={c.id} className="border-border border-l-2 pl-3">
-              <div className="mb-0.5 flex items-center gap-2 text-[11px]">
+              <div className="mb-0.5 flex items-center gap-2 text-[0.6875rem]">
                 <span className={c.actor_type === 'agent' ? 'text-accent' : 'text-fg-subtle'}>
                   {c.actor_type === 'agent' ? c.actor_id : 'you'}
                 </span>

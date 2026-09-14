@@ -24,7 +24,7 @@ const Keys = ({ keys }: { keys: string[] }) => (
   <span className="ml-auto flex shrink-0 items-center gap-1">
     {keys.map((k, i) =>
       k === 'then' ? (
-        <span key={i} className="text-fg-subtle text-[11px]">
+        <span key={i} className="text-fg-subtle text-[0.6875rem]">
           then
         </span>
       ) : (
@@ -37,13 +37,13 @@ const Keys = ({ keys }: { keys: string[] }) => (
 )
 
 const itemClass =
-  'flex h-[38px] cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[13px] ' +
+  'flex h-[2.375rem] cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[0.8125rem] ' +
   'data-[selected=true]:bg-surface-hover'
 
 const groupClass =
   '[&_[cmdk-group-heading]]:text-fg-subtle [&_[cmdk-group-heading]]:px-2.5 ' +
   '[&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 ' +
-  '[&_[cmdk-group-heading]]:text-[11px]'
+  '[&_[cmdk-group-heading]]:text-[0.6875rem]'
 
 export const CommandPalette = ({ projects }: { projects: { key: string; title: string }[] }) => {
   const router = useRouter()
@@ -111,7 +111,7 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
       onClick={() => setOpen(false)}
     >
       <Command
-        className="bg-surface border-border pop w-full max-w-[560px] overflow-hidden rounded-lg border raised-lg"
+        className="bg-surface border-border pop w-full max-w-[35rem] overflow-hidden rounded-lg border raised-lg"
         onClick={(e) => e.stopPropagation()}
         shouldFilter={!searchable}
         loop
@@ -123,17 +123,17 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
             value={query}
             onValueChange={setQuery}
             placeholder="Search tasks, or jump to a project…"
-            className="placeholder:text-fg-subtle h-[46px] w-full bg-transparent text-[14px] outline-none"
+            className="placeholder:text-fg-subtle h-[2.875rem] w-full bg-transparent text-[0.875rem] outline-none"
           />
           {loading ? (
-            <span className="text-fg-subtle shrink-0 text-[11px]">…</span>
+            <span className="text-fg-subtle shrink-0 text-[0.6875rem]">…</span>
           ) : (
             <kbd className="kbd inline-flex shrink-0">esc</kbd>
           )}
         </div>
 
-        <Command.List className="max-h-[340px] overflow-y-auto p-1.5">
-          <Command.Empty className="text-fg-subtle px-2.5 py-8 text-center text-[12px]">
+        <Command.List className="max-h-[21.25rem] overflow-y-auto p-1.5">
+          <Command.Empty className="text-fg-subtle px-2.5 py-8 text-center text-[0.75rem]">
             {searchable ? 'Nothing found — this subject looks new.' : 'Type to search.'}
           </Command.Empty>
 
@@ -148,7 +148,7 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
                 <span className="min-w-0 flex-1 truncate">
                   All results for <span className="text-fg-muted">{query.trim()}</span>
                 </span>
-                <span className="text-fg-subtle shrink-0 text-[10px]">
+                <span className="text-fg-subtle shrink-0 text-[0.625rem]">
                   filters, resolutions, shareable link
                 </span>
               </Command.Item>
@@ -169,19 +169,19 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
                     className={itemClass}
                   >
                     <StatusIcon status={hit.status} size={13} />
-                    <code className="text-fg-subtle w-[68px] shrink-0 truncate text-[11px] tabular">
+                    <code className="text-fg-subtle w-[4.25rem] shrink-0 truncate text-[0.6875rem] tabular">
                       {hit.ref}
                     </code>
                     <span className="min-w-0 flex-1 truncate">{hit.title}</span>
                     {hit.resolved && (
-                      <span className="bg-status-done size-[6px] shrink-0 rounded-full" title="Has a resolution" />
+                      <span className="bg-status-done size-[0.375rem] shrink-0 rounded-full" title="Has a resolution" />
                     )}
                     {hit.loose && (
-                      <span className="text-fg-subtle shrink-0 text-[10px]" title="Loose match">
+                      <span className="text-fg-subtle shrink-0 text-[0.625rem]" title="Loose match">
                         ~
                       </span>
                     )}
-                    <span className="text-fg-subtle shrink-0 text-[10px] tabular">
+                    <span className="text-fg-subtle shrink-0 text-[0.625rem] tabular">
                       ~{hit.tokens}
                     </span>
                   </Command.Item>
@@ -240,7 +240,7 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
                     >
                       <ProjectIcon size={13} projectKey={p.key} />
                       <span className="min-w-0 flex-1 truncate">{p.title}</span>
-                      <code className="text-fg-subtle shrink-0 text-[10px]">{p.key}</code>
+                      <code className="text-fg-subtle shrink-0 text-[0.625rem]">{p.key}</code>
                     </Command.Item>
                   ))}
                 </Command.Group>

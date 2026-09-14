@@ -41,7 +41,7 @@ const Section = ({
   className?: string
 }) => (
   <div className={cn('flex flex-col gap-1.5', className)}>
-    <span className="text-fg-subtle text-[11px] font-medium">{title}</span>
+    <span className="text-fg-subtle text-[0.6875rem] font-medium">{title}</span>
     {children}
   </div>
 )
@@ -66,9 +66,9 @@ const SelectRow = <T extends string>({
   onChange: (v: T) => void
   disabled?: boolean
 }) => (
-  <div className="hover:bg-surface-hover relative -mx-1.5 flex h-[28px] items-center gap-2 rounded-md px-1.5 transition-colors">
+  <div className="hover:bg-surface-hover relative -mx-1.5 flex h-[1.75rem] items-center gap-2 rounded-md px-1.5 transition-colors">
     {icon}
-    <span className="text-fg text-[13px]">{labels?.[value] ?? value}</span>
+    <span className="text-fg text-[0.8125rem]">{labels?.[value] ?? value}</span>
     <select
       value={value}
       disabled={disabled}
@@ -142,7 +142,7 @@ export const Properties = ({
 
   return (
     <aside
-      className="border-border flex shrink-0 flex-row flex-wrap gap-x-5 gap-y-3 border-b px-4 py-3 lg:w-[220px] lg:flex-col lg:gap-5 lg:border-b-0 lg:border-l lg:px-4 lg:py-5"
+      className="border-border flex shrink-0 flex-row flex-wrap gap-x-5 gap-y-3 border-b px-4 py-3 lg:w-[13.75rem] lg:flex-col lg:gap-5 lg:border-b-0 lg:border-l lg:px-4 lg:py-5"
     >
       <Section title="Properties">
         <SelectRow
@@ -158,13 +158,13 @@ export const Properties = ({
           icon={<PriorityIcon priority={shown.priority} />}
           onChange={(v: TaskPriority) => void patch({ priority: v })}
         />
-        <div className="flex h-[28px] items-center gap-2 px-0">
+        <div className="flex h-[1.75rem] items-center gap-2 px-0">
           {task.claimed_by ? (
             <>
               <Avatar name={task.claimed_by} size={16} />
               <span
                 className={cn(
-                  'text-[13px]',
+                  'text-[0.8125rem]',
                   stale ? 'text-fg-subtle' : 'text-fg',
                 )}
               >
@@ -174,15 +174,15 @@ export const Properties = ({
             </>
           ) : (
             <>
-              <span className="border-border size-[16px] rounded-full border border-dashed" />
-              <span className="text-fg-subtle text-[13px]">Unassigned</span>
+              <span className="border-border size-[1rem] rounded-full border border-dashed" />
+              <span className="text-fg-subtle text-[0.8125rem]">Unassigned</span>
             </>
           )}
         </div>
       </Section>
 
       <Section title="Type">
-        <div className="hover:bg-surface-hover relative -mx-1.5 flex h-[28px] items-center rounded-md px-1.5">
+        <div className="hover:bg-surface-hover relative -mx-1.5 flex h-[1.75rem] items-center rounded-md px-1.5">
           <TypePill type={shown.type} />
           <select
             value={shown.type}
@@ -211,7 +211,7 @@ export const Properties = ({
 
       <div className="hidden lg:block">
       <Section title="Project">
-        <span className="text-fg-muted flex items-center gap-1.5 text-[13px]">
+        <span className="text-fg-muted flex items-center gap-1.5 text-[0.8125rem]">
           <ProjectIcon size={13} projectKey={project.key} />
           {project.title}
         </span>
@@ -231,7 +231,7 @@ export const Properties = ({
 
       {task.external_ref && (
         <Section title="Imported from" className="hidden lg:flex">
-          <code className="text-fg-subtle text-[12px]">{task.external_ref}</code>
+          <code className="text-fg-subtle text-[0.75rem]">{task.external_ref}</code>
         </Section>
       )}
 
@@ -248,8 +248,8 @@ export const Properties = ({
             .filter(([, value]) => Boolean(value))
             .map(([label, value]) => (
               <div key={label} className="flex items-baseline justify-between gap-2">
-                <dt className="text-fg-subtle text-[12px]">{label}</dt>
-                <dd className="text-fg-muted text-[12px]">
+                <dt className="text-fg-subtle text-[0.75rem]">{label}</dt>
+                <dd className="text-fg-muted text-[0.75rem]">
                   {label === 'Due' ? shortDateWithYear(value as string) : (
                     <RelativeTime iso={value as string} />
                   )}
@@ -261,7 +261,7 @@ export const Properties = ({
 
       {task.attempt > 1 && (
         <Section title="Attempts" className="hidden lg:flex">
-          <span className="text-fg-muted tabular text-[13px]">
+          <span className="text-fg-muted tabular text-[0.8125rem]">
             {task.attempt} claims
             <span className="text-fg-subtle"> — may be thrashing</span>
           </span>

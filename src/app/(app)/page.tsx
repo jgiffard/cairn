@@ -11,7 +11,7 @@ import { PendingLink } from '@/components/pending-link'
 export const dynamic = 'force-dynamic'
 
 const Stat = ({ label, value }: { label: string; value: number | string }) => (
-  <span className="text-fg-subtle text-[12px]">
+  <span className="text-fg-subtle text-[0.75rem]">
     <span className="text-fg tabular font-medium">{value}</span> {label}
   </span>
 )
@@ -36,12 +36,12 @@ const Home = async ({ searchParams }: { searchParams: Promise<{ closed?: string 
   if (projects.length === 0) {
     return (
       <div className="mx-auto flex h-dvh max-w-lg flex-col justify-center px-5 sm:px-6">
-        <h1 className="mb-2 text-[20px] font-semibold tracking-[-0.01em]">Nothing here yet</h1>
-        <p className="text-fg-muted mb-5 text-[13px] leading-relaxed">
+        <h1 className="mb-2 text-[1.25rem] font-semibold tracking-[-0.01em]">Nothing here yet</h1>
+        <p className="text-fg-muted mb-5 text-[0.8125rem] leading-relaxed">
           A cairn is built one stone at a time. Create the first project from an agent, or from
           the CLI.
         </p>
-        <pre className="border-border bg-surface overflow-x-auto rounded-md border p-3 font-mono text-[12px]">
+        <pre className="border-border bg-surface overflow-x-auto rounded-md border p-3 font-mono text-[0.75rem]">
           {`cairn add "first task" --project CAI --type feature`}
         </pre>
       </div>
@@ -50,10 +50,10 @@ const Home = async ({ searchParams }: { searchParams: Promise<{ closed?: string 
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[44px] shrink-0 items-center gap-2 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4">
         <MobileNavButton />
-        <span className="text-fg shrink-0 text-[13px] font-medium">All tasks</span>
-        <span className="text-fg-subtle hidden text-[13px] sm:block">·</span>
+        <span className="text-fg shrink-0 text-[0.8125rem] font-medium">All tasks</span>
+        <span className="text-fg-subtle hidden text-[0.8125rem] sm:block">·</span>
         {/* The counts are the first thing to go on a phone — the list itself
             says more than a tally of it. */}
         <span className="hidden items-center gap-2 sm:flex">
@@ -64,7 +64,7 @@ const Home = async ({ searchParams }: { searchParams: Promise<{ closed?: string 
 
         <PendingLink
           href={includeClosed ? '/' : '/?closed=1'}
-          className="text-fg-subtle hover:text-fg ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[12px] transition-colors"
+          className="text-fg-subtle hover:text-fg ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[0.75rem] transition-colors"
         >
           {includeClosed ? 'Hide closed' : `Show ${closedHidden} closed`}
         </PendingLink>
@@ -82,13 +82,13 @@ const Home = async ({ searchParams }: { searchParams: Promise<{ closed?: string 
         />
 
         <section className="border-border mt-6 border-t px-4 py-4">
-          <h2 className="text-fg-muted mb-2 text-[11px] font-medium">Projects</h2>
+          <h2 className="text-fg-muted mb-2 text-[0.6875rem] font-medium">Projects</h2>
           <ul className="flex flex-wrap gap-1.5">
             {projects.map((p) => (
               <li key={p.id}>
                 <Link
                   href={`/projects/${p.key}`}
-                  className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg flex h-[26px] items-center gap-1.5 rounded-md border px-2 text-[12px] transition-colors"
+                  className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg flex h-[1.625rem] items-center gap-1.5 rounded-md border px-2 text-[0.75rem] transition-colors"
                 >
                   <ProjectIcon size={12} projectKey={p.key} />
                   {p.title}

@@ -83,7 +83,7 @@ export const SearchResults = ({ rows }: { rows: ResultRow[] }) => {
                   onToggle(row.id, e.shiftKey)
                 }}
                 className={cn(
-                  'pointer-events-auto relative z-10 grid size-[18px] shrink-0 place-items-center transition-opacity',
+                  'pointer-events-auto relative z-10 grid size-[1.125rem] shrink-0 place-items-center transition-opacity',
                   isSelected || selecting
                     ? 'opacity-100'
                     : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100',
@@ -91,7 +91,7 @@ export const SearchResults = ({ rows }: { rows: ResultRow[] }) => {
               >
                 <span
                   className={cn(
-                    'grid size-[14px] place-items-center rounded-[4px] border transition-colors',
+                    'grid size-[0.875rem] place-items-center rounded-[0.25rem] border transition-colors',
                     isSelected
                       ? 'border-accent bg-accent text-accent-fg'
                       : 'border-border-strong bg-surface hover:border-accent',
@@ -114,12 +114,12 @@ export const SearchResults = ({ rows }: { rows: ResultRow[] }) => {
 
               <PriorityIcon priority={row.priority as TaskPriority} />
               <StatusIcon status={row.status as TaskStatus} />
-              <span className="text-fg min-w-0 flex-1 truncate text-[13px]">{row.title}</span>
+              <span className="text-fg min-w-0 flex-1 truncate text-[0.8125rem]">{row.title}</span>
               <span className="hidden shrink-0 sm:block">
                 <TypePill type={row.type as TaskType} />
               </span>
               <ProjectIcon size={12} projectKey={row.project_key} />
-              <code className="text-fg-subtle tabular hidden w-[80px] shrink-0 truncate text-right text-[12px] sm:block">
+              <code className="text-fg-subtle tabular hidden w-[5rem] shrink-0 truncate text-right text-[0.75rem] sm:block">
                 {ref}
               </code>
             </div>
@@ -127,14 +127,14 @@ export const SearchResults = ({ rows }: { rows: ResultRow[] }) => {
             {/* A recorded resolution is the payload — show it here so the
                 answer can be read without opening anything. */}
             {row.resolution ? (
-              <p className="text-fg-muted pointer-events-none relative mt-1.5 line-clamp-2 pl-[62px] text-[12.5px] leading-relaxed">
-                <span className="text-status-done mr-1.5 text-[11px] font-medium">
+              <p className="text-fg-muted pointer-events-none relative mt-1.5 line-clamp-2 pl-[3.875rem] text-[0.78125rem] leading-relaxed">
+                <span className="text-status-done mr-1.5 text-[0.6875rem] font-medium">
                   {RESOLUTION_LABEL[row.resolution_kind ?? ''] ?? 'Resolved'}
                 </span>
                 {row.resolution}
               </p>
             ) : row.description ? (
-              <p className="text-fg-subtle pointer-events-none relative mt-1 line-clamp-1 pl-[62px] text-[12.5px]">
+              <p className="text-fg-subtle pointer-events-none relative mt-1 line-clamp-1 pl-[3.875rem] text-[0.78125rem]">
                 {row.description}
               </p>
             ) : null}

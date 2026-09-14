@@ -40,7 +40,7 @@ export const MobileNav = ({
         onClick={() => setOpen(true)}
         aria-label="Open navigation"
         aria-expanded={open}
-        className="text-fg-muted hover:text-fg hover:bg-surface-hover grid size-[30px] shrink-0 place-items-center rounded-md transition-colors md:hidden"
+        className="text-fg-muted hover:text-fg hover:bg-surface-hover grid size-[1.875rem] shrink-0 place-items-center rounded-md transition-colors md:hidden"
       >
         <Menu size={16} aria-hidden />
       </button>
@@ -53,7 +53,7 @@ export const MobileNav = ({
             role="presentation"
           />
           <aside
-            className="bg-bg-elevated border-border relative flex w-[270px] max-w-[82vw] flex-col border-r raised-lg"
+            className="bg-bg-elevated border-border relative flex w-[16.875rem] max-w-[82vw] flex-col border-r raised-lg"
             /* Keyed on the path so a navigation rebuilds it collapsed, rather
                than leaving a filter box half-typed from the last visit. */
             key={pathname}

@@ -97,7 +97,7 @@ export const ResolutionDialog = ({
         />
 
         {suggestion && value === suggestion && (
-          <p className="text-fg-subtle mt-1.5 text-[11px]">
+          <p className="text-fg-subtle mt-1.5 text-[0.6875rem]">
             Prefilled from the last checkpoint — edit it if that is not the whole story.
           </p>
         )}
@@ -126,7 +126,7 @@ export const ResolutionDialog = ({
               }}
               placeholder="duplicate of… CAI-31"
               aria-label="The task this duplicates"
-              className="w-[150px]"
+              className="w-[9.375rem]"
             />
           )}
 
@@ -145,7 +145,7 @@ export const ResolutionDialog = ({
             </Button>
           </div>
         </div>
-        <p className="text-fg-subtle mt-2 text-[11px]">⌘↵ to save</p>
+        <p className="text-fg-subtle mt-2 text-[0.6875rem]">⌘↵ to save</p>
       </div>
     </div>
   )

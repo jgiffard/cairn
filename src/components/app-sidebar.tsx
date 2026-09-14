@@ -28,12 +28,12 @@ export const AppSidebar = ({
   trailing?: React.ReactNode
 }) => (
   <>
-    <div className="flex h-[44px] shrink-0 items-center gap-2 px-3">
+    <div className="flex h-[2.75rem] shrink-0 items-center gap-2 px-3">
       <Avatar name={email} size={20} />
       <Link
         href="/"
         onClick={onNavigate}
-        className="text-fg truncate text-[13px] font-medium"
+        className="text-fg truncate text-[0.8125rem] font-medium"
       >
         Cairn
       </Link>

@@ -37,28 +37,28 @@ const ProjectPage = async ({
     <div className="flex h-dvh flex-col">
       {/* Breadcrumb bar — fixed height, so the list below always starts in
           the same place regardless of project name length. */}
-      <header className="border-border flex h-[44px] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
         <MobileNavButton />
         {/* The leading crumbs are the first thing to go on a phone: the project
             name is already the page title, and the sidebar is a tap away. */}
         <Link
           href="/"
-          className="text-fg-muted hover:text-fg hidden text-[13px] transition-colors sm:block"
+          className="text-fg-muted hover:text-fg hidden text-[0.8125rem] transition-colors sm:block"
         >
           Cairn
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
-        <span className="text-fg-muted flex min-w-0 items-center gap-1.5 text-[13px]">
+        <span className="text-fg-muted flex min-w-0 items-center gap-1.5 text-[0.8125rem]">
           <ProjectIcon size={13} projectKey={project.key} />
           <span className="truncate">{project.title}</span>
         </span>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
-        <span className="text-fg hidden text-[13px] sm:block">Tasks</span>
+        <span className="text-fg hidden text-[0.8125rem] sm:block">Tasks</span>
         {/* Which groupings this project belongs to, so "why am I seeing this
             fact here" has an answer where the work happens rather than only in
             settings. Hidden on a phone; the crumbs go first there too. */}
         {entities.length > 0 && (
-          <span className="text-fg-subtle ml-1 hidden items-center gap-1 text-[11px] lg:flex">
+          <span className="text-fg-subtle ml-1 hidden items-center gap-1 text-[0.6875rem] lg:flex">
             {entities.map((key) => (
               <Link
                 key={key}
@@ -71,7 +71,7 @@ const ProjectPage = async ({
           </span>
         )}
         {project.status === 'archived' && (
-          <span className="border-border text-fg-subtle ml-1 rounded border px-1.5 py-px text-[10px] uppercase tracking-wide">
+          <span className="border-border text-fg-subtle ml-1 rounded border px-1.5 py-px text-[0.625rem] uppercase tracking-wide">
             Archived
           </span>
         )}
@@ -80,7 +80,7 @@ const ProjectPage = async ({
           {closedHidden > 0 || includeClosed ? (
             <PendingLink
               href={includeClosed ? `/projects/${project.key}` : `/projects/${project.key}?closed=1`}
-              className="text-fg-subtle hover:text-fg flex items-center gap-1.5 whitespace-nowrap text-[12px] transition-colors"
+              className="text-fg-subtle hover:text-fg flex items-center gap-1.5 whitespace-nowrap text-[0.75rem] transition-colors"
             >
               {includeClosed ? 'Hide closed' : `Show ${closedHidden} closed`}
             </PendingLink>

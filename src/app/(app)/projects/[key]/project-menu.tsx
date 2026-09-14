@@ -61,16 +61,16 @@ const DeleteDialog = ({
       role="presentation"
     >
       <div
-        className="border-border bg-surface w-full max-w-[420px] rounded-lg border p-5 raised-lg"
+        className="border-border bg-surface w-full max-w-[26.25rem] rounded-lg border p-5 raised-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-fg text-[14px] font-medium">Delete {projectKey}?</h2>
-        <p className="text-fg-muted mt-2 text-[13px] leading-relaxed">
+        <h2 className="text-fg text-[0.875rem] font-medium">Delete {projectKey}?</h2>
+        <p className="text-fg-muted mt-2 text-[0.8125rem] leading-relaxed">
           This permanently removes {taskCount} {taskCount === 1 ? 'task' : 'tasks'} along with
           their comments, notes and attachments. Any agent that recorded a resolution here loses
           it. This cannot be undone.
         </p>
-        <label className="text-fg-subtle mt-4 block text-[11px] font-medium">
+        <label className="text-fg-subtle mt-4 block text-[0.6875rem] font-medium">
           Type {projectKey} to confirm
         </label>
         <InlineInput
@@ -81,15 +81,15 @@ const DeleteDialog = ({
             if (e.key === 'Enter') void submit()
             if (e.key === 'Escape') onClose()
           }}
-          className="focus:border-danger focus:ring-danger/25 mt-1.5 h-[30px] text-[13px]"
+          className="focus:border-danger focus:ring-danger/25 mt-1.5 h-[1.875rem] text-[0.8125rem]"
           aria-label={`Type ${projectKey} to confirm deletion`}
         />
-        {error && <p className="text-danger mt-2 text-[12px]">{error}</p>}
+        {error && <p className="text-danger mt-2 text-[0.75rem]">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="text-fg-muted hover:text-fg hover:bg-surface-hover h-[28px] rounded-md px-3 text-[13px] transition-colors"
+            className="text-fg-muted hover:text-fg hover:bg-surface-hover h-[1.75rem] rounded-md px-3 text-[0.8125rem] transition-colors"
           >
             Cancel
           </button>
@@ -97,7 +97,7 @@ const DeleteDialog = ({
             type="button"
             disabled={!armed || busy}
             onClick={() => void submit()}
-            className="bg-danger h-[28px] rounded-md px-3 text-[13px] font-medium text-white transition-opacity disabled:opacity-40"
+            className="bg-danger h-[1.75rem] rounded-md px-3 text-[0.8125rem] font-medium text-white transition-opacity disabled:opacity-40"
           >
             {busy ? 'Deleting…' : 'Delete project'}
           </button>
@@ -183,7 +183,7 @@ export const ProjectMenu = ({
           }
         }}
         aria-label="Project name"
-        className="w-[220px] text-[13px]"
+        className="w-[13.75rem] text-[0.8125rem]"
       />
     )
   }
@@ -195,12 +195,12 @@ export const ProjectMenu = ({
         onClick={() => setOpen((o) => !o)}
         aria-label="Project actions"
         aria-expanded={open}
-        className="text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-[24px] place-items-center rounded-md transition-colors"
+        className="text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-[1.5rem] place-items-center rounded-md transition-colors"
       >
         <MoreHorizontal size={15} aria-hidden />
       </button>
       {open && (
-        <div className="border-border bg-surface absolute right-0 top-[28px] z-40 w-[180px] overflow-hidden rounded-md border py-1 raised">
+        <div className="border-border bg-surface absolute right-0 top-[1.75rem] z-40 w-[11.25rem] overflow-hidden rounded-md border py-1 raised">
           <button
             type="button"
             onClick={() => {
@@ -208,14 +208,14 @@ export const ProjectMenu = ({
               setDraft(title)
               setRenaming(true)
             }}
-            className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[13px] transition-colors"
+            className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors"
           >
             Rename project
           </button>
           <button
             type="button"
             onClick={() => void setStatus(archived ? 'active' : 'archived')}
-            className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[13px] transition-colors"
+            className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors"
           >
             {archived ? 'Restore from archive' : 'Archive project'}
           </button>
@@ -225,7 +225,7 @@ export const ProjectMenu = ({
               setOpen(false)
               setConfirming(true)
             }}
-            className="text-danger hover:bg-danger-subtle block w-full px-3 py-1.5 text-left text-[13px] transition-colors"
+            className="text-danger hover:bg-danger-subtle block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors"
           >
             Delete project…
           </button>

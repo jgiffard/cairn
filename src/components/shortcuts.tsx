@@ -66,17 +66,17 @@ export const Shortcuts = () => {
       onClick={() => setOpen(false)}
     >
       <div
-        className="bg-surface border-border pop w-full max-w-[420px] rounded-lg border p-5 raised-lg"
+        className="bg-surface border-border pop w-full max-w-[26.25rem] rounded-lg border p-5 raised-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-fg mb-4 text-[13px] font-medium">Keyboard shortcuts</h2>
+        <h2 className="text-fg mb-4 text-[0.8125rem] font-medium">Keyboard shortcuts</h2>
         <div className="flex flex-col gap-4">
           {GROUPS.map((group) => (
             <div key={group.title}>
-              <p className="text-fg-subtle mb-1.5 text-[11px]">{group.title}</p>
+              <p className="text-fg-subtle mb-1.5 text-[0.6875rem]">{group.title}</p>
               <ul className="flex flex-col gap-1">
                 {group.keys.map(([keys, label]) => (
-                  <li key={label} className="flex items-center gap-2 text-[12.5px]">
+                  <li key={label} className="flex items-center gap-2 text-[0.78125rem]">
                     <span className="text-fg-muted flex-1">{label}</span>
                     {keys.map((k) => (
                       <kbd key={k} className="kbd inline-flex">{k}</kbd>

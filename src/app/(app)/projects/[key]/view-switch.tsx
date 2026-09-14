@@ -44,7 +44,7 @@ export const ViewSwitch = ({
       aria-pressed={view === value}
       title={label}
       className={cn(
-        'grid size-[22px] place-items-center rounded transition-all duration-100',
+        'grid size-[1.375rem] place-items-center rounded transition-all duration-100',
         view === value
           ? 'bg-surface text-fg raised-sm'
           : 'text-fg-subtle hover:text-fg',

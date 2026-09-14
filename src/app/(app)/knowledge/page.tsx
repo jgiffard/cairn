@@ -109,17 +109,17 @@ const KnowledgePage = async ({
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[44px] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
         <MobileNavButton />
         <Link
           href="/"
-          className="text-fg-muted hover:text-fg hidden text-[13px] transition-colors sm:block"
+          className="text-fg-muted hover:text-fg hidden text-[0.8125rem] transition-colors sm:block"
         >
           Cairn
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
-        <span className="text-fg text-[13px]">Knowledge</span>
-        <span className="text-fg-subtle ml-auto hidden text-[12px] sm:block">
+        <span className="text-fg text-[0.8125rem]">Knowledge</span>
+        <span className="text-fg-subtle ml-auto hidden text-[0.75rem] sm:block">
           {items.length} {items.length === 1 ? 'entry' : 'entries'}
           {widened ? ' · loose match' : ''}
         </span>
@@ -140,7 +140,7 @@ const KnowledgePage = async ({
           and "entity" means nothing to someone meeting it here for the first
           time. Said once, at the top, rather than in a tooltip nobody opens. */}
       {!query && (
-        <p className="border-border text-fg-subtle bg-bg-elevated border-b px-4 py-2 text-[11.5px] leading-relaxed">
+        <p className="border-border text-fg-subtle bg-bg-elevated border-b px-4 py-2 text-[0.71875rem] leading-relaxed">
           Scope is how widely a fact applies:{' '}
           <span className="text-fg-muted">a project</span> (true of that codebase),{' '}
           <span className="text-fg-muted">an entity</span> — a grouping a fact can be true
@@ -152,9 +152,9 @@ const KnowledgePage = async ({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {failure ? (
-          <p className="text-danger px-4 py-8 text-[13px]">{failure}</p>
+          <p className="text-danger px-4 py-8 text-[0.8125rem]">{failure}</p>
         ) : items.length === 0 ? (
-          <div className="text-fg-subtle px-4 py-12 text-center text-[13px]">
+          <div className="text-fg-subtle px-4 py-12 text-center text-[0.8125rem]">
             <p>{query ? `Nothing found for "${query}".` : 'No knowledge matches these filters.'}</p>
           </div>
         ) : (

@@ -37,8 +37,8 @@ const Row = ({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number) => vo
       role="status"
       className="border-danger/40 bg-surface pointer-events-auto flex max-w-[min(420px,calc(100vw-2rem))] items-start gap-2 rounded-lg border px-3 py-2 raised-lg"
     >
-      <span className="bg-danger mt-[5px] size-[6px] shrink-0 rounded-full" aria-hidden />
-      <p className="text-fg min-w-0 flex-1 text-[12.5px] leading-relaxed break-words">
+      <span className="bg-danger mt-[0.3125rem] size-[0.375rem] shrink-0 rounded-full" aria-hidden />
+      <p className="text-fg min-w-0 flex-1 text-[0.78125rem] leading-relaxed break-words">
         {toast.message}
       </p>
       <button

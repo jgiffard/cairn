@@ -89,7 +89,7 @@ const SettingsPage = async () => {
         </span>
         <div>
           <h1 className="font-display text-2xl leading-none">Settings</h1>
-          <p className="text-fg-subtle mt-2 text-[12px]">{user.email}</p>
+          <p className="text-fg-subtle mt-2 text-[0.75rem]">{user.email}</p>
         </div>
       </header>
 

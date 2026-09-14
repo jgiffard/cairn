@@ -64,7 +64,7 @@ export const EditableTitle = ({ taskId, initial }: { taskId: string; initial: st
           setValue(initial)
           setEditing(true)
         }}
-        className="hover:bg-surface-hover -mx-1.5 mb-6 cursor-text rounded-md px-1.5 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em] text-balance transition-colors"
+        className="hover:bg-surface-hover -mx-1.5 mb-6 cursor-text rounded-md px-1.5 text-[1.5rem] leading-[1.25] font-semibold tracking-[-0.01em] text-balance transition-colors"
         title="Click to edit"
       >
         {initial}
@@ -94,7 +94,7 @@ export const EditableTitle = ({ taskId, initial }: { taskId: string; initial: st
           setEditing(false)
         }
       }}
-      className="border-accent bg-surface -mx-1.5 mb-6 w-[calc(100%+0.75rem)] resize-none rounded-md border px-1.5 text-[24px] leading-[1.25] font-semibold tracking-[-0.01em] outline-none"
+      className="border-accent bg-surface -mx-1.5 mb-6 w-[calc(100%+0.75rem)] resize-none rounded-md border px-1.5 text-[1.5rem] leading-[1.25] font-semibold tracking-[-0.01em] outline-none"
       rows={1}
     />
   )

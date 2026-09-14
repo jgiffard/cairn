@@ -137,11 +137,11 @@ const Picker = ({
               }`}
             >
               <StatusIcon status={h.status as TaskStatus} size={12} />
-              <span className="text-fg-muted min-w-0 truncate text-[12px]">{h.title}</span>
+              <span className="text-fg-muted min-w-0 truncate text-[0.75rem]">{h.title}</span>
             </button>
           ))}
           {visible.length === 0 && (
-            <span className="text-fg-subtle px-1.5 py-1 text-[12px]">
+            <span className="text-fg-subtle px-1.5 py-1 text-[0.75rem]">
               {loading ? 'Searching…' : 'No match'}
             </span>
           )}
@@ -205,13 +205,13 @@ export const DependencyEditor = ({
         return (
           <div key={direction} className="group/dep flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-fg-subtle text-[11px] font-medium">{TITLE[direction]}</span>
+              <span className="text-fg-subtle text-[0.6875rem] font-medium">{TITLE[direction]}</span>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => setOpen(open === direction ? null : direction)}
                 aria-label={`Add a task that ${direction === 'blocked-by' ? 'blocks' : 'is blocked by'} this one`}
-                className="text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-[18px] place-items-center rounded opacity-0 transition group-hover/dep:opacity-100 focus-visible:opacity-100"
+                className="text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-[1.125rem] place-items-center rounded opacity-0 transition group-hover/dep:opacity-100 focus-visible:opacity-100"
               >
                 <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden>
                   <path
@@ -234,7 +234,7 @@ export const DependencyEditor = ({
                   <Link
                     href={`/projects/${r.project_key}/tasks/${r.number}`}
                     prefetch
-                    className="text-fg-muted hover:text-fg min-w-0 flex-1 truncate text-[12.5px]"
+                    className="text-fg-muted hover:text-fg min-w-0 flex-1 truncate text-[0.78125rem]"
                   >
                     {r.title}
                   </Link>
@@ -257,7 +257,7 @@ export const DependencyEditor = ({
                 </div>
               ))}
               {items.length === 0 && open !== direction && (
-                <span className="text-fg-subtle text-[12px]">None</span>
+                <span className="text-fg-subtle text-[0.75rem]">None</span>
               )}
             </div>
 
@@ -272,7 +272,7 @@ export const DependencyEditor = ({
           </div>
         )
       })}
-      {error && <span className="text-danger text-[12px]">{error}</span>}
+      {error && <span className="text-danger text-[0.75rem]">{error}</span>}
     </div>
   )
 }

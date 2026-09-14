@@ -54,14 +54,14 @@ const Row = ({ row }: { row: ActivityGroup }) => {
 
   const body = (
     <div className="flex min-w-0 items-start gap-2.5 px-4 py-2">
-      <span className="text-fg-subtle w-[38px] shrink-0 pt-[2px] text-[11px] tabular-nums">
+      <span className="text-fg-subtle w-[2.375rem] shrink-0 pt-[2px] text-[0.6875rem] tabular-nums">
         {time}
       </span>
       {/* A tinted tile rather than a bare glyph: at 13px on a near-black
           ground a line icon has almost no presence, and the column is the
           only thing telling twelve identical-looking rows apart. */}
       <span
-        className="mt-[1px] grid size-[20px] shrink-0 place-items-center rounded-md"
+        className="mt-[1px] grid size-[1.25rem] shrink-0 place-items-center rounded-md"
         style={{ backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`, color }}
         aria-hidden
       >
@@ -74,9 +74,9 @@ const Row = ({ row }: { row: ActivityGroup }) => {
           same grey before saying anything, and a timeline you cannot skim by
           content is a list of timestamps. */}
       <div className="min-w-0 flex-1">
-        <p className="text-fg line-clamp-2 text-[13px] leading-snug">{row.title}</p>
+        <p className="text-fg line-clamp-2 text-[0.8125rem] leading-snug">{row.title}</p>
 
-        <div className="text-fg-subtle mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px]">
+        <div className="text-fg-subtle mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[0.6875rem]">
           <span style={{ color }}>{label}</span>
           {row.details
             .filter((d) => d !== label)
@@ -128,7 +128,7 @@ export const ActivityList = ({ rows }: { rows: ActivityRow[] }) => {
     <div>
       {[...days].map(([day, items]) => (
         <section key={day}>
-          <h2 className="border-border bg-bg-elevated text-fg sticky top-0 z-10 border-y px-4 py-2 text-[12px] font-medium">
+          <h2 className="border-border bg-bg-elevated text-fg sticky top-0 z-10 border-y px-4 py-2 text-[0.75rem] font-medium">
             {new Date(`${day}T12:00:00Z`).toLocaleDateString('en-GB', {
               weekday: 'long',
               day: 'numeric',

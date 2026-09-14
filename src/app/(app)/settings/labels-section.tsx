@@ -46,21 +46,21 @@ export const LabelsSection = ({ labels }: { labels: LabelRow[] }) => {
 
   return (
     <section>
-      <h2 className="text-fg text-[13px] font-medium">Labels</h2>
-      <p className="text-fg-subtle mt-1 text-[12px]">
+      <h2 className="text-fg text-[0.8125rem] font-medium">Labels</h2>
+      <p className="text-fg-subtle mt-1 text-[0.75rem]">
         Renaming onto a label that already exists merges the two. Nothing else keeps
         <code className="mx-1">db</code>,<code className="mx-1">database</code> and
         <code className="mx-1">postgres</code> from becoming three separate things.
       </p>
 
       {labels.length === 0 ? (
-        <p className="text-fg-subtle border-border mt-3 rounded-md border border-dashed px-3 py-4 text-center text-[12px]">
+        <p className="text-fg-subtle border-border mt-3 rounded-md border border-dashed px-3 py-4 text-center text-[0.75rem]">
           No labels in use.
         </p>
       ) : (
         <ul className="border-border divide-border mt-3 divide-y rounded-md border">
           {labels.map((l) => (
-            <li key={l.label} className="flex min-h-[38px] items-center gap-2 px-3 py-1.5">
+            <li key={l.label} className="flex min-h-[2.375rem] items-center gap-2 px-3 py-1.5">
               {editing === l.label ? (
                 <>
                   <InlineInput
@@ -75,20 +75,20 @@ export const LabelsSection = ({ labels }: { labels: LabelRow[] }) => {
                     className="min-w-0 flex-1"
                   />
                   {existing.has(draft.trim()) && draft.trim() !== l.label && (
-                    <span className="text-fg-subtle shrink-0 text-[11px]">merges</span>
+                    <span className="text-fg-subtle shrink-0 text-[0.6875rem]">merges</span>
                   )}
                   <button
                     type="button"
                     disabled={busy || !draft.trim()}
                     onClick={() => void apply(l.label, draft.trim())}
-                    className="text-accent shrink-0 text-[12px] disabled:opacity-40"
+                    className="text-accent shrink-0 text-[0.75rem] disabled:opacity-40"
                   >
                     Save
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditing(null)}
-                    className="text-fg-subtle hover:text-fg shrink-0 text-[12px]"
+                    className="text-fg-subtle hover:text-fg shrink-0 text-[0.75rem]"
                   >
                     Cancel
                   </button>
@@ -96,7 +96,7 @@ export const LabelsSection = ({ labels }: { labels: LabelRow[] }) => {
               ) : (
                 <>
                   <LabelPill>{l.label}</LabelPill>
-                  <span className="text-fg-subtle tabular ml-auto shrink-0 text-[11px]">
+                  <span className="text-fg-subtle tabular ml-auto shrink-0 text-[0.6875rem]">
                     {l.task_count} task{l.task_count === 1 ? '' : 's'}
                   </span>
                   <button
@@ -105,7 +105,7 @@ export const LabelsSection = ({ labels }: { labels: LabelRow[] }) => {
                       setEditing(l.label)
                       setDraft(l.label)
                     }}
-                    className="text-fg-muted hover:text-fg shrink-0 text-[12px] transition-colors"
+                    className="text-fg-muted hover:text-fg shrink-0 text-[0.75rem] transition-colors"
                   >
                     Rename
                   </button>
@@ -113,7 +113,7 @@ export const LabelsSection = ({ labels }: { labels: LabelRow[] }) => {
                     type="button"
                     disabled={busy}
                     onClick={() => void apply(l.label, null)}
-                    className="text-fg-subtle hover:text-danger shrink-0 text-[12px] transition-colors"
+                    className="text-fg-subtle hover:text-danger shrink-0 text-[0.75rem] transition-colors"
                   >
                     Remove
                   </button>
@@ -124,7 +124,7 @@ export const LabelsSection = ({ labels }: { labels: LabelRow[] }) => {
         </ul>
       )}
 
-      {message && <p className="text-fg-muted mt-2 text-[12px]">{message}</p>}
+      {message && <p className="text-fg-muted mt-2 text-[0.75rem]">{message}</p>}
     </section>
   )
 }

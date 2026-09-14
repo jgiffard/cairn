@@ -82,7 +82,7 @@ export const NewTaskButton = () => {
       type="button"
       onClick={open}
       title="New task — c"
-      className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg flex h-[26px] items-center gap-1.5 rounded-md border px-2 text-[12px] transition-colors"
+      className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg flex h-[1.625rem] items-center gap-1.5 rounded-md border px-2 text-[0.75rem] transition-colors"
     >
       New task
       <kbd className="kbd hidden sm:inline-flex">c</kbd>

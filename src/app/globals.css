@@ -192,11 +192,28 @@
   html { color-scheme: light; }
   html.dark { color-scheme: dark; }
 
+  /**
+   * One knob for how large the whole interface is.
+   *
+   * Every size in the app is expressed in rem, so this scales text, row
+   * heights, control heights and spacing together. Raising only the type would
+   * have left 83 fixed pixel heights behind and pushed text out of its own
+   * rows.
+   *
+   * 17px rather than the browser's 16 because the people reading this all day
+   * asked for it larger, and because a root size stated in px still honours
+   * browser zoom, which is what somebody who needs it much larger will reach
+   * for. Change this one number to change everything.
+   */
+  html {
+    font-size: 17px;
+  }
+
   body {
     background-color: var(--bg);
     color: var(--fg);
     font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
-    font-size: 13px;
+    font-size: 0.8125rem;
     line-height: 1.5;
     letter-spacing: -0.0025em;
     -webkit-font-smoothing: antialiased;
@@ -241,7 +258,7 @@
     border-radius: 4px;
     background: var(--surface-raised);
     color: var(--fg-muted);
-    font-size: 11px;
+    font-size: 0.6875rem;
     line-height: 1;
   }
 

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { ProjectIcon } from '@/components/icons'
-import { Activity, BookOpen, Columns3, HeartPulse, History, Inbox, Search, X } from 'lucide-react'
+import { Activity, BookOpen, Columns3, FolderKanban, HeartPulse, History, Inbox, Search, X } from 'lucide-react'
 
 /**
  * 34 projects is too many for a plain list, so the nav filters.
@@ -36,6 +36,7 @@ export const ProjectNav = ({
     { href: '/sessions', label: 'Sessions', icon: History },
     { href: '/activity', label: 'Activity', icon: Activity },
     { href: '/vitals', label: 'Vitals', icon: HeartPulse },
+    { href: '/projects', label: 'Projects', icon: FolderKanban },
   ]
 
   return (
@@ -52,13 +53,13 @@ export const ProjectNav = ({
                 href={href}
                 onClick={onNavigate}
                 className={cn(
-                  'relative flex h-[28px] items-center gap-2 rounded-md px-2 text-[13px]',
+                  'relative flex h-[1.75rem] items-center gap-2 rounded-md px-2 text-[0.8125rem]',
                   'transition-colors duration-100 ease-[var(--ease)]',
                   // The active item gets a marker as well as a fill: a raised
                   // background alone is a very quiet way to answer "where am
                   // I" on a sidebar of twenty-odd entries.
                   active
-                    ? 'bg-surface-raised text-fg before:bg-accent before:absolute before:inset-y-[6px] before:-left-[2px] before:w-[2px] before:rounded-full'
+                    ? 'bg-surface-raised text-fg before:bg-accent before:absolute before:inset-y-[0.375rem] before:-left-[2px] before:w-[2px] before:rounded-full'
                     : 'text-fg-muted hover:bg-surface-hover hover:text-fg',
                 )}
               >
@@ -70,7 +71,7 @@ export const ProjectNav = ({
         })}
       </ul>
 
-      <span className="text-fg-subtle px-2 pb-1 text-[11px] font-medium">Projects</span>
+      <span className="text-fg-subtle px-2 pb-1 text-[0.6875rem] font-medium">Projects</span>
 
       {projects.length > 8 && (
         <div className="relative mb-1">
@@ -84,7 +85,7 @@ export const ProjectNav = ({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Find a project…"
             aria-label="Filter projects"
-            className="placeholder:text-fg-subtle hover:bg-surface focus:bg-surface focus:ring-ring/30 w-full rounded-md border border-transparent bg-transparent py-1 pr-2 pl-6 text-[12px] outline-none transition-colors focus:ring-2"
+            className="placeholder:text-fg-subtle hover:bg-surface focus:bg-surface focus:ring-ring/30 w-full rounded-md border border-transparent bg-transparent py-1 pr-2 pl-6 text-[0.75rem] outline-none transition-colors focus:ring-2"
           />
           {query && (
             <button
@@ -109,23 +110,23 @@ export const ProjectNav = ({
                 href={href}
                 onClick={onNavigate}
                 className={cn(
-                  'group relative flex h-[28px] items-center gap-2 rounded-md px-2',
+                  'group relative flex h-[1.75rem] items-center gap-2 rounded-md px-2',
                   'transition-colors duration-100 ease-[var(--ease)]',
                   active
-                    ? 'bg-surface-raised text-fg before:bg-accent before:absolute before:inset-y-[6px] before:-left-[2px] before:w-[2px] before:rounded-full'
+                    ? 'bg-surface-raised text-fg before:bg-accent before:absolute before:inset-y-[0.375rem] before:-left-[2px] before:w-[2px] before:rounded-full'
                     : 'text-fg-muted hover:bg-surface-hover hover:text-fg',
                 )}
               >
                 <ProjectIcon size={13} projectKey={p.key} />
-                <span className="truncate text-[13px]">{p.title}</span>
-                <code className="text-fg-subtle ml-auto shrink-0 text-[10px]">{p.key}</code>
+                <span className="truncate text-[0.8125rem]">{p.title}</span>
+                <code className="text-fg-subtle ml-auto shrink-0 text-[0.625rem]">{p.key}</code>
               </Link>
             </li>
           )
         })}
 
         {shown.length === 0 && (
-          <li className="text-fg-subtle px-2 py-2 text-[11px]">No project matches.</li>
+          <li className="text-fg-subtle px-2 py-2 text-[0.6875rem]">No project matches.</li>
         )}
       </ul>
     </nav>

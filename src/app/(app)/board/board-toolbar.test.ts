@@ -30,6 +30,11 @@ describe('the board toolbar is not a scroll container', () => {
   })
 
   it('still opens its menus with an absolute popover', () => {
-    expect(source).toMatch(/absolute top-\[\d+px\]/)
+    // Unit-agnostic on purpose: what matters is that the popover is placed
+    // outside the bar, not whether the offset is written in px or rem. This
+    // assertion has now broken twice on details it never meant to pin — first
+    // a drop shadow, then the switch to rem — and a guard that cries wolf is
+    // one somebody eventually deletes.
+    expect(source).toMatch(/absolute top-\[[\d.]+(px|rem)\]/)
   })
 })

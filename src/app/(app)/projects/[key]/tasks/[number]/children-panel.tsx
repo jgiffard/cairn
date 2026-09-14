@@ -78,12 +78,12 @@ export const ChildrenPanel = ({
   return (
     <section>
       <div className="mb-2 flex items-center gap-2">
-        <h2 className="text-fg-subtle text-[11px] font-medium">
+        <h2 className="text-fg-subtle text-[0.6875rem] font-medium">
           Sub-tasks{items.length > 0 ? ` · ${closed}/${items.length}` : ''}
         </h2>
         {items.length > 0 && (
           <div
-            className="bg-surface-raised h-[4px] w-[80px] overflow-hidden rounded-full"
+            className="bg-surface-raised h-[0.25rem] w-[5rem] overflow-hidden rounded-full"
             role="progressbar"
             aria-valuenow={pct}
             aria-valuemin={0}
@@ -96,7 +96,7 @@ export const ChildrenPanel = ({
         <button
           type="button"
           onClick={() => setAdding((a) => !a)}
-          className="text-fg-subtle hover:text-fg ml-auto text-[11px] transition-colors"
+          className="text-fg-subtle hover:text-fg ml-auto text-[0.6875rem] transition-colors"
         >
           {adding ? 'Cancel' : 'Add sub-task'}
         </button>
@@ -105,17 +105,17 @@ export const ChildrenPanel = ({
       {items.length > 0 && (
         <ul className="border-border divide-border divide-y rounded-md border">
           {items.map((c) => (
-            <li key={c.id} className="group hover:bg-surface-hover flex h-[32px] items-center gap-2 px-2.5">
+            <li key={c.id} className="group hover:bg-surface-hover flex h-[2rem] items-center gap-2 px-2.5">
               <PriorityIcon priority={c.priority} />
               <StatusIcon status={c.status} size={13} />
               <Link
                 href={`/projects/${c.project_key}/tasks/${c.number}`}
                 prefetch
-                className="text-fg min-w-0 flex-1 truncate text-[12.5px]"
+                className="text-fg min-w-0 flex-1 truncate text-[0.78125rem]"
               >
                 {c.title}
               </Link>
-              <code className="text-fg-subtle tabular shrink-0 text-[11px]">
+              <code className="text-fg-subtle tabular shrink-0 text-[0.6875rem]">
                 {c.project_key}-{c.number}
               </code>
               <button
@@ -156,7 +156,7 @@ export const ChildrenPanel = ({
               onChange={(e) => setTarget(e.target.value)}
               aria-label="Which project the sub-task goes in"
               title="A sub-task can live in another repo's project — that is how one change lands across several"
-              className="w-[92px]"
+              className="w-[5.75rem]"
             >
               {projects.map((p) => (
                 <option key={p.key} value={p.key}>
@@ -169,12 +169,12 @@ export const ChildrenPanel = ({
       )}
 
       {items.length === 0 && !adding && (
-        <p className="text-fg-subtle text-[12px]">
+        <p className="text-fg-subtle text-[0.75rem]">
           None. Split the work here when it is too big for one resolution.
         </p>
       )}
 
-      {error && <p className="text-danger mt-1.5 text-[12px]">{error}</p>}
+      {error && <p className="text-danger mt-1.5 text-[0.75rem]">{error}</p>}
     </section>
   )
 }

@@ -43,35 +43,35 @@ const Row = ({ row }: { row: SearchAllRow }) => {
 
   const body = (
     <div className="flex min-w-0 items-start gap-2.5">
-      <Icon size={13} className={cn('mt-[3px] shrink-0', tone)} aria-hidden />
+      <Icon size={13} className={cn('mt-[0.1875rem] shrink-0', tone)} aria-hidden />
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-fg-subtle shrink-0 font-mono text-[11px]">{row.ref}</span>
+          <span className="text-fg-subtle shrink-0 font-mono text-[0.6875rem]">{row.ref}</span>
           {row.project_key && row.kind !== 'knowledge' && (
             <span className="flex shrink-0 items-center gap-1">
               <ProjectIcon size={11} projectKey={row.project_key} />
             </span>
           )}
-          <span className="text-fg-subtle text-[11px]">{label}</span>
+          <span className="text-fg-subtle text-[0.6875rem]">{label}</span>
           {row.answered && (
-            <span className="text-status-done text-[11px]">
+            <span className="text-status-done text-[0.6875rem]">
               {row.kind === 'task' ? 'answered' : row.kind === 'session' ? 'has next steps' : 'verified'}
             </span>
           )}
           {row.status === 'superseded' && (
-            <span className="text-danger text-[11px]">superseded</span>
+            <span className="text-danger text-[0.6875rem]">superseded</span>
           )}
         </div>
 
-        <p className="text-fg mt-1 text-[13px] leading-snug">{row.title}</p>
+        <p className="text-fg mt-1 text-[0.8125rem] leading-snug">{row.title}</p>
 
         {row.subtitle && (
-          <p className="text-fg-subtle mt-0.5 truncate text-[11px]">{row.subtitle}</p>
+          <p className="text-fg-subtle mt-0.5 truncate text-[0.6875rem]">{row.subtitle}</p>
         )}
       </div>
 
-      <span className="text-fg-subtle shrink-0 self-center text-[11px] tabular-nums">
+      <span className="text-fg-subtle shrink-0 self-center text-[0.6875rem] tabular-nums">
         ~{Math.ceil(row.body_bytes / 4)}
       </span>
     </div>

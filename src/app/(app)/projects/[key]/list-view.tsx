@@ -37,7 +37,7 @@ const GROUP_LABEL: Record<GroupKey, string> = {
   cancelled: 'Cancelled',
 }
 
-type Tab = 'active' | 'backlog' | 'all' | 'recent' | 'held' | 'closed'
+type Tab = 'doing' | 'todo' | 'active' | 'backlog' | 'all' | 'recent' | 'held' | 'closed'
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   backlog: 'Backlog',
@@ -82,7 +82,7 @@ const Row = ({
   return (
     <div
       className={cn(
-        'group relative flex h-[36px] items-center transition-colors duration-100 ease-[var(--ease)]',
+        'group relative flex h-[2.25rem] items-center transition-colors duration-100 ease-[var(--ease)]',
         // Shift-click paints a text selection across the rows it passes
         // otherwise, which looks like a mistake on every range.
         'select-none',
@@ -127,7 +127,7 @@ const Row = ({
           onToggle(task.id, e.shiftKey)
         }}
         className={cn(
-          'relative z-10 grid h-[36px] w-[30px] shrink-0 place-items-center pl-3 transition-opacity',
+          'relative z-10 grid h-[2.25rem] w-[1.875rem] shrink-0 place-items-center pl-3 transition-opacity',
           selected || selecting
             ? 'opacity-100'
             : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100',
@@ -135,7 +135,7 @@ const Row = ({
       >
         <span
           className={cn(
-            'grid size-[14px] place-items-center rounded-[4px] border transition-colors',
+            'grid size-[0.875rem] place-items-center rounded-[0.25rem] border transition-colors',
             selected
               ? 'border-accent bg-accent text-accent-fg'
               : 'border-border-strong bg-surface hover:border-accent',
@@ -156,7 +156,7 @@ const Row = ({
         </span>
       </button>
 
-      <div className="pointer-events-none flex h-[36px] min-w-0 flex-1 items-center gap-2 pl-1.5 pr-3 md:pr-4">
+      <div className="pointer-events-none flex h-[2.25rem] min-w-0 flex-1 items-center gap-2 pl-1.5 pr-3 md:pr-4">
         <QuickSelect
           value={priority}
           options={TASK_PRIORITIES}
@@ -167,7 +167,7 @@ const Row = ({
           <PriorityIcon priority={priority} />
         </QuickSelect>
 
-        <code className="text-fg-subtle hidden w-[62px] shrink-0 truncate text-[12px] tabular sm:block md:w-[72px]">
+        <code className="text-fg-subtle hidden w-[3.875rem] shrink-0 truncate text-[0.75rem] tabular sm:block md:w-[4.5rem]">
           {task.external_ref ?? ref}
         </code>
 
@@ -193,7 +193,7 @@ const Row = ({
           <StatusIcon status={status} />
         </QuickSelect>
 
-        <span className="text-fg min-w-0 flex-1 truncate text-[13px]">{task.title}</span>
+        <span className="text-fg min-w-0 flex-1 truncate text-[0.8125rem]">{task.title}</span>
 
         {/* Filed in another project and linked here. Without saying so, a row
             reading CAIRN-83 in the HM list reads as a bug rather than as work
@@ -201,7 +201,7 @@ const Row = ({
         {task.guest && (
           <span
             title={`Filed in ${ownKey}, also belongs here`}
-            className="border-border text-fg-subtle pointer-events-auto hidden shrink-0 rounded border px-1.5 py-px text-[10px] tracking-wide uppercase sm:inline"
+            className="border-border text-fg-subtle pointer-events-auto hidden shrink-0 rounded border px-1.5 py-px text-[0.625rem] tracking-wide uppercase sm:inline"
           >
             guest
           </span>
@@ -212,7 +212,7 @@ const Row = ({
             type="button"
             onClick={clearError}
             title={error}
-            className="text-danger pointer-events-auto shrink-0 text-[11px]"
+            className="text-danger pointer-events-auto shrink-0 text-[0.6875rem]"
           >
             refused
           </button>
@@ -220,7 +220,7 @@ const Row = ({
 
         {task.blocked_reason ? (
           <span
-            className="text-danger shrink-0 text-[11px]"
+            className="text-danger shrink-0 text-[0.6875rem]"
             title={`Blocked: ${task.blocked_reason}`}
           >
             blocked
@@ -229,7 +229,7 @@ const Row = ({
 
         {task.has_resolution ? (
           <span
-            className="bg-status-done size-[6px] shrink-0 rounded-full"
+            className="bg-status-done size-[0.375rem] shrink-0 rounded-full"
             title="Has a recorded resolution"
           />
         ) : null}
@@ -241,7 +241,7 @@ const Row = ({
             labels={Object.fromEntries(projects.map((p) => [p.key, p.title]))}
             title={`Project: ${ownKey} — moving renumbers the task`}
             onChange={(next) => void patch({ project: next })}
-            className="text-fg-muted pointer-events-auto hidden items-center gap-1.5 text-[12px] md:inline-flex"
+            className="text-fg-muted pointer-events-auto hidden items-center gap-1.5 text-[0.75rem] md:inline-flex"
           >
             <ProjectIcon size={12} projectKey={ownKey} />
             {ownKey}
@@ -278,13 +278,13 @@ const Row = ({
             <Avatar name={task.claimed_by} size={18} />
           </span>
         ) : (
-          <span className="border-border hidden size-[18px] shrink-0 rounded-full border border-dashed sm:block" />
+          <span className="border-border hidden size-[1.125rem] shrink-0 rounded-full border border-dashed sm:block" />
         )}
 
         <time
           dateTime={task.updated_at}
           title={fullDateTime(task.updated_at)}
-          className="text-fg-subtle tabular hidden w-[46px] shrink-0 text-right text-[12px] md:block"
+          className="text-fg-subtle tabular hidden w-[2.875rem] shrink-0 text-right text-[0.75rem] md:block"
         >
           {shortDate(task.updated_at)}
         </time>
@@ -334,7 +334,7 @@ export const ListView = ({
   /** The view toggle, so it does not need a band of its own above the list. */
   toolbarExtra?: React.ReactNode
 }) => {
-  const [tab, setTab] = useState<Tab>('all')
+  const [tab, setTab] = useState<Tab>('doing')
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -375,11 +375,13 @@ export const ListView = ({
         filterRef.current?.focus()
       }
       if (e.key === 'Escape') setSelected(new Set())
-      if (e.key === '1') setTab('active')
-      if (e.key === '2') setTab('backlog')
-      if (e.key === '3') setTab('all')
-      if (e.key === '4') setTab('recent')
-      if (e.key === '5') setTab('closed')
+      if (e.key === '1') setTab('doing')
+      if (e.key === '2') setTab('todo')
+      if (e.key === '3') setTab('active')
+      if (e.key === '4') setTab('backlog')
+      if (e.key === '5') setTab('all')
+      if (e.key === '6') setTab('recent')
+      if (e.key === '7') setTab('closed')
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -393,6 +395,8 @@ export const ListView = ({
   const filtered = useMemo(() => {
     const byTab = source.filter((t) => {
       if (tab === 'closed') return true
+      if (tab === 'doing') return t.status === 'doing' || t.status === 'in-review'
+      if (tab === 'todo') return t.status === 'todo'
       if (tab === 'active')
         return t.status === 'doing' || t.status === 'in-review' || t.status === 'todo'
       if (tab === 'backlog') return t.status === 'backlog'
@@ -454,7 +458,7 @@ export const ListView = ({
 
   const tabClass = (t: Tab) =>
     cn(
-      'shrink-0 rounded-md px-2.5 py-1 text-[12px] whitespace-nowrap transition-colors',
+      'shrink-0 rounded-md px-2.5 py-1 text-[0.75rem] whitespace-nowrap transition-colors',
       tab === t ? 'bg-surface-raised text-fg' : 'text-fg-muted hover:text-fg',
     )
 
@@ -466,7 +470,13 @@ export const ListView = ({
       <div className="border-border flex flex-col gap-1.5 border-b px-3 py-2 sm:flex-row sm:items-center sm:gap-1">
         <div className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {toolbarExtra}
-          {toolbarExtra ? <span className="bg-border mx-1 h-[16px] w-px shrink-0" aria-hidden /> : null}
+          {toolbarExtra ? <span className="bg-border mx-1 h-[1rem] w-px shrink-0" aria-hidden /> : null}
+          <button type="button" onClick={() => setTab('doing')} className={tabClass('doing')}>
+            In Progress
+          </button>
+          <button type="button" onClick={() => setTab('todo')} className={tabClass('todo')}>
+            Todo
+          </button>
           <button type="button" onClick={() => setTab('active')} className={tabClass('active')}>
             Active
           </button>
@@ -498,15 +508,45 @@ export const ListView = ({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filter…"
             aria-label="Filter tasks"
-            className="placeholder:text-fg-subtle border-border focus:border-accent min-w-0 flex-1 rounded-md border bg-transparent px-2 py-1 text-[12px] outline-none transition-colors sm:border-transparent sm:px-1 sm:py-0"
+            className="placeholder:text-fg-subtle border-border focus:border-accent min-w-0 flex-1 rounded-md border bg-transparent px-2 py-1 text-[0.75rem] outline-none transition-colors sm:border-transparent sm:px-1 sm:py-0"
           />
-          <span className="text-fg-subtle tabular shrink-0 text-[11px]">{filtered.length}</span>
+          <span className="text-fg-subtle tabular shrink-0 text-[0.6875rem]">{filtered.length}</span>
           <NewTaskButton />
         </div>
       </div>
 
       {groups.length === 0 && (
-        <p className="text-fg-subtle py-16 text-center text-[13px]">Nothing here.</p>
+        /**
+         * "Nothing here" was fine when the page opened on All, where an empty
+         * list meant an empty project. In Progress is the default now, so an
+         * empty list is the ordinary state of a day where nothing has been
+         * picked up — and a dead end is the wrong thing to show somebody who
+         * has just arrived looking for work.
+         */
+        <div className="text-fg-subtle flex flex-col items-center gap-2 py-16 text-center text-[0.8125rem]">
+          {query ? (
+            <p>Nothing matches “{query}”.</p>
+          ) : tab === 'doing' ? (
+            <>
+              <p>Nothing is in progress.</p>
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={() => setTab('todo')} className="text-accent hover:underline">
+                  Todo
+                </button>
+                <span aria-hidden>·</span>
+                <button type="button" onClick={() => setTab('backlog')} className="text-accent hover:underline">
+                  Backlog
+                </button>
+                <span aria-hidden>·</span>
+                <button type="button" onClick={() => setTab('all')} className="text-accent hover:underline">
+                  All
+                </button>
+              </div>
+            </>
+          ) : (
+            <p>Nothing here.</p>
+          )}
+        </div>
       )}
 
       {groups.map((group) => {
@@ -516,7 +556,7 @@ export const ListView = ({
             <button
               type="button"
               onClick={() => toggle(group.status)}
-              className="bg-bg-elevated border-border hover:bg-surface-hover sticky top-0 z-10 flex h-[34px] w-full items-center gap-2 border-b px-3 text-left transition-colors"
+              className="bg-bg-elevated border-border hover:bg-surface-hover sticky top-0 z-10 flex h-[2.125rem] w-full items-center gap-2 border-b px-3 text-left transition-colors"
             >
               {group.status === 'recent' ? (
                 <Clock size={13} className="text-fg-subtle" />
@@ -528,7 +568,7 @@ export const ListView = ({
                   and the eye has nothing to land on when scrolling a long
                   list. */}
               <span
-                className="text-[12px] font-medium"
+                className="text-[0.75rem] font-medium"
                 style={
                   group.status === 'recent'
                     ? undefined
@@ -537,7 +577,7 @@ export const ListView = ({
               >
                 {GROUP_LABEL[group.status]}
               </span>
-              <span className="text-fg-subtle tabular text-[12px]">
+              <span className="text-fg-subtle tabular text-[0.75rem]">
                 {group.items.length}
                 {group.items.length !== group.total ? ` / ${group.total}` : ''}
               </span>

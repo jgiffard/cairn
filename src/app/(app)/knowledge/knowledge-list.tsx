@@ -30,7 +30,7 @@ export type KnowledgeListItem = {
  * read as three unrelated things rather than one answer at three widths.
  */
 const Chip = ({ children }: { children: React.ReactNode }) => (
-  <span className="border-border bg-surface text-fg-muted inline-flex h-[18px] shrink-0 items-center gap-1 rounded-full border px-1.5 text-[10.5px] whitespace-nowrap">
+  <span className="border-border bg-surface text-fg-muted inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded-full border px-1.5 text-[0.65625rem] whitespace-nowrap">
     {children}
   </span>
 )
@@ -53,7 +53,7 @@ const Scope = ({ item }: { item: KnowledgeListItem }) => {
       <span className="inline-flex flex-wrap items-center gap-1">
         {item.entities.map((e) => (
           <Chip key={e}>
-            <span className="bg-fg-subtle size-[5px] rounded-full" aria-hidden />
+            <span className="bg-fg-subtle size-[0.3125rem] rounded-full" aria-hidden />
             {e}
           </Chip>
         ))}
@@ -62,7 +62,7 @@ const Scope = ({ item }: { item: KnowledgeListItem }) => {
   }
   return (
     <Chip>
-      <span className="bg-fg-subtle size-[5px] rounded-full opacity-60" aria-hidden />
+      <span className="bg-fg-subtle size-[0.3125rem] rounded-full opacity-60" aria-hidden />
       everywhere
     </Chip>
   )
@@ -83,10 +83,10 @@ export const KnowledgeList = ({ items }: { items: KnowledgeListItem[] }) => (
             own rhythm — a knowledge list beside a task list read as two
             different applications. Everything after the title is metadata and
             belongs on the same line, ranked right. */}
-        <div className="hover:bg-surface-hover flex h-[40px] min-w-0 items-center gap-2 px-3 transition-colors sm:px-4">
+        <div className="hover:bg-surface-hover flex h-[2.5rem] min-w-0 items-center gap-2 px-3 transition-colors sm:px-4">
           <span
             className={cn(
-              'pointer-events-none min-w-0 flex-1 truncate text-[13px]',
+              'pointer-events-none min-w-0 flex-1 truncate text-[0.8125rem]',
               item.superseded ? 'text-fg-muted line-through decoration-1' : 'text-fg',
             )}
           >
@@ -100,7 +100,7 @@ export const KnowledgeList = ({ items }: { items: KnowledgeListItem[] }) => (
           )}
 
           {item.loose && (
-            <span className="text-fg-subtle pointer-events-none shrink-0 text-[11px] italic">
+            <span className="text-fg-subtle pointer-events-none shrink-0 text-[0.6875rem] italic">
               loose
             </span>
           )}
@@ -111,13 +111,13 @@ export const KnowledgeList = ({ items }: { items: KnowledgeListItem[] }) => (
                 href={`/knowledge/${item.supersededByRef.slug}`}
                 prefetch
                 title={`Superseded by ${item.supersededByRef.title}`}
-                className="text-accent pointer-events-auto relative z-10 hidden shrink-0 items-center gap-1 text-[11px] hover:underline sm:flex"
+                className="text-accent pointer-events-auto relative z-10 hidden shrink-0 items-center gap-1 text-[0.6875rem] hover:underline sm:flex"
               >
                 <ArrowRight size={11} aria-hidden />
                 superseded
               </Link>
             ) : (
-              <span className="text-fg-subtle pointer-events-none shrink-0 text-[11px] italic">
+              <span className="text-fg-subtle pointer-events-none shrink-0 text-[0.6875rem] italic">
                 superseded
               </span>
             ))}
@@ -128,7 +128,7 @@ export const KnowledgeList = ({ items }: { items: KnowledgeListItem[] }) => (
                 <LabelPill key={l}>{l}</LabelPill>
               ))}
               {item.labels.length > 3 && (
-                <span className="text-fg-subtle text-[11px]">+{item.labels.length - 3}</span>
+                <span className="text-fg-subtle text-[0.6875rem]">+{item.labels.length - 3}</span>
               )}
             </span>
           )}
@@ -140,7 +140,7 @@ export const KnowledgeList = ({ items }: { items: KnowledgeListItem[] }) => (
           <time
             dateTime={item.updatedAt}
             title={fullDateTime(item.updatedAt)}
-            className="text-fg-subtle tabular hidden w-[46px] shrink-0 text-right text-[12px] md:block"
+            className="text-fg-subtle tabular hidden w-[2.875rem] shrink-0 text-right text-[0.75rem] md:block"
           >
             {shortDate(item.updatedAt)}
           </time>

@@ -110,12 +110,12 @@ export const MarkdownEditor = ({
             baseline.current = value
             setEditing(true)
           }}
-          className="text-fg-subtle hover:text-fg border-border bg-surface absolute -top-1 right-0 rounded border px-2 py-0.5 text-[11px] opacity-0 transition-opacity group-hover:opacity-100"
+          className="text-fg-subtle hover:text-fg border-border bg-surface absolute -top-1 right-0 rounded border px-2 py-0.5 text-[0.6875rem] opacity-0 transition-opacity group-hover:opacity-100"
         >
           Edit
         </button>
         {state === 'saved' && (
-          <span className="text-status-done absolute -top-1 right-14 text-[11px]">saved</span>
+          <span className="text-status-done absolute -top-1 right-14 text-[0.6875rem]">saved</span>
         )}
       </div>
     )
@@ -150,9 +150,9 @@ export const MarkdownEditor = ({
         >
           Cancel
         </button>
-        <span className="text-fg-subtle text-[11px]">⌘↵ save · esc cancel</span>
+        <span className="text-fg-subtle text-[0.6875rem]">⌘↵ save · esc cancel</span>
         {state === 'error' && (
-          <span className="text-danger text-[11px]">Save failed — nothing was changed.</span>
+          <span className="text-danger text-[0.6875rem]">Save failed — nothing was changed.</span>
         )}
       </div>
     </div>

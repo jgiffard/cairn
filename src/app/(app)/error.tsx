@@ -17,8 +17,8 @@ const AppError = ({ error, reset }: { error: Error & { digest?: string }; reset:
   return (
     <div className="flex h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-fg text-[15px] font-medium">That page did not render.</h1>
-        <p className="text-fg-muted max-w-[46ch] text-[13px] leading-relaxed">
+        <h1 className="text-fg text-[0.9375rem] font-medium">That page did not render.</h1>
+        <p className="text-fg-muted max-w-[46ch] text-[0.8125rem] leading-relaxed">
           Nothing was lost — this is a display failure, not a write. Retrying usually works.
         </p>
       </div>
@@ -27,20 +27,20 @@ const AppError = ({ error, reset }: { error: Error & { digest?: string }; reset:
         <button
           type="button"
           onClick={reset}
-          className="bg-accent text-accent-fg h-[30px] rounded-md px-3.5 text-[13px] font-medium"
+          className="bg-accent text-accent-fg h-[1.875rem] rounded-md px-3.5 text-[0.8125rem] font-medium"
         >
           Try again
         </button>
         <Link
           href="/"
-          className="text-fg-muted hover:text-fg hover:bg-surface-hover h-[30px] rounded-md px-3.5 text-[13px] leading-[30px] transition-colors"
+          className="text-fg-muted hover:text-fg hover:bg-surface-hover h-[1.875rem] rounded-md px-3.5 text-[0.8125rem] leading-[1.875rem] transition-colors"
         >
           Back to all tasks
         </Link>
       </div>
 
       {error.digest && (
-        <code className="text-fg-subtle text-[11px]">
+        <code className="text-fg-subtle text-[0.6875rem]">
           digest {error.digest}
         </code>
       )}

@@ -60,7 +60,7 @@ export const LabelEditor = ({
         <LabelPill key={l}>{l}</LabelPill>
       ))}
       {labels.length > 2 && (
-        <span className="text-fg-subtle text-[11px]">+{labels.length - 2}</span>
+        <span className="text-fg-subtle text-[0.6875rem]">+{labels.length - 2}</span>
       )}
 
       <button
@@ -71,7 +71,7 @@ export const LabelEditor = ({
         }}
         aria-label={`Labels on ${taskRef}`}
         aria-expanded={open}
-        className={`text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-[18px] place-items-center rounded transition ${
+        className={`text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-[1.125rem] place-items-center rounded transition ${
           labels.length === 0 && !open ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'
         }`}
       >
@@ -87,10 +87,10 @@ export const LabelEditor = ({
 
       {open && (
         <div
-          className="border-border bg-surface absolute top-[24px] right-0 z-50 w-[190px] overflow-hidden rounded-md border py-1 raised"
+          className="border-border bg-surface absolute top-[1.5rem] right-0 z-50 w-[11.875rem] overflow-hidden rounded-md border py-1 raised"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="max-h-[190px] overflow-y-auto">
+          <div className="max-h-[11.875rem] overflow-y-auto">
             {options.map((l) => (
               <button
                 key={l}
@@ -103,13 +103,13 @@ export const LabelEditor = ({
                   readOnly
                   tabIndex={-1}
                   checked={labels.includes(l)}
-                  className="accent-accent size-[12px]"
+                  className="accent-accent size-[0.75rem]"
                 />
-                <span className="text-fg-muted min-w-0 truncate text-[12px]">{l}</span>
+                <span className="text-fg-muted min-w-0 truncate text-[0.75rem]">{l}</span>
               </button>
             ))}
             {options.length === 0 && (
-              <p className="text-fg-subtle px-2.5 py-1.5 text-[11px]">No labels yet.</p>
+              <p className="text-fg-subtle px-2.5 py-1.5 text-[0.6875rem]">No labels yet.</p>
             )}
           </div>
 
@@ -122,7 +122,7 @@ export const LabelEditor = ({
               }}
               placeholder="New label…"
               aria-label="New label"
-              className="h-[26px] text-[12px]"
+              className="h-[1.625rem] text-[0.75rem]"
             />
           </div>
         </div>

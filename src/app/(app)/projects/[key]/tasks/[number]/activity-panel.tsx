@@ -68,11 +68,11 @@ const describe = (entry: ActivityEntry): React.ReactNode => {
     case 'unblocked':
       return <>unblocked it</>
     case 'git_commit':
-      return <>recorded commit <code className="font-mono text-[11px]">{val(d.sha)}</code>{d.message ? <> · {String(d.message)}</> : null}</>
+      return <>recorded commit <code className="font-mono text-[0.6875rem]">{val(d.sha)}</code>{d.message ? <> · {String(d.message)}</> : null}</>
     case 'git_push':
-      return <>pushed <code className="font-mono text-[11px]">{val(d.sha)}</code>{d.branch ? <> to {String(d.branch)}</> : null}</>
+      return <>pushed <code className="font-mono text-[0.6875rem]">{val(d.sha)}</code>{d.branch ? <> to {String(d.branch)}</> : null}</>
     case 'run_result':
-      return <>{val(d.status)} <code className="font-mono text-[11px]">{val(d.command)}</code>{d.exitCode !== undefined ? <> · exit {String(d.exitCode)}</> : null}</>
+      return <>{val(d.status)} <code className="font-mono text-[0.6875rem]">{val(d.command)}</code>{d.exitCode !== undefined ? <> · exit {String(d.exitCode)}</> : null}</>
     default:
       return <>{entry.event.replace(/_/g, ' ')}</>
   }
@@ -92,7 +92,7 @@ export const ActivityPanel = ({ entries }: { entries: ActivityEntry[] }) => {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="text-fg-subtle hover:text-fg flex items-center gap-1.5 text-[11px] font-medium transition-colors"
+        className="text-fg-subtle hover:text-fg flex items-center gap-1.5 text-[0.6875rem] font-medium transition-colors"
         aria-expanded={open}
       >
         <svg
@@ -110,12 +110,12 @@ export const ActivityPanel = ({ entries }: { entries: ActivityEntry[] }) => {
       {open && (
         <ol className="mt-3 flex flex-col gap-2">
           {entries.map((e) => (
-            <li key={e.id} className="flex items-center gap-2 text-[12.5px]">
+            <li key={e.id} className="flex items-center gap-2 text-[0.78125rem]">
               <Avatar name={e.actor_id} size={16} />
               <span className="text-fg-muted min-w-0 flex-1">
                 <span className="text-fg">{e.actor_id}</span> {describe(e)}
               </span>
-              <RelativeTime iso={e.created_at} className="text-fg-subtle shrink-0 text-[11px]" />
+              <RelativeTime iso={e.created_at} className="text-fg-subtle shrink-0 text-[0.6875rem]" />
             </li>
           ))}
         </ol>

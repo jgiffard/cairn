@@ -39,17 +39,17 @@ const BoardPage = async ({
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[44px] shrink-0 items-center gap-2 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4">
         <MobileNavButton />
-        <span className="text-fg shrink-0 text-[13px] font-medium">Board</span>
-        <span className="text-fg-subtle hidden text-[13px] sm:block">·</span>
-        <span className="text-fg-subtle hidden text-[13px] sm:block">
+        <span className="text-fg shrink-0 text-[0.8125rem] font-medium">Board</span>
+        <span className="text-fg-subtle hidden text-[0.8125rem] sm:block">·</span>
+        <span className="text-fg-subtle hidden text-[0.8125rem] sm:block">
           {tasks.length} across {projects.length} projects
         </span>
 
         <PendingLink
           href={closedToggleHref(params, includeClosed)}
-          className="text-fg-subtle hover:text-fg ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[12px] transition-colors"
+          className="text-fg-subtle hover:text-fg ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[0.75rem] transition-colors"
         >
           {includeClosed ? 'Hide closed' : `Show ${closedHidden} closed`}
         </PendingLink>

@@ -4,9 +4,9 @@
  * bar, so nothing shifts when content lands.
  */
 const Row = ({ i }: { i: number }) => (
-  <div className="border-border flex h-[36px] items-center gap-2 border-b px-3">
+  <div className="border-border flex h-[2.25rem] items-center gap-2 border-b px-3">
     <span className="bg-border size-3 shrink-0 rounded-sm" />
-    <span className="bg-border h-2 w-[60px] shrink-0 rounded-full opacity-70" />
+    <span className="bg-border h-2 w-[3.75rem] shrink-0 rounded-full opacity-70" />
     <span className="bg-border size-3 shrink-0 rounded-full" />
     <span
       className="bg-border h-2 rounded-full opacity-60"
@@ -17,11 +17,11 @@ const Row = ({ i }: { i: number }) => (
 
 const Loading = () => (
   <div className="animate-pulse">
-    <div className="border-border flex h-[44px] items-center gap-2 border-b px-4">
+    <div className="border-border flex h-[2.75rem] items-center gap-2 border-b px-4">
       <span className="bg-border h-2.5 w-24 rounded-full" />
       <span className="bg-border h-2 w-16 rounded-full opacity-50" />
     </div>
-    <div className="border-border bg-bg-elevated flex h-[34px] items-center gap-2 border-b px-3">
+    <div className="border-border bg-bg-elevated flex h-[2.125rem] items-center gap-2 border-b px-3">
       <span className="bg-border size-3 rounded-full" />
       <span className="bg-border h-2 w-20 rounded-full opacity-70" />
     </div>

@@ -63,7 +63,7 @@ const ChipToggle = ({
           onClick={() => onToggle(o.key)}
           aria-pressed={active}
           className={cn(
-            'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition-colors',
+            'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.75rem] transition-colors',
             active
               ? 'border-accent bg-accent-subtle text-accent'
               : 'border-border text-fg-muted hover:border-border-strong hover:bg-surface-hover',
@@ -74,7 +74,7 @@ const ChipToggle = ({
         </button>
       )
     })}
-    {options.length === 0 && <span className="text-fg-subtle text-[12px]">None defined.</span>}
+    {options.length === 0 && <span className="text-fg-subtle text-[0.75rem]">None defined.</span>}
   </div>
 )
 
@@ -187,9 +187,9 @@ export const KnowledgeDetail = ({
   }
 
   return (
-    <div className="mx-auto max-w-[720px] px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-[45rem] px-4 py-6 sm:px-6">
       {current.superseded && (
-        <div className="border-border bg-surface-raised text-fg-muted mb-4 flex flex-wrap items-center gap-1.5 rounded-md border px-3 py-2 text-[12.5px]">
+        <div className="border-border bg-surface-raised text-fg-muted mb-4 flex flex-wrap items-center gap-1.5 rounded-md border px-3 py-2 text-[0.78125rem]">
           <span>This entry is superseded.</span>
           {current.supersededByRef ? (
             <Link
@@ -213,7 +213,7 @@ export const KnowledgeDetail = ({
       )}
 
       {error && (
-        <p className="text-danger bg-danger-subtle mb-4 rounded-md px-3 py-2 text-[12.5px]">
+        <p className="text-danger bg-danger-subtle mb-4 rounded-md px-3 py-2 text-[0.78125rem]">
           {error}
         </p>
       )}
@@ -223,7 +223,7 @@ export const KnowledgeDetail = ({
           <div className="mb-3 flex items-start justify-between gap-3">
             <h1
               className={cn(
-                'text-fg text-[19px] font-semibold tracking-tight',
+                'text-fg text-[1.1875rem] font-semibold tracking-tight',
                 current.superseded && 'text-fg-muted line-through decoration-1',
               )}
             >
@@ -234,7 +234,7 @@ export const KnowledgeDetail = ({
             </Button>
           </div>
 
-          <div className="text-fg-subtle mb-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px]">
+          <div className="text-fg-subtle mb-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.75rem]">
             {current.verified && (
               <span className="text-status-in-review inline-flex items-center gap-1">
                 <ShieldCheck size={12} aria-hidden /> Verified
@@ -266,13 +266,13 @@ export const KnowledgeDetail = ({
 
           {!current.superseded && (
             <div className="border-border mt-8 flex flex-wrap items-center gap-2 border-t pt-4">
-              <span className="text-fg-subtle text-[12px]">Mark superseded by:</span>
+              <span className="text-fg-subtle text-[0.75rem]">Mark superseded by:</span>
               <Select
                 size="sm"
                 value={supersedeTarget}
                 onChange={(e) => setSupersedeTarget(e.target.value)}
                 aria-label="Replacement entry"
-                className="w-auto max-w-[220px]"
+                className="w-auto max-w-[13.75rem]"
               >
                 <option value="">Choose an entry…</option>
                 {candidates.map((c) => (
@@ -340,19 +340,19 @@ export const KnowledgeDetail = ({
                 }
               />
               {suggestedEntities.length > 0 && (
-                <p className="text-fg-subtle mt-1.5 text-[11px]">
+                <p className="text-fg-subtle mt-1.5 text-[0.6875rem]">
                   Suggested, from the projects above: {suggestedEntities.join(', ')}
                 </p>
               )}
             </>
           </Field>
 
-          <label className="text-fg-muted flex items-center gap-2 text-[12.5px]">
+          <label className="text-fg-muted flex items-center gap-2 text-[0.78125rem]">
             <input
               type="checkbox"
               checked={draftVerified}
               onChange={(e) => setDraftVerified(e.target.checked)}
-              className="accent-accent size-[14px]"
+              className="accent-accent size-[0.875rem]"
             />
             Verified — this has been checked, not just recorded
           </label>

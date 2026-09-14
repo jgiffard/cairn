@@ -5,9 +5,9 @@
  * rather than showing a spinner.
  */
 const Row = ({ i }: { i: number }) => (
-  <div className="border-border flex h-[36px] items-center gap-2 border-b px-3">
+  <div className="border-border flex h-[2.25rem] items-center gap-2 border-b px-3">
     <span className="bg-border size-3 shrink-0 rounded-sm" />
-    <span className="bg-border h-2 w-[60px] shrink-0 rounded-full opacity-70" />
+    <span className="bg-border h-2 w-[3.75rem] shrink-0 rounded-full opacity-70" />
     <span className="bg-border size-3 shrink-0 rounded-full" />
     <span
       className="bg-border h-2 rounded-full opacity-60"
@@ -18,11 +18,11 @@ const Row = ({ i }: { i: number }) => (
 
 const Loading = () => (
   <div className="animate-pulse">
-    <div className="border-border flex h-[44px] items-center gap-2 border-b px-4">
+    <div className="border-border flex h-[2.75rem] items-center gap-2 border-b px-4">
       <span className="bg-border h-2 w-12 rounded-full opacity-50" />
       <span className="bg-border h-2.5 w-32 rounded-full" />
     </div>
-    <div className="border-border flex h-[38px] items-center gap-2 border-b px-3">
+    <div className="border-border flex h-[2.375rem] items-center gap-2 border-b px-3">
       <span className="bg-border h-2 w-10 rounded-full opacity-40" />
       <span className="bg-border h-2 w-10 rounded-full opacity-40" />
       <span className="bg-border h-2 w-10 rounded-full opacity-40" />

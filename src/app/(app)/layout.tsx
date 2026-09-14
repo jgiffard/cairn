@@ -35,7 +35,7 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
         <TaskCreationProvider projects={projectList}>
           <MobileNavProvider email={email} projects={projectList}>
             <div className="bg-bg flex h-dvh">
-              <aside className="border-border bg-bg-elevated hidden w-[220px] shrink-0 flex-col border-r md:flex">
+              <aside className="border-border bg-bg-elevated hidden w-[13.75rem] shrink-0 flex-col border-r md:flex">
                 <AppSidebar email={email} projects={projectList} />
               </aside>
 

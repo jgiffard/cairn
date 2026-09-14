@@ -48,7 +48,7 @@ export const PasswordSection = () => {
   return (
     <section>
       <div className="mb-3 flex items-baseline gap-2">
-        <h2 className="text-fg-muted text-[10.5px] font-medium tracking-[0.06em] uppercase">
+        <h2 className="text-fg-muted text-[0.65625rem] font-medium tracking-[0.06em] uppercase">
           Password
         </h2>
         <span className="bg-border ml-1 h-px flex-1" />
@@ -75,14 +75,14 @@ export const PasswordSection = () => {
         </Field>
 
         {tooShort && (
-          <p className="text-fg-subtle text-[11px]">At least 12 characters.</p>
+          <p className="text-fg-subtle text-[0.6875rem]">At least 12 characters.</p>
         )}
-        {mismatch && <p className="text-danger text-[11px]">These do not match.</p>}
+        {mismatch && <p className="text-danger text-[0.6875rem]">These do not match.</p>}
         {error && (
-          <p className="text-danger bg-danger-subtle rounded px-2 py-1.5 text-[11px]">{error}</p>
+          <p className="text-danger bg-danger-subtle rounded px-2 py-1.5 text-[0.6875rem]">{error}</p>
         )}
         {state === 'done' && (
-          <p className="text-status-done text-[11px]">
+          <p className="text-status-done text-[0.6875rem]">
             Changed. Store it somewhere safe — there is no email recovery on this instance.
           </p>
         )}
@@ -92,7 +92,7 @@ export const PasswordSection = () => {
         </Button>
       </form>
 
-      <p className="text-fg-subtle mt-3 max-w-sm text-[11px] leading-relaxed">
+      <p className="text-fg-subtle mt-3 max-w-sm text-[0.6875rem] leading-relaxed">
         There is no SMTP configured, so a forgotten password can only be reset from the host.
         Keep this in a password manager.
       </p>

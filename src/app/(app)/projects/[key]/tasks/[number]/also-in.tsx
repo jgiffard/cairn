@@ -53,18 +53,18 @@ export const AlsoIn = ({
       <div className="flex items-center justify-between gap-2">
         {/* Matches every other label down this sidebar. Uppercase here made
             one heading shout among six that do not. */}
-        <span className="text-fg-subtle text-[11px] font-medium">Also in</span>
+        <span className="text-fg-subtle text-[0.6875rem] font-medium">Also in</span>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="text-fg-subtle hover:text-fg text-[11px] transition-colors"
+          className="text-fg-subtle hover:text-fg text-[0.6875rem] transition-colors"
         >
           {open ? 'Done' : 'Edit'}
         </button>
       </div>
 
       {current.length === 0 && !open && (
-        <span className="text-fg-subtle text-[12px]">Only {homeKey}</span>
+        <span className="text-fg-subtle text-[0.75rem]">Only {homeKey}</span>
       )}
 
       {current.length > 0 && (
@@ -72,7 +72,7 @@ export const AlsoIn = ({
           {current.map((key) => (
             <span
               key={key}
-              className="text-fg-muted inline-flex items-center gap-1 text-[12px]"
+              className="text-fg-muted inline-flex items-center gap-1 text-[0.75rem]"
             >
               <ProjectIcon size={11} projectKey={key} />
               {key}
@@ -96,7 +96,7 @@ export const AlsoIn = ({
                   aria-pressed={on}
                   title={p.title}
                   className={cn(
-                    'rounded border px-1.5 py-0.5 font-mono text-[11px] transition-colors',
+                    'rounded border px-1.5 py-0.5 font-mono text-[0.6875rem] transition-colors',
                     on ? 'border-accent text-accent' : 'border-border text-fg-subtle hover:text-fg',
                   )}
                 >

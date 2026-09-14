@@ -28,7 +28,7 @@ const Prose = ({ label, body }: { label: string; body: string | null }) => {
   if (!body) return null
   return (
     <div>
-      <h3 className="text-fg-subtle mb-1 text-[11px] font-medium tracking-wide uppercase">
+      <h3 className="text-fg-subtle mb-1 text-[0.6875rem] font-medium tracking-wide uppercase">
         {label}
       </h3>
       <MarkdownView>{body}</MarkdownView>
@@ -53,12 +53,12 @@ const Row = ({ item }: { item: SessionItem }) => {
           className={cn('text-fg-subtle shrink-0 transition-transform', open && 'rotate-90')}
           aria-hidden
         />
-        <span className="text-fg-subtle tabular w-[42px] shrink-0 text-[12px]">
+        <span className="text-fg-subtle tabular w-[2.625rem] shrink-0 text-[0.75rem]">
           {item.endedAt ? timeOfDay(item.endedAt) : '—'}
         </span>
         <Avatar name={agentName} size={18} />
         {item.project && (
-          <span className="text-fg-muted hidden shrink-0 items-center gap-1 text-[12px] sm:flex">
+          <span className="text-fg-muted hidden shrink-0 items-center gap-1 text-[0.75rem] sm:flex">
             <ProjectIcon size={11} projectKey={item.project} />
             {item.project}
           </span>
@@ -68,7 +68,7 @@ const Row = ({ item }: { item: SessionItem }) => {
           return (
             <span
               className={cn(
-                'min-w-0 flex-1 truncate text-[13px]',
+                'min-w-0 flex-1 truncate text-[0.8125rem]',
                 machine ? 'text-fg-muted' : 'text-fg',
               )}
               // The machine prompt is still what opened the session, so it stays
@@ -79,7 +79,7 @@ const Row = ({ item }: { item: SessionItem }) => {
             </span>
           )
         })()}
-        <span className="text-fg-subtle flex shrink-0 items-center gap-2.5 text-[11px]">
+        <span className="text-fg-subtle flex shrink-0 items-center gap-2.5 text-[0.6875rem]">
           {item.files.length > 0 && (
             <span className="inline-flex items-center gap-1" title={`${item.files.length} files touched`}>
               <FileText size={11} aria-hidden />
@@ -96,14 +96,14 @@ const Row = ({ item }: { item: SessionItem }) => {
       </button>
 
       {open && (
-        <div className="border-border bg-surface-raised flex flex-col gap-4 border-t px-4 py-3 pl-[76px] sm:pl-[84px]">
+        <div className="border-border bg-surface-raised flex flex-col gap-4 border-t px-4 py-3 pl-[4.75rem] sm:pl-[5.25rem]">
           <Prose label="Learned" body={item.learned} />
           <Prose label="Completed" body={item.completed} />
           <Prose label="Next steps" body={item.nextSteps} />
 
           {item.taskRefs.length > 0 && (
             <div>
-              <h3 className="text-fg-subtle mb-1.5 text-[11px] font-medium tracking-wide uppercase">
+              <h3 className="text-fg-subtle mb-1.5 text-[0.6875rem] font-medium tracking-wide uppercase">
                 Tasks
               </h3>
               <div className="flex flex-wrap gap-1.5">
@@ -114,14 +114,14 @@ const Row = ({ item }: { item: SessionItem }) => {
                       key={ref}
                       href={href}
                       prefetch
-                      className="border-border text-fg-muted hover:border-accent hover:text-accent rounded-full border px-2 py-0.5 text-[11px] transition-colors"
+                      className="border-border text-fg-muted hover:border-accent hover:text-accent rounded-full border px-2 py-0.5 text-[0.6875rem] transition-colors"
                     >
                       {ref}
                     </Link>
                   ) : (
                     <span
                       key={ref}
-                      className="border-border text-fg-subtle rounded-full border px-2 py-0.5 text-[11px]"
+                      className="border-border text-fg-subtle rounded-full border px-2 py-0.5 text-[0.6875rem]"
                     >
                       {ref}
                     </span>
@@ -133,13 +133,13 @@ const Row = ({ item }: { item: SessionItem }) => {
 
           {item.files.length > 0 && (
             <div>
-              <h3 className="text-fg-subtle mb-1.5 text-[11px] font-medium tracking-wide uppercase">
+              <h3 className="text-fg-subtle mb-1.5 text-[0.6875rem] font-medium tracking-wide uppercase">
                 Files ({item.files.length})
               </h3>
-              <div className="border-border bg-bg max-h-[180px] overflow-y-auto rounded-md border">
+              <div className="border-border bg-bg max-h-[11.25rem] overflow-y-auto rounded-md border">
                 <ul className="divide-border divide-y">
                   {item.files.map((f) => (
-                    <li key={f} className="text-fg-muted truncate px-2.5 py-1 font-mono text-[11.5px]">
+                    <li key={f} className="text-fg-muted truncate px-2.5 py-1 font-mono text-[0.71875rem]">
                       {f}
                     </li>
                   ))}
@@ -157,8 +157,8 @@ export const SessionTimeline = ({ groups }: { groups: DayGroup<SessionItem>[] })
   <div>
     {groups.map((group) => (
       <section key={group.day}>
-        <div className="bg-bg-elevated border-border sticky top-0 z-10 flex h-[30px] items-center border-b px-3 sm:px-4">
-          <span className="text-fg-muted text-[12px] font-medium">{group.day}</span>
+        <div className="bg-bg-elevated border-border sticky top-0 z-10 flex h-[1.875rem] items-center border-b px-3 sm:px-4">
+          <span className="text-fg-muted text-[0.75rem] font-medium">{group.day}</span>
         </div>
         <ul>
           {group.rows.map((item) => (

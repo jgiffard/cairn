@@ -35,14 +35,14 @@ const RailMarker = ({
 }) => (
   <span
     className={cn(
-      'tabular relative z-10 grid size-[22px] shrink-0 place-items-center rounded-full border text-[10px] font-medium',
+      'tabular relative z-10 grid size-[1.375rem] shrink-0 place-items-center rounded-full border text-[0.625rem] font-medium',
       latest
         ? 'border-accent bg-accent-subtle text-accent'
         : 'border-border bg-bg text-fg-subtle',
     )}
     title={kind}
   >
-    {latest ? <span className="bg-accent size-[7px] rounded-full" /> : ordinal}
+    {latest ? <span className="bg-accent size-[0.4375rem] rounded-full" /> : ordinal}
   </span>
 )
 
@@ -102,7 +102,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
 
   return (
     <section>
-      <h2 className="text-fg-muted mb-2.5 flex items-center gap-2 text-[11px] font-medium">
+      <h2 className="text-fg-muted mb-2.5 flex items-center gap-2 text-[0.6875rem] font-medium">
         Work log
         <span className="tabular text-fg-subtle">{notes.length}</span>
         {allLong.length > 1 && (
@@ -129,7 +129,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
           }}
           placeholder="What did you try, find, or decide? Dead ends count."
-          className="text-fg placeholder:text-fg-subtle block max-h-[40vh] min-h-[58px] w-full resize-y bg-transparent px-3 py-2.5 text-[13px] leading-relaxed outline-none"
+          className="text-fg placeholder:text-fg-subtle block max-h-[40vh] min-h-[3.625rem] w-full resize-y bg-transparent px-3 py-2.5 text-[0.8125rem] leading-relaxed outline-none"
         />
 
         <div className="border-border/70 flex items-center gap-2 border-t px-2 py-1.5">
@@ -139,7 +139,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
               onChange={(e) => setKind(e.target.value as NoteKind)}
               aria-label="Note kind"
               className={cn(
-                'hover:bg-surface-raised cursor-pointer appearance-none rounded-md border border-transparent bg-transparent py-1 pr-5 pl-1.5 text-[12px] outline-none transition-colors',
+                'hover:bg-surface-raised cursor-pointer appearance-none rounded-md border border-transparent bg-transparent py-1 pr-5 pl-1.5 text-[0.75rem] outline-none transition-colors',
                 KIND_STYLE[kind] ?? 'text-fg-muted',
               )}
             >
@@ -160,7 +160,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
             </svg>
           </div>
 
-          <span className="text-fg-subtle ml-auto hidden text-[11px] sm:block">
+          <span className="text-fg-subtle ml-auto hidden text-[0.6875rem] sm:block">
             <kbd className="kbd inline-flex">⌘</kbd>
             <kbd className="kbd ml-0.5 inline-flex">↵</kbd>
           </span>
@@ -178,7 +178,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
       </div>
 
       {notes.length === 0 ? (
-        <p className="text-fg-subtle border-border rounded-md border border-dashed px-3 py-4 text-center text-[12px]">
+        <p className="text-fg-subtle border-border rounded-md border border-dashed px-3 py-4 text-center text-[0.75rem]">
           Nothing logged yet. Dead ends are worth recording too.
         </p>
       ) : (
@@ -187,7 +187,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
               row — a divided list of boxes reads as a table, and this is a
               sequence. */}
           <span
-            className="bg-border-strong/70 absolute top-[16px] bottom-[16px] left-[10.5px] w-px"
+            className="bg-border-strong/70 absolute top-[1rem] bottom-[1rem] left-[0.65625rem] w-px"
             aria-hidden
           />
 
@@ -202,7 +202,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
                 <RailMarker ordinal={ordinal} latest={index === 0} kind={note.kind} />
 
                 <div className="min-w-0 flex-1 pt-[2px]">
-                  <div className="flex items-baseline gap-2 text-[11px]">
+                  <div className="flex items-baseline gap-2 text-[0.6875rem]">
                     <span
                       className={cn('font-medium', KIND_STYLE[note.kind] ?? 'text-fg-subtle')}
                     >
@@ -221,7 +221,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
 
                   <div
                     className={cn(
-                      'mt-0.5 text-[13px]',
+                      'mt-0.5 text-[0.8125rem]',
                       !isOpen && long && 'line-clamp-3',
                     )}
                   >
@@ -232,14 +232,14 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
                     <button
                       type="button"
                       onClick={() => toggleExpanded(note.id)}
-                      className="text-fg-subtle hover:text-fg mt-0.5 text-[11px] transition-colors"
+                      className="text-fg-subtle hover:text-fg mt-0.5 text-[0.6875rem] transition-colors"
                     >
                       {isOpen ? 'Show less' : 'Show more'}
                     </button>
                   )}
 
                   {note.facts && note.facts.length > 0 && (
-                    <ul className="text-fg-muted mt-1.5 flex flex-col gap-0.5 text-[12px]">
+                    <ul className="text-fg-muted mt-1.5 flex flex-col gap-0.5 text-[0.75rem]">
                       {note.facts.map((f) => (
                         <li key={f} className="flex gap-1.5">
                           <span className="text-fg-subtle select-none">·</span>

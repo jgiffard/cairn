@@ -59,8 +59,8 @@ export const KnowledgeControls = ({
 
   return (
     <div className="border-border flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:flex-row sm:items-center sm:px-4">
-      <div className="flex min-w-0 flex-1 items-center gap-2 sm:max-w-[280px]">
-        <span className="text-fg-subtle grid size-[14px] shrink-0 place-items-center">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:max-w-[17.5rem]">
+        <span className="text-fg-subtle grid size-[0.875rem] shrink-0 place-items-center">
           {running || pendingDebounce ? <Spinner size={13} /> : <SearchIcon size={13} aria-hidden />}
         </span>
         <input
@@ -70,7 +70,7 @@ export const KnowledgeControls = ({
           onKeyDown={(e) => e.key === 'Escape' && setDraft('')}
           placeholder="Search knowledge…"
           aria-label="Search knowledge"
-          className="text-fg placeholder:text-fg-subtle min-w-0 flex-1 bg-transparent text-[13px] outline-none"
+          className="text-fg placeholder:text-fg-subtle min-w-0 flex-1 bg-transparent text-[0.8125rem] outline-none"
         />
       </div>
 
@@ -122,12 +122,12 @@ export const KnowledgeControls = ({
           ))}
         </Select>
 
-        <label className="text-fg-muted flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap">
+        <label className="text-fg-muted flex shrink-0 items-center gap-1.5 text-[0.75rem] whitespace-nowrap">
           <input
             type="checkbox"
             checked={superseded}
             onChange={(e) => push({ superseded: e.target.checked })}
-            className="accent-accent size-[13px]"
+            className="accent-accent size-[0.8125rem]"
           />
           Show superseded
         </label>
@@ -140,7 +140,7 @@ export const KnowledgeControls = ({
               committed.current = ''
               router.replace('/knowledge')
             }}
-            className="text-fg-subtle hover:text-fg shrink-0 whitespace-nowrap text-[12px] transition-colors"
+            className="text-fg-subtle hover:text-fg shrink-0 whitespace-nowrap text-[0.75rem] transition-colors"
           >
             Clear
           </button>

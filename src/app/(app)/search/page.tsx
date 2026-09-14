@@ -79,18 +79,18 @@ const SearchPage = async ({
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[44px] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
         <MobileNavButton />
         <Link
           href="/"
-          className="text-fg-muted hover:text-fg hidden text-[13px] transition-colors sm:block"
+          className="text-fg-muted hover:text-fg hidden text-[0.8125rem] transition-colors sm:block"
         >
           Cairn
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
-        <span className="text-fg text-[13px]">Search</span>
+        <span className="text-fg text-[0.8125rem]">Search</span>
         {count > 0 && (
-          <span className="text-fg-subtle ml-auto hidden text-[12px] sm:block">
+          <span className="text-fg-subtle ml-auto hidden text-[0.75rem] sm:block">
             {count} {count === 1 ? 'result' : 'results'}
             {resolved > 0 ? ` · ${resolved} with a recorded answer` : ''}
             {widened ? ' · loose match' : ''}
@@ -109,20 +109,20 @@ const SearchPage = async ({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {failure ? (
-          <p className="text-danger px-4 py-8 text-[13px]">{failure}</p>
+          <p className="text-danger px-4 py-8 text-[0.8125rem]">{failure}</p>
         ) : query.length < 2 ? (
-          <div className="text-fg-subtle px-4 py-12 text-center text-[13px]">
+          <div className="text-fg-subtle px-4 py-12 text-center text-[0.8125rem]">
             <p>Search tasks, work-log notes, knowledge and past sessions at once.</p>
-            <p className="mt-1.5 text-[12px]">
+            <p className="mt-1.5 text-[0.75rem]">
               Closed work is included on purpose — a recorded answer is the point.
             </p>
           </div>
         ) : count === 0 ? (
-          <div className="text-fg-subtle px-4 py-12 text-center text-[13px]">
+          <div className="text-fg-subtle px-4 py-12 text-center text-[0.8125rem]">
             <p>
               Nothing found for <span className="text-fg-muted">{query}</span>.
             </p>
-            <p className="mt-1.5 text-[12px]">This subject looks new.</p>
+            <p className="mt-1.5 text-[0.75rem]">This subject looks new.</p>
           </div>
         ) : !taskOnly ? (
           <UnifiedResults rows={unified} />

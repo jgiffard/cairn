@@ -85,16 +85,16 @@ const SessionsPage = async ({
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[44px] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
         <MobileNavButton />
         <Link
           href="/"
-          className="text-fg-muted hover:text-fg hidden text-[13px] transition-colors sm:block"
+          className="text-fg-muted hover:text-fg hidden text-[0.8125rem] transition-colors sm:block"
         >
           Cairn
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
-        <span className="text-fg text-[13px]">Sessions</span>
+        <span className="text-fg text-[0.8125rem]">Sessions</span>
         {before && (
           <Link
             href={(() => {
@@ -104,7 +104,7 @@ const SessionsPage = async ({
               const qs = params.toString()
               return qs ? `/sessions?${qs}` : '/sessions'
             })()}
-            className="text-fg-subtle hover:text-fg ml-2 text-[12px] transition-colors"
+            className="text-fg-subtle hover:text-fg ml-2 text-[0.75rem] transition-colors"
           >
             back to newest
           </Link>
@@ -130,7 +130,7 @@ const SessionsPage = async ({
               const query = params.toString()
               return query ? `/sessions?${query}` : '/sessions'
             })()}
-            className="border-border text-fg-subtle hover:text-fg block border-b px-4 py-1.5 text-[11.5px] transition-colors"
+            className="border-border text-fg-subtle hover:text-fg block border-b px-4 py-1.5 text-[0.71875rem] transition-colors"
           >
             {showScheduled
               ? `Hide ${scheduledCount} scheduled run${scheduledCount === 1 ? '' : 's'}`
@@ -139,7 +139,7 @@ const SessionsPage = async ({
         )}
 
         {visible.length === 0 ? (
-          <p className="text-fg-subtle px-4 py-12 text-center text-[13px]">
+          <p className="text-fg-subtle px-4 py-12 text-center text-[0.8125rem]">
             {scheduledCount > 0
               ? 'Only scheduled runs on this page.'
               : `No sessions recorded ${project || agent ? 'for these filters' : 'yet'}.`}
@@ -151,7 +151,7 @@ const SessionsPage = async ({
               <div className="flex justify-center py-4">
                 <PendingLink
                   href={nextHref}
-                  className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg rounded-md border px-3 py-1.5 text-[12px] transition-colors"
+                  className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg rounded-md border px-3 py-1.5 text-[0.75rem] transition-colors"
                 >
                   Load older sessions
                 </PendingLink>

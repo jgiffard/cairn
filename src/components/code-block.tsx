@@ -35,21 +35,21 @@ export const CodeBlock = ({ children, ...rest }: React.ComponentProps<'pre'>) =>
 
   return (
     <div className="group border-border bg-surface-raised relative mb-3 overflow-hidden rounded-md border last:mb-0">
-      <div className="border-border/60 flex h-[28px] items-center gap-2 border-b px-2.5">
-        <span className="text-fg-subtle font-mono text-[10.5px] tracking-wide">
+      <div className="border-border/60 flex h-[1.75rem] items-center gap-2 border-b px-2.5">
+        <span className="text-fg-subtle font-mono text-[0.65625rem] tracking-wide">
           {language ?? 'text'}
         </span>
         <button
           type="button"
           onClick={copy}
           aria-label="Copy code"
-          className="text-fg-subtle hover:text-fg ml-auto flex items-center gap-1 text-[10.5px] opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          className="text-fg-subtle hover:text-fg ml-auto flex items-center gap-1 text-[0.65625rem] opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
         >
           {copied ? <Check size={11} /> : <Copy size={11} />}
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <pre ref={ref} className="overflow-x-auto p-3 text-[12.5px] leading-relaxed" {...rest}>
+      <pre ref={ref} className="overflow-x-auto p-3 text-[0.78125rem] leading-relaxed" {...rest}>
         {children}
       </pre>
     </div>

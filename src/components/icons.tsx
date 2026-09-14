@@ -198,7 +198,7 @@ export const TypePill = ({ type }: { type: TaskType }) => {
   const color = `var(--type-${type})`
   return (
     <span
-      className="inline-flex h-[20px] shrink-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[11px] whitespace-nowrap"
+      className="inline-flex h-[1.25rem] shrink-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] whitespace-nowrap"
       style={{
         color,
         // An unsupported color-mix is simply ignored, leaving the border the
@@ -207,16 +207,16 @@ export const TypePill = ({ type }: { type: TaskType }) => {
         backgroundColor: `color-mix(in srgb, ${color} 8%, transparent)`,
       }}
     >
-      <span className="size-[7px] rounded-full" style={{ backgroundColor: color }} />
+      <span className="size-[0.4375rem] rounded-full" style={{ backgroundColor: color }} />
       {TYPE_LABEL[type]}
     </span>
   )
 }
 
 export const LabelPill = ({ children }: { children: React.ReactNode }) => (
-  <span className="border-border text-fg-muted inline-flex h-[20px] shrink-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[11px] whitespace-nowrap">
+  <span className="border-border text-fg-muted inline-flex h-[1.25rem] shrink-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] whitespace-nowrap">
     <span
-      className="size-[7px] rounded-full"
+      className="size-[0.4375rem] rounded-full"
       style={{
         backgroundColor:
           typeof children === 'string' ? labelColor(children) : 'var(--fg-subtle)',

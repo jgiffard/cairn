@@ -67,20 +67,20 @@ export const KeysSection = ({ keys }: { keys: KeyRow[] }) => {
   return (
     <section>
       <div className="mb-3 flex items-baseline gap-2">
-        <h2 className="text-fg-muted text-[10.5px] font-medium tracking-[0.06em] uppercase">
+        <h2 className="text-fg-muted text-[0.65625rem] font-medium tracking-[0.06em] uppercase">
           API keys
         </h2>
-        <span className="text-fg-subtle tabular text-[11px]">{active.length} active</span>
+        <span className="text-fg-subtle tabular text-[0.6875rem]">{active.length} active</span>
         <span className="bg-border ml-1 h-px flex-1" />
       </div>
 
       {fresh && (
         <div className="border-accent bg-accent-subtle mb-4 rounded-md border p-3">
-          <p className="text-fg mb-2 text-[12px] font-medium">
+          <p className="text-fg mb-2 text-[0.75rem] font-medium">
             New key for {fresh.agent} — shown once
           </p>
           <div className="flex items-center gap-2">
-            <code className="bg-surface border-border min-w-0 flex-1 overflow-x-auto rounded border px-2 py-1.5 font-mono text-[11px] whitespace-nowrap">
+            <code className="bg-surface border-border min-w-0 flex-1 overflow-x-auto rounded border px-2 py-1.5 font-mono text-[0.6875rem] whitespace-nowrap">
               {fresh.key}
             </code>
             <Button
@@ -97,14 +97,14 @@ export const KeysSection = ({ keys }: { keys: KeyRow[] }) => {
               {copied ? 'Copied' : 'Copy'}
             </Button>
           </div>
-          <p className="text-fg-muted mt-2 text-[11px] leading-relaxed">
+          <p className="text-fg-muted mt-2 text-[0.6875rem] leading-relaxed">
             The server stores only a hash, so this cannot be shown again. Put it in the
             agent&apos;s <code className="font-mono">~/.cairn/env</code>, then dismiss.
           </p>
           <button
             type="button"
             onClick={() => setFresh(null)}
-            className="text-fg-muted hover:text-fg mt-2 text-[11px] underline"
+            className="text-fg-muted hover:text-fg mt-2 text-[0.6875rem] underline"
           >
             I&apos;ve stored it
           </button>
@@ -114,15 +114,15 @@ export const KeysSection = ({ keys }: { keys: KeyRow[] }) => {
       {active.length > 0 && (
         <ul className="border-border divide-border mb-4 overflow-hidden rounded-md border divide-y">
           {active.map((k) => (
-            <li key={k.id} className="group flex h-[36px] items-center gap-2.5 px-3">
+            <li key={k.id} className="group flex h-[2.25rem] items-center gap-2.5 px-3">
               <KeyRound size={12} className="text-fg-subtle shrink-0" />
-              <span className="w-24 shrink-0 truncate text-[12.5px]">{k.agent_name}</span>
-              <code className="text-fg-subtle shrink-0 font-mono text-[10.5px]">
+              <span className="w-24 shrink-0 truncate text-[0.78125rem]">{k.agent_name}</span>
+              <code className="text-fg-subtle shrink-0 font-mono text-[0.65625rem]">
                 {k.key_prefix}…
               </code>
               <span
                 className={cn(
-                  'ml-auto shrink-0 text-[11px]',
+                  'ml-auto shrink-0 text-[0.6875rem]',
                   k.last_used_at ? 'text-fg-muted' : 'text-fg-subtle',
                 )}
                 title={k.last_used_at ?? 'never used'}
@@ -132,7 +132,7 @@ export const KeysSection = ({ keys }: { keys: KeyRow[] }) => {
               <button
                 type="button"
                 onClick={() => revoke(k.id, k.agent_name)}
-                className="text-fg-subtle hover:text-danger shrink-0 text-[11px] opacity-0 transition-opacity group-hover:opacity-100"
+                className="text-fg-subtle hover:text-danger shrink-0 text-[0.6875rem] opacity-0 transition-opacity group-hover:opacity-100"
               >
                 Revoke
               </button>
@@ -165,9 +165,9 @@ export const KeysSection = ({ keys }: { keys: KeyRow[] }) => {
         </Button>
       </div>
 
-      {error && <p className="text-danger mt-2 text-[11px]">{error}</p>}
+      {error && <p className="text-danger mt-2 text-[0.6875rem]">{error}</p>}
 
-      <p className="text-fg-subtle mt-3 max-w-md text-[11px] leading-relaxed">
+      <p className="text-fg-subtle mt-3 max-w-md text-[0.6875rem] leading-relaxed">
         One key per agent. The key&apos;s name is recorded as the author on everything it
         writes, so &quot;who tried what&quot; stays answerable — and any single agent can be
         revoked without disturbing the others.
@@ -175,14 +175,14 @@ export const KeysSection = ({ keys }: { keys: KeyRow[] }) => {
 
       {revoked.length > 0 && (
         <details className="mt-4">
-          <summary className="text-fg-subtle cursor-pointer text-[11px]">
+          <summary className="text-fg-subtle cursor-pointer text-[0.6875rem]">
             {revoked.length} revoked
           </summary>
-          <ul className="text-fg-subtle mt-1.5 flex flex-col gap-1 text-[11px]">
+          <ul className="text-fg-subtle mt-1.5 flex flex-col gap-1 text-[0.6875rem]">
             {revoked.map((k) => (
               <li key={k.id} className="flex gap-2">
                 <span className="w-24 truncate line-through">{k.agent_name}</span>
-                <code className="font-mono text-[10.5px]">{k.key_prefix}…</code>
+                <code className="font-mono text-[0.65625rem]">{k.key_prefix}…</code>
                 <span className="ml-auto">
                   revoked {k.revoked_at ? <RelativeTime iso={k.revoked_at} /> : ''}
                 </span>

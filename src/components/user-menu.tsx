@@ -60,7 +60,7 @@ export const UserMenu = ({ email, onNavigate }: { email: string; onNavigate?: ()
   }
 
   const item =
-    'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12.5px] text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg'
+    'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.78125rem] text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg'
 
   return (
     <div ref={wrap} className="border-border relative border-t p-1.5">
@@ -72,7 +72,7 @@ export const UserMenu = ({ email, onNavigate }: { email: string; onNavigate?: ()
         className="hover:bg-surface-hover flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors"
       >
         <Avatar name={email} size={18} />
-        <span className="text-fg-muted min-w-0 flex-1 truncate text-left text-[12px]" title={email}>
+        <span className="text-fg-muted min-w-0 flex-1 truncate text-left text-[0.75rem]" title={email}>
           {email}
         </span>
         {busy ? (

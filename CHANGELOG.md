@@ -48,6 +48,30 @@ out under **Breaking** with what to do about it.
   work. Refused rather than auto-closed, because `done` and `cancelled` are different
   claims about the work and only the caller knows which one it is making.
 
+## [Unreleased]
+
+### Added
+
+- **Projects can be created and curated from the UI.** Creating one meant the API or the
+  CLI, and renaming or archiving meant the same, so the only way to tidy the thing you look
+  at every day was to leave it. `/projects` lists every project with live open and total
+  counts, creates one, renames in place, archives and restores, and deletes behind a typed
+  confirmation that says how many tasks go with it and points at archiving instead.
+
+- **In Progress and Todo tabs** in the task list, and **In Progress is now the default** —
+  what is being worked on is the question the page is usually open to answer. Its empty
+  state offers Todo, Backlog and All rather than dead-ending, because an empty In Progress
+  is an ordinary state rather than an empty project.
+
+### Changed
+
+- **Everything is larger, and scales from one number.** Every size in the app was written
+  in fixed pixels — 343 text sizes and 192 dimensions, including 83 heights — so raising
+  the type alone would have pushed text out of rows that could not grow with it. All of it
+  is expressed in rem now and the root is 17px; change that one value in `globals.css` to
+  change the whole interface. Hairlines and one-pixel nudges stay in pixels, where a
+  fraction of a pixel is not a thing a browser draws consistently.
+
 ## [0.4.0] — 2026-09-14
 
 ### Added

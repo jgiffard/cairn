@@ -138,7 +138,7 @@ export const CreateTask = ({
   if (!open) return null
 
   const chip =
-    'relative flex h-[26px] items-center gap-1.5 rounded-md border border-border px-2 text-[12px] ' +
+    'relative flex h-[1.625rem] items-center gap-1.5 rounded-md border border-border px-2 text-[0.75rem] ' +
     'text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg'
 
   return (
@@ -147,12 +147,12 @@ export const CreateTask = ({
       onClick={onClose}
     >
       <div
-        className="bg-surface border-border pop w-full max-w-[560px] overflow-hidden rounded-lg border raised-lg"
+        className="bg-surface border-border pop w-full max-w-[35rem] overflow-hidden rounded-lg border raised-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 px-4 pt-3.5">
           <ProjectIcon size={12} projectKey={project || undefined} />
-          <span className="text-fg-subtle text-[11px]">New task in {project || '—'}</span>
+          <span className="text-fg-subtle text-[0.6875rem]">New task in {project || '—'}</span>
         </div>
 
         <input
@@ -166,7 +166,7 @@ export const CreateTask = ({
             }
           }}
           placeholder="Task title"
-          className="placeholder:text-fg-subtle w-full bg-transparent px-4 pt-2 pb-1 text-[16px] outline-none"
+          className="placeholder:text-fg-subtle w-full bg-transparent px-4 pt-2 pb-1 text-[1rem] outline-none"
         />
 
         <textarea
@@ -174,17 +174,17 @@ export const CreateTask = ({
           onChange={(e) => setBody(e.target.value)}
           placeholder="Description — markdown, optional"
           rows={3}
-          className="placeholder:text-fg-subtle w-full resize-none bg-transparent px-4 pb-3 text-[13px] leading-relaxed outline-none"
+          className="placeholder:text-fg-subtle w-full resize-none bg-transparent px-4 pb-3 text-[0.8125rem] leading-relaxed outline-none"
         />
 
         {visibleSimilar.length > 0 && (
           <div className="border-border mx-4 mb-3 rounded-md border px-2.5 py-2">
-            <p className="text-fg-subtle mb-1.5 text-[11px]">Similar work already exists</p>
+            <p className="text-fg-subtle mb-1.5 text-[0.6875rem]">Similar work already exists</p>
             <ul className="flex flex-col gap-1">
               {visibleSimilar.map((s) => (
-                <li key={s.ref} className="flex items-center gap-2 text-[12px]">
+                <li key={s.ref} className="flex items-center gap-2 text-[0.75rem]">
                   <StatusIcon status={s.status as TaskStatus} size={12} />
-                  <code className="text-fg-subtle text-[11px]">{s.ref}</code>
+                  <code className="text-fg-subtle text-[0.6875rem]">{s.ref}</code>
                   <span className="text-fg-muted min-w-0 truncate">{s.title}</span>
                 </li>
               ))}
@@ -253,7 +253,7 @@ export const CreateTask = ({
               list="cairn-known-labels"
               placeholder="labels…"
               aria-label="Labels, comma separated"
-              className="w-[130px] text-[12px]"
+              className="w-[8.125rem] text-[0.75rem]"
             />
             <datalist id="cairn-known-labels">
               {known.map((l) => (
@@ -266,7 +266,7 @@ export const CreateTask = ({
             type="button"
             onClick={submit}
             disabled={!title.trim() || !project || pending}
-            className="bg-accent text-accent-fg ml-auto h-[26px] rounded-md px-3 text-[12px] font-medium transition-opacity disabled:opacity-40"
+            className="bg-accent text-accent-fg ml-auto h-[1.625rem] rounded-md px-3 text-[0.75rem] font-medium transition-opacity disabled:opacity-40"
           >
             {pending ? (
               <span className="inline-flex items-center gap-1.5">
@@ -279,7 +279,7 @@ export const CreateTask = ({
           </button>
         </div>
 
-        {error && <p className="text-danger px-4 pb-3 text-[12px]">{error}</p>}
+        {error && <p className="text-danger px-4 pb-3 text-[0.75rem]">{error}</p>}
       </div>
     </div>
   )

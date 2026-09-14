@@ -34,7 +34,7 @@ export const HealthBanner = async ({ userId }: { userId: string }) => {
       className="border-danger/40 bg-danger-subtle hover:bg-danger-subtle/70 flex shrink-0 items-start gap-2 border-b px-3 py-2 transition-colors md:px-4"
     >
       <AlertTriangle size={13} className="text-danger mt-[2px] shrink-0" aria-hidden />
-      <p className="text-fg min-w-0 text-[12.5px] leading-relaxed">
+      <p className="text-fg min-w-0 text-[0.78125rem] leading-relaxed">
         {alarms[0]}
         {alarms.length > 1 ? (
           <span className="text-fg-muted"> · and {alarms.length - 1} more</span>

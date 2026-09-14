@@ -89,7 +89,7 @@ const Action = <T extends string>({
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className={`h-[26px] rounded-md px-2.5 text-[12px] transition-colors ${
+        className={`h-[1.625rem] rounded-md px-2.5 text-[0.75rem] transition-colors ${
           open ? 'bg-surface-hover text-fg' : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
         }`}
       >
@@ -98,7 +98,7 @@ const Action = <T extends string>({
       {open && (
         <div
           role="menu"
-          className="border-border bg-surface absolute bottom-[32px] left-0 z-50 w-[168px] overflow-hidden rounded-md border py-1 raised"
+          className="border-border bg-surface absolute bottom-[2rem] left-0 z-50 w-[10.5rem] overflow-hidden rounded-md border py-1 raised"
         >
           {options.map((o) => (
             <button
@@ -109,7 +109,7 @@ const Action = <T extends string>({
                 setOpen(false)
                 onPick(o)
               }}
-              className="text-fg-muted hover:bg-surface-hover hover:text-fg flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12.5px] transition-colors"
+              className="text-fg-muted hover:bg-surface-hover hover:text-fg flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.78125rem] transition-colors"
             >
               {icon(o)}
               {labels?.[o] ?? o}
@@ -156,12 +156,12 @@ export const BulkBar = ({
             and Priority menus — which open *above* it — out of existence.
             The content is ~300px; it wraps rather than scrolls. */}
         <div className="border-border bg-surface pointer-events-auto flex max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-1 rounded-lg border px-2 py-1.5 raised-lg">
-          <span className="text-fg tabular px-1.5 text-[12px] font-medium">
+          <span className="text-fg tabular px-1.5 text-[0.75rem] font-medium">
             {progress === null
               ? `${ids.length} selected`
               : `${progress} / ${ids.length}…`}
           </span>
-          <span className="bg-border mx-1 h-[16px] w-px" aria-hidden />
+          <span className="bg-border mx-1 h-[1rem] w-px" aria-hidden />
 
           <Action
             label="Status"
@@ -182,13 +182,13 @@ export const BulkBar = ({
             onPick={(p) => void run({ priority: p })}
           />
 
-          {error && <span className="text-danger px-2 text-[12px]">{error}</span>}
+          {error && <span className="text-danger px-2 text-[0.75rem]">{error}</span>}
 
-          <span className="bg-border mx-1 h-[16px] w-px" aria-hidden />
+          <span className="bg-border mx-1 h-[1rem] w-px" aria-hidden />
           <button
             type="button"
             onClick={onClear}
-            className="text-fg-subtle hover:text-fg h-[26px] rounded-md px-2 text-[12px] transition-colors"
+            className="text-fg-subtle hover:text-fg h-[1.625rem] rounded-md px-2 text-[0.75rem] transition-colors"
           >
             Clear
           </button>

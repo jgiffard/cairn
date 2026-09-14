@@ -40,7 +40,7 @@ const ColumnHeading = ({ groupBy, col }: { groupBy: GroupBy; col: ColumnDef }) =
       {groupBy === 'project' && <ProjectIcon size={13} projectKey={col.value} />}
       {groupBy === 'agent' &&
         (col.value === UNASSIGNED ? (
-          <span className="border-border size-[14px] shrink-0 rounded-full border border-dashed" />
+          <span className="border-border size-[0.875rem] shrink-0 rounded-full border border-dashed" />
         ) : (
           <Avatar name={col.value} size={14} />
         ))}
@@ -66,7 +66,7 @@ const Column = ({
     <div className="flex w-64 shrink-0 flex-col">
       <div className="mb-2 flex items-center gap-2 px-0.5">
         <ColumnHeading groupBy={groupBy} col={col} />
-        <span className="text-fg-subtle tabular ml-auto text-[11px]">{tasks.length}</span>
+        <span className="text-fg-subtle tabular ml-auto text-[0.6875rem]">{tasks.length}</span>
       </div>
       <div
         ref={setNodeRef}
@@ -96,7 +96,7 @@ const Lane = ({
 }) => (
   <section>
     {lane.label && (
-      <div className="text-fg-muted mb-1.5 flex items-center gap-1.5 px-0.5 text-[11px] font-medium">
+      <div className="text-fg-muted mb-1.5 flex items-center gap-1.5 px-0.5 text-[0.6875rem] font-medium">
         {lane.label}
         <span className="text-fg-subtle tabular">{tasks.length}</span>
       </div>
@@ -259,7 +259,7 @@ export const CrossProjectBoard = ({
           onDragCancel={() => setDragging(null)}
         >
           {visible.length === 0 ? (
-            <p className="text-fg-subtle py-16 text-center text-[13px]">Nothing matches these filters.</p>
+            <p className="text-fg-subtle py-16 text-center text-[0.8125rem]">Nothing matches these filters.</p>
           ) : (
             <div className="flex flex-col gap-4 overflow-x-auto pb-4">
               {lanes.map((lane) => (
@@ -277,7 +277,7 @@ export const CrossProjectBoard = ({
           <DragOverlay>
             {dragging ? (
               <div className="bg-surface border-accent w-64 rounded-md border p-2.5 raised-lg">
-                <p className="text-[13px] font-medium">{dragging.title}</p>
+                <p className="text-[0.8125rem] font-medium">{dragging.title}</p>
               </div>
             ) : null}
           </DragOverlay>

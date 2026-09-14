@@ -31,7 +31,7 @@ const Filter = ({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={placeholder}
-      className={`border-border bg-bg hover:bg-surface-hover h-[26px] cursor-pointer appearance-none rounded-md border pr-6 pl-2 text-[12px] outline-none transition-colors ${
+      className={`border-border bg-bg hover:bg-surface-hover h-[1.625rem] cursor-pointer appearance-none rounded-md border pr-6 pl-2 text-[0.75rem] outline-none transition-colors ${
         value ? 'text-fg' : 'text-fg-subtle'
       }`}
     >
@@ -130,9 +130,9 @@ export const SearchControls = ({
   const cleared = !q && !project && !type && !status && (!kind || kind === 'all')
 
   return (
-    <div className="border-border flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:h-[42px] sm:flex-row sm:items-center sm:px-4 sm:py-0">
+    <div className="border-border flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:h-[2.625rem] sm:flex-row sm:items-center sm:px-4 sm:py-0">
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="text-fg-subtle grid size-[14px] shrink-0 place-items-center">
+        <span className="text-fg-subtle grid size-[0.875rem] shrink-0 place-items-center">
           {running || pendingDebounce ? <Spinner size={13} /> : <SearchIcon size={13} aria-hidden />}
         </span>
         <input
@@ -144,7 +144,7 @@ export const SearchControls = ({
           }}
           placeholder="Has this already been done or debugged?"
           aria-label="Search tasks"
-          className="text-fg placeholder:text-fg-subtle min-w-0 flex-1 bg-transparent text-[13px] outline-none"
+          className="text-fg placeholder:text-fg-subtle min-w-0 flex-1 bg-transparent text-[0.8125rem] outline-none"
         />
         {draft && (
           <button
@@ -199,7 +199,7 @@ export const SearchControls = ({
             committed.current = ''
             router.replace('/search')
           }}
-          className="text-fg-subtle hover:text-fg shrink-0 whitespace-nowrap text-[12px] transition-colors"
+          className="text-fg-subtle hover:text-fg shrink-0 whitespace-nowrap text-[0.75rem] transition-colors"
         >
           Clear
         </button>

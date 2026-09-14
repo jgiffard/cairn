@@ -69,7 +69,7 @@ export const AttachmentsPanel = ({
 
   return (
     <section>
-      <h2 className="text-fg-muted mb-2.5 flex items-center gap-2 text-[11px] font-medium">
+      <h2 className="text-fg-muted mb-2.5 flex items-center gap-2 text-[0.6875rem] font-medium">
         Files
         <span className="tabular text-fg-subtle">{attachments.length}</span>
       </h2>
@@ -116,7 +116,7 @@ export const AttachmentsPanel = ({
       </div>
 
       {error && (
-        <p className="text-danger bg-danger-subtle mb-2 rounded px-2 py-1.5 text-[11px]">{error}</p>
+        <p className="text-danger bg-danger-subtle mb-2 rounded px-2 py-1.5 text-[0.6875rem]">{error}</p>
       )}
 
       {attachments.length > 0 && (
@@ -131,14 +131,14 @@ export const AttachmentsPanel = ({
               <button
                 type="button"
                 onClick={() => void openSigned(a.id, a.original_name, a.mime_type)}
-                className="hover:text-accent min-w-0 flex-1 truncate text-left text-[12.5px]"
+                className="hover:text-accent min-w-0 flex-1 truncate text-left text-[0.78125rem]"
               >
                 {a.original_name}
               </button>
-              <span className="text-fg-subtle tabular shrink-0 text-[11px]">
+              <span className="text-fg-subtle tabular shrink-0 text-[0.6875rem]">
                 {formatBytes(a.size_bytes)}
               </span>
-              <span className="text-fg-subtle shrink-0 text-[11px]">{a.actor_id}</span>
+              <span className="text-fg-subtle shrink-0 text-[0.6875rem]">{a.actor_id}</span>
               <button
                 type="button"
                 onClick={() => void openSigned(a.id, a.original_name, 'application/octet-stream')}

@@ -69,18 +69,18 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[44px] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
         <MobileNavButton />
         <Link
           href="/"
-          className="text-fg-muted hover:text-fg hidden text-[13px] transition-colors lg:block"
+          className="text-fg-muted hover:text-fg hidden text-[0.8125rem] transition-colors lg:block"
         >
           Cairn
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden lg:block" aria-hidden />
         <Link
           href={`/projects/${task.project.key}`}
-          className="text-fg-muted hover:text-fg flex min-w-0 shrink items-center gap-1.5 text-[13px] transition-colors"
+          className="text-fg-muted hover:text-fg flex min-w-0 shrink items-center gap-1.5 text-[0.8125rem] transition-colors"
         >
           <ProjectIcon size={13} projectKey={task.project.key} />
           <span className="truncate">{task.project.title}</span>
@@ -91,7 +91,7 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
             <Link
               href={`/projects/${parent.ref.slice(0, parent.ref.lastIndexOf('-'))}/tasks/${parent.ref.slice(parent.ref.lastIndexOf('-') + 1)}`}
               prefetch
-              className="text-fg-muted hover:text-fg hidden max-w-[22ch] truncate text-[13px] transition-colors sm:block"
+              className="text-fg-muted hover:text-fg hidden max-w-[22ch] truncate text-[0.8125rem] transition-colors sm:block"
               title={parent.title}
             >
               {parent.title}
@@ -99,10 +99,10 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
             <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
           </>
         ) : null}
-        <span className="text-fg-subtle shrink-0 text-[13px] tabular">{ref}</span>
+        <span className="text-fg-subtle shrink-0 text-[0.8125rem] tabular">{ref}</span>
         {formerKeys.length > 0 && !task.external_ref ? (
           <span
-            className="text-fg-subtle hidden shrink-0 text-[11px] tabular sm:inline"
+            className="text-fg-subtle hidden shrink-0 text-[0.6875rem] tabular sm:inline"
             title={`This project was renamed. ${formerKeys
               .map((k) => `${k}-${task.number}`)
               .join(' and ')} still resolve${formerKeys.length === 1 ? 's' : ''} here.`}
@@ -110,20 +110,20 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
             (was {formerKeys.map((k) => `${k}-${task.number}`).join(', ')})
           </span>
         ) : null}
-        <span className="text-fg hidden max-w-[38ch] truncate text-[13px] sm:block">
+        <span className="text-fg hidden max-w-[38ch] truncate text-[0.8125rem] sm:block">
           {task.title}
         </span>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col-reverse lg:flex-row">
         <div className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[820px] px-4 py-6 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-[51.25rem] px-4 py-6 sm:px-6 lg:px-8">
             <EditableTitle taskId={task.id} initial={task.title} />
 
             {/* First thing on the page when it applies: a reader who opens a
                 duplicate wants redirecting, not reading. */}
             {duplicateOf ? (
-              <p className="border-border bg-surface-raised text-fg-muted mb-5 rounded-md border px-3 py-2 text-[12.5px]">
+              <p className="border-border bg-surface-raised text-fg-muted mb-5 rounded-md border px-3 py-2 text-[0.78125rem]">
                 Duplicate of{' '}
                 <Link
                   href={`/projects/${duplicateOf.ref.slice(0, duplicateOf.ref.lastIndexOf('-'))}/tasks/${duplicateOf.ref.slice(duplicateOf.ref.lastIndexOf('-') + 1)}`}
@@ -137,7 +137,7 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
             ) : null}
 
             {task.blocked_reason ? (
-              <p className="text-danger bg-danger-subtle mb-5 rounded-md px-3 py-2 text-[12px]">
+              <p className="text-danger bg-danger-subtle mb-5 rounded-md px-3 py-2 text-[0.75rem]">
                 Blocked: {task.blocked_reason}
               </p>
             ) : null}
@@ -146,7 +146,7 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
                 task, the answer is what it came for. */}
             {task.resolution ? (
               <div className="border-status-done/25 bg-status-done/[0.06] mb-6 rounded-md border py-2.5 pr-3 pl-3.5">
-                <p className="text-status-done mb-1 text-[11px] font-medium">
+                <p className="text-status-done mb-1 text-[0.6875rem] font-medium">
                   Resolution{task.resolution_kind ? ` · ${task.resolution_kind}` : ''}
                   {task.resolved_by ? ` · ${task.resolved_by}` : ''}
                 </p>
@@ -156,8 +156,8 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
 
             {task.checkpoint_summary && !task.resolution ? (
               <div className="border-border bg-surface-raised mb-6 rounded-md border py-2.5 pr-3 pl-3.5">
-                <p className="text-fg-subtle mb-1 text-[11px] font-medium">Last checkpoint</p>
-                <p className="text-fg-muted text-[13px]">{task.checkpoint_summary}</p>
+                <p className="text-fg-subtle mb-1 text-[0.6875rem] font-medium">Last checkpoint</p>
+                <p className="text-fg-muted text-[0.8125rem]">{task.checkpoint_summary}</p>
               </div>
             ) : null}
 
