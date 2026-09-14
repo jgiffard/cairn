@@ -6,6 +6,7 @@ import { admin } from '@/lib/db/client'
 import { diffTaskEvents, recordActivity } from '@/lib/api/activity'
 import { findTask, resolveParent } from '@/lib/api/tasks'
 import { buildDigest } from '@/lib/api/digest'
+import { removeAttachments } from '@/lib/attachments'
 import { isTerminal, updateTaskSchema, RESOLUTION_KINDS } from '@/schemas/task'
 
 export const dynamic = 'force-dynamic'
@@ -275,13 +276,88 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
   },
 })
 
+/**
+ * Deletes a task, and is deliberately hard to reach.
+ *
+ * This used to take a ref and delete it — no confirmation, and no objection to
+ * a task carrying children, a work log or dependants. In a store whose whole
+ * value is that things do not quietly vanish, the unguarded version was worse
+ * than having none: `cancel` is what almost every caller reaching for this
+ * actually wants, because it keeps the record and the reason.
+ *
+ * So this is for junk that should never have existed — a scratch task, a batch
+ * filed by a broken import — and it refuses anything that has accumulated
+ * meaning. What it refuses can still be deleted, by detaching or deleting the
+ * things that depend on it first, which is the point: that is a decision per
+ * item rather than one cascade nobody reviewed.
+ */
+// Counting on the filter column rather than `id`: task_deps is a composite
+// key and has no id, so asking for one returns an error and a count of zero —
+// a guard that reports "nothing depends on this" for every task alike.
+const countFor = async (table: string, column: string, id: string) => {
+  const { count, error } = await admin()
+    .from(table)
+    .select(column, { count: 'exact', head: true })
+    .eq(column, id)
+  if (error) throw new Error(`${table}.${column} count failed: ${error.message}`)
+  return count ?? 0
+}
+
 export const DELETE = route<{ ref: string }>({
-  handler: async ({ actor, params }) => {
+  handler: async ({ actor, params, url }) => {
     const task = await findTask(actor, params.ref)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
 
+    const ref = `${(task.project as { key: string } | undefined)?.key ?? ''}-${task.number as number}`
+
+    const [children, notes, comments, dependants, dependencies] = await Promise.all([
+      countFor('tasks', 'parent_id', task.id),
+      countFor('task_notes', 'task_id', task.id),
+      countFor('task_comments', 'task_id', task.id),
+      // Both directions: something pointing AT this task loses its dependency
+      // silently, which is the failure that is hardest to notice afterwards.
+      countFor('task_deps', 'blocking_id', task.id),
+      countFor('task_deps', 'blocked_id', task.id),
+    ])
+
+    const holding = [
+      children && `${children} child task${children === 1 ? '' : 's'}`,
+      notes && `${notes} work-log note${notes === 1 ? '' : 's'}`,
+      comments && `${comments} comment${comments === 1 ? '' : 's'}`,
+      dependants && `${dependants} task${dependants === 1 ? '' : 's'} depending on it`,
+      dependencies && `${dependencies} dependenc${dependencies === 1 ? 'y' : 'ies'} of its own`,
+    ].filter(Boolean) as string[]
+
+    if (holding.length > 0) {
+      return fail(
+        'validation_failed',
+        `${ref} has ${holding.join(', ')}. Delete is for tasks that should never have ` +
+          `existed; this one has a history. Cancel it instead — \`status: cancelled\` with a ` +
+          `resolution keeps the record and the reason — or detach what it holds first.`,
+        { holding, children, notes, comments, dependants, dependencies },
+      )
+    }
+
+    if (url.searchParams.get('confirm') !== ref) {
+      return fail(
+        'validation_failed',
+        `This permanently deletes ${ref} and cannot be undone. Repeat the ref to ` +
+          `confirm: ?confirm=${ref}`,
+        { requiresConfirmation: ref },
+      )
+    }
+
+    // Storage objects are outside the database cascade, so they have to go
+    // explicitly or the bucket keeps orphans nobody can find a task for.
+    const { data: files } = await admin()
+      .from('task_attachments')
+      .select('storage_path')
+      .eq('task_id', task.id)
+    const paths = ((files ?? []) as { storage_path: string }[]).map((f) => f.storage_path)
+    if (paths.length > 0) await removeAttachments(paths)
+
     const { error } = await admin().from('tasks').delete().eq('id', task.id)
     if (error) return failFromDb(error)
-    return ok({ deleted: true, id: task.id })
+    return ok({ deleted: true, ref, id: task.id, attachmentsRemoved: paths.length })
   },
 })
