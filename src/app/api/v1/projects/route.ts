@@ -27,7 +27,7 @@ export const GET = route({
       .eq('owner_user_id', actor.userId)
 
     const { data, error } = await (includeArchived ? query : query.eq('status', 'active'))
-      .order('position')
+      .order('title')
       .order('created_at')
 
     if (error) return fail('internal_error', error.message)

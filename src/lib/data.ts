@@ -66,9 +66,18 @@ export const listProjects = async (
     .from('projects')
     .select('id, key, title, description, status, task_counter')
     .eq('owner_user_id', userId)
+  /**
+   * Alphabetical by title, which is what the sidebar shows.
+   *
+   * The order was `position` then `created_at`, and nothing has ever written a
+   * project's position — so every project sat at 0 and the list was really in
+   * creation order. That is findable only by someone who remembers when they
+   * made each one, and it drifts further from useful with every new project.
+   * Sorted by title rather than key because the title is the text a reader
+   * scans; the key is the small mark at the end of the row.
+   */
   const { data } = await (includeArchived ? query : query.eq('status', 'active'))
-    .order('position')
-    .order('created_at')
+    .order('title')
   return (data ?? []) as Project[]
 }
 

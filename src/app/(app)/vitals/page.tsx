@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PendingLink } from '@/components/pending-link'
 import { redirect } from 'next/navigation'
 import { AlertTriangle, CheckCircle2, Info } from 'lucide-react'
 import { currentUser } from '@/lib/data'
@@ -188,16 +189,16 @@ const VitalsPage = async ({
         <span className="text-fg text-[0.8125rem] font-medium">Vitals</span>
         <span className="bg-surface-raised ml-auto flex items-center gap-0.5 rounded-md p-0.5">
           {WINDOWS.map((w) => (
-            <Link
+            <PendingLink
               key={w.hours}
               href={w.hours === 24 ? '/vitals' : `/vitals?hours=${w.hours}`}
               className={cn(
-                'rounded px-2 py-0.5 text-[0.71875rem] transition-colors',
+                'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[0.71875rem] transition-colors',
                 w.hours === hours ? 'bg-surface text-fg' : 'text-fg-muted hover:text-fg',
               )}
             >
               {w.label}
-            </Link>
+            </PendingLink>
           ))}
         </span>
       </header>

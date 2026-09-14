@@ -3,7 +3,6 @@ import { admin } from '@/lib/db/client'
 import { currentUser } from '@/lib/data'
 import { PasswordSection } from './password-section'
 import { KeysSection, type KeyRow } from './keys-section'
-import { ArchivedSection, type ArchivedProject } from './archived-section'
 import { LabelsSection, type LabelRow } from './labels-section'
 import { EntitiesSection, type EntityRow } from './entities-section'
 import { MobileNavButton } from '@/components/mobile-nav-context'
@@ -20,13 +19,6 @@ const SettingsPage = async () => {
     .select('id, agent_name, name, key_prefix, last_used_at, revoked_at, created_at')
     .eq('user_id', user.id)
     .order('created_at')
-
-  const { data: archived } = await admin()
-    .from('projects')
-    .select('id, key, title, task_counter')
-    .eq('owner_user_id', user.id)
-    .eq('status', 'archived')
-    .order('title')
 
   const { data: labels } = await admin().rpc('list_labels', { p_owner: user.id })
 
@@ -102,7 +94,6 @@ const SettingsPage = async () => {
           allProjects={allProjects}
           unassigned={unassigned}
         />
-        <ArchivedSection projects={(archived ?? []) as ArchivedProject[]} />
       </div>
     </div>
     </div>

@@ -67,7 +67,7 @@ export const listBoardTasks = async (
       .select('id, key, title')
       .eq('owner_user_id', userId)
       .eq('status', 'active')
-      .order('position')
+      .order('title')
       .order('created_at'),
     (() => {
       let q = admin()

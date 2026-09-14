@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PendingLink } from '@/components/pending-link'
 import { LiveUpdates } from '@/components/live-updates'
 import { redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
@@ -93,12 +94,17 @@ const ActivityPage = async ({
             <ActivityList rows={rows} />
             {older && (
               <div className="px-4 py-6 text-center">
-                <Link
+                {/* The same control on /sessions was already a PendingLink and
+                    this one was not. It changes only the query string, so
+                    loading.tsx never fires, and fetching another page of a feed
+                    that unions six stores is not instant — it read as a dead
+                    link for as long as it took. */}
+                <PendingLink
                   href={withParam('before', older)}
-                  className="text-fg-subtle hover:text-fg text-[0.75rem] transition-colors"
+                  className="text-fg-subtle hover:text-fg inline-flex items-center gap-1.5 text-[0.75rem] transition-colors"
                 >
                   Load older
-                </Link>
+                </PendingLink>
               </div>
             )}
           </>
