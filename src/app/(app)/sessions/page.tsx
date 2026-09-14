@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { LiveUpdates } from '@/components/live-updates'
 import { redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { currentUser, listProjects } from '@/lib/data'
@@ -96,6 +97,8 @@ const SessionsPage = async ({
 
   return (
     <div className="flex h-dvh flex-col">
+      {/* sessions arrive from a sweep on a schedule, never from anything you did here */}
+      <LiveUpdates />
       <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
         <MobileNavButton />
         <Link

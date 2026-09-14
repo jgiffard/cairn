@@ -26,28 +26,27 @@ export const GET = async (req: Request) => {
   const url = new URL(req.url)
   const projectKey = url.searchParams.get('project')
 
+  /**
+   * One query, covering every store the UI can show.
+   *
+   * This compared `max(tasks.updated_at)` and `count(tasks)` and nothing else,
+   * which is why the sessions, knowledge and activity pages could not be given
+   * live updates: they would have held a subscription that could never fire. A
+   * session recorded or a fact learned moves nothing in a fingerprint made of
+   * tasks.
+   *
+   * In the database rather than four round trips from here, because this runs
+   * every few seconds for every open tab.
+   */
   const fingerprint = async (): Promise<string> => {
-    let q = admin()
-      .from('tasks')
-      .select('updated_at, project:projects!project_id!inner(key, owner_user_id)')
-      .eq('projects.owner_user_id', actor.userId)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-
-    if (projectKey) q = q.eq('projects.key', projectKey.toUpperCase())
-
-    const [latest, counted] = await Promise.all([
-      q,
-      admin()
-        .from('tasks')
-        .select('id, project:projects!project_id!inner(key, owner_user_id)', { count: 'exact', head: true })
-        .eq('projects.owner_user_id', actor.userId),
-    ])
-
-    const row = (latest.data ?? [])[0] as { updated_at?: string } | undefined
-    // Count is included so a deletion registers too — updated_at alone
-    // would not move when a row disappears.
-    return `${row?.updated_at ?? '-'}:${counted.count ?? 0}`
+    const { data, error } = await admin().rpc('cairn_pulse', {
+      p_owner: actor.userId,
+      p_project: projectKey ? projectKey.toUpperCase() : null,
+    })
+    // A failed read must not look like a change: returning something new would
+    // refresh every open page on a loop for as long as the error lasts.
+    if (error) return 'unavailable'
+    return typeof data === 'string' ? data : String(data ?? '-')
   }
 
   const encoder = new TextEncoder()

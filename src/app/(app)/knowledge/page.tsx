@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { LiveUpdates } from '@/components/live-updates'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import { currentUser, listProjects } from '@/lib/data'
@@ -109,6 +110,8 @@ const KnowledgePage = async ({
 
   return (
     <div className="flex h-dvh flex-col">
+      {/* agents write knowledge while you are reading it */}
+      <LiveUpdates />
       <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
         <MobileNavButton />
         <Link
