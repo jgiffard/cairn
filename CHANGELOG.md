@@ -68,7 +68,8 @@ out under **Breaking** with what to do about it.
 - **Everything is larger, and scales from one number.** Every size in the app was written
   in fixed pixels — 343 text sizes and 192 dimensions, including 83 heights — so raising
   the type alone would have pushed text out of rows that could not grow with it. All of it
-  is expressed in rem now and the root is 17px; change that one value in `globals.css` to
+  is expressed in rem now and the root is 18px — body text 13px to 14.6px, about an eighth
+  larger, while the task list stays dense. Change that one value in `globals.css` to
   change the whole interface. Hairlines and one-pixel nudges stay in pixels, where a
   fraction of a pixel is not a thing a browser draws consistently.
 

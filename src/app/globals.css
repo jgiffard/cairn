@@ -200,13 +200,17 @@
    * have left 83 fixed pixel heights behind and pushed text out of its own
    * rows.
    *
-   * 17px rather than the browser's 16 because the people reading this all day
-   * asked for it larger, and because a root size stated in px still honours
-   * browser zoom, which is what somebody who needs it much larger will reach
-   * for. Change this one number to change everything.
+   * 18px rather than the browser's 16. 17 was tried first and is not worth
+   * having: it takes body text from 13px to 13.8px, which nobody asked for and
+   * nobody would notice. 18 makes it 14.6px, about an eighth larger, which is
+   * a real change while still leaving the task list dense.
+   *
+   * A root size in px still honours browser zoom, which is what somebody who
+   * needs it much larger will reach for. Change this one number to change
+   * everything.
    */
   html {
-    font-size: 17px;
+    font-size: 18px;
   }
 
   body {
