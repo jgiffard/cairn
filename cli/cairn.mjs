@@ -13,7 +13,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -48,7 +48,7 @@ const fileEnv = () => {
  * old was found writing under the wrong identity exactly once, which was
  * enough.
  */
-const VERSION = '0.3.0'
+const VERSION = '0.4.0'
 
 const FILE_ENV = fileEnv()
 const BASE = (process.env.CAIRN_BASE_URL || FILE_ENV.CAIRN_BASE_URL || 'http://localhost:3000')
@@ -145,11 +145,120 @@ const resolveValue = async (v) => (v === '-' ? (await readStdin()).trim() : v)
 const TRANSIENT = new Set([502, 503, 504])
 const RETRIES = 3
 
+/**
+ * How long a write may spend being retried before it is put aside instead.
+ *
+ * Writes normally return in about half a second. During a deploy the container
+ * is down and they block for minutes — several `cairn add` calls ran past 120s
+ * and 300s, every one of them while a container was restarting. Retrying is
+ * right; making an agent mid-task wait for a restart is not. Cairn is supposed
+ * to be the thing an agent can always write to.
+ */
+const DEADLINE_MS = Number(process.env.CAIRN_DEADLINE_MS ?? 15_000)
+
+/** Guards against a replay triggering its own replay. */
+let FLUSHING = false
+
+/**
+ * The outbox, and what is allowed into it.
+ *
+ * Only writes whose answer the caller does not need: a note, a comment, a
+ * heartbeat, a checkpoint. `add` and `claim` are deliberately excluded — an
+ * agent that is handed a ref which does not exist yet, or told it holds a task
+ * it may not have won, is worse off than one told plainly that the write
+ * failed. Those fail fast instead.
+ */
+const OUTBOX_PATH = join(homedir(), '.cairn', 'outbox.jsonl')
+const QUEUEABLE = /\/(notes|comments|beat|checkpoint)$/
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/** Put a write aside so the agent can carry on, and say so plainly. */
+const enqueue = (method, path, body, why) => {
+  try {
+    mkdirSync(dirname(OUTBOX_PATH), { recursive: true })
+    appendFileSync(
+      OUTBOX_PATH,
+      `${JSON.stringify({ t: new Date().toISOString(), method, path, body, agent: AGENT })}\n`,
+    )
+  } catch (error) {
+    die(`${why}, and it could not be queued either: ${error.message}`)
+  }
+  process.stderr.write(`${why} — queued locally, replays on the next successful write\n`)
+  return { queued: true, path }
+}
+
+/**
+ * Send everything that was put aside, oldest first.
+ *
+ * Stops at the first transient failure and keeps the rest: the server is still
+ * coming back, and draining into a restarting container would lose the queue
+ * for the same reason it was written. A write the server actively rejects is
+ * dropped and reported — replaying a 4xx forever is a queue that never empties.
+ */
+const flushOutbox = async () => {
+  let lines
+  try {
+    lines = readFileSync(OUTBOX_PATH, 'utf8').trim().split('\n').filter(Boolean)
+  } catch {
+    return { sent: 0, dropped: 0, left: 0 }
+  }
+  if (lines.length === 0) return { sent: 0, dropped: 0, left: 0 }
+
+  let sent = 0
+  let dropped = 0
+  let index = 0
+  for (; index < lines.length; index += 1) {
+    let item
+    try {
+      item = JSON.parse(lines[index])
+    } catch {
+      dropped += 1
+      continue
+    }
+    let res
+    try {
+      res = await fetch(`${BASE}${item.path}`, {
+        method: item.method,
+        headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+        body: item.body === undefined ? undefined : JSON.stringify(item.body),
+      })
+    } catch {
+      break // still unreachable
+    }
+    if (TRANSIENT.has(res.status)) break
+    if (res.ok) sent += 1
+    else dropped += 1
+  }
+
+  // Whatever the loop stopped before. A break leaves lines[index] unsent, and
+  // running to the end leaves nothing — so the index is the whole answer, and
+  // the counters are only for reporting.
+  const left = lines.slice(index)
+  try {
+    if (left.length === 0) rmSync(OUTBOX_PATH, { force: true })
+    else writeFileSync(OUTBOX_PATH, `${left.join('\n')}\n`)
+  } catch {
+    // Leaving the file as it was replays a few writes twice, which is a note
+    // appearing twice. Losing it loses work. The duplicate is the better bug.
+  }
+  return { sent, dropped, left: left.length }
+}
 
 const request = async (method, path, body, { soft = false } = {}) => {
   if (!KEY) die('CAIRN_API_KEY is not set (env, or ~/.cairn/env).')
   let res
+  const startedAt = Date.now()
+  const spent = () => Date.now() - startedAt
+
+  // A write that cannot get through is put aside rather than waited on. Only
+  // ones whose answer the caller does not need; everything else fails fast,
+  // which is still far better than blocking for minutes.
+  const giveUp = (why) => {
+    if (method !== 'GET' && QUEUEABLE.test(path.split('?')[0])) return enqueue(method, path, body, why)
+    die(`${why} (${Math.round(spent() / 1000)}s)`)
+  }
+
   for (let attempt = 0; ; attempt += 1) {
     try {
       res = await fetch(`${BASE}${path}`, {
@@ -158,11 +267,16 @@ const request = async (method, path, body, { soft = false } = {}) => {
         body: body === undefined ? undefined : JSON.stringify(body),
       })
     } catch (error) {
-      if (attempt >= RETRIES) die(`cannot reach ${BASE}: ${error.message}`)
+      if (attempt >= RETRIES || spent() > DEADLINE_MS) {
+        return giveUp(`cannot reach ${BASE}: ${error.message}`)
+      }
       await sleep(500 * 2 ** attempt)
       continue
     }
-    if (TRANSIENT.has(res.status) && attempt < RETRIES) {
+    if (TRANSIENT.has(res.status)) {
+      if (attempt >= RETRIES || spent() > DEADLINE_MS) {
+        return giveUp(`${BASE} returned ${res.status} — it is probably restarting`)
+      }
       await sleep(500 * 2 ** attempt)
       continue
     }
@@ -199,7 +313,20 @@ const request = async (method, path, body, { soft = false } = {}) => {
 
   // Recorded here rather than at each call site: one place that already knows
   // the method, the path and that the server said yes.
-  if (method !== 'GET') rememberWrite(method, path, payload.data)
+  if (method !== 'GET') {
+    rememberWrite(method, path, payload.data)
+    // The server just answered, so anything put aside while it was down can go
+    // now. No cron and nothing to remember to run: the next write drains it.
+    if (!FLUSHING && existsSync(OUTBOX_PATH)) {
+      FLUSHING = true
+      try {
+        const { sent } = await flushOutbox()
+        if (sent > 0) process.stderr.write(`replayed ${sent} queued write(s)\n`)
+      } finally {
+        FLUSHING = false
+      }
+    }
+  }
   return payload.data
 }
 
@@ -592,6 +719,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn entities rename <key> --key <new> --title "T"
     cairn know [<slug>|<query>]    read it back, or list what applies here
     cairn verify <slug>            it is still true — clears the stale mark
+    cairn replay                   send writes put aside while the server was down
     cairn relearn <slug> --body -  correct it
     cairn unlearn <slug> [--superseded-by <slug>]
     cairn session list             recent sessions
@@ -1192,6 +1320,22 @@ const commands = {
   async verify() {
     const slug = need(positional[0], 'usage: cairn verify <slug>')
     emit(await request('PATCH', `/api/v1/knowledge/${slug}`, { verified: true }))
+  },
+
+  /**
+   * Send whatever was put aside while the server was unreachable.
+   *
+   * Rarely needed by hand — any successful write drains the queue — but a
+   * queue with no way to look at it is a queue nobody trusts.
+   */
+  async replay() {
+    const result = await flushOutbox()
+    emit(result, {
+      lines: (d) =>
+        d.sent + d.dropped + d.left === 0
+          ? ['nothing queued']
+          : [`sent ${d.sent}, dropped ${d.dropped}, still queued ${d.left}`],
+    })
   },
 
   async relearn() {

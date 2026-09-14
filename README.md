@@ -306,6 +306,7 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 |---|---|
 | `cairn check "<subject>"` | **Start here.** Prior work across all four stores, with a `~tokens` cost per row |
 | `cairn context` | The briefing: what you hold, what is in flight, where the last session here stopped |
+| `cairn next` | **What to pick up, and why.** Finishing beats starting, so work you hold ranks above work dropped with a checkpoint, which ranks above anything not begun. Blocked, waiting, or actively held by another agent is never offered |
 | `cairn show <ref>` · `cairn list --project K` · `cairn projects` | Read one, many, or the project index |
 | `cairn add "<title>" --project K` | File work. Warns if something similar already exists |
 | `cairn update <ref> --status S --priority P` | Change fields; `--project` moves it, `--also-project` widens it |
@@ -325,6 +326,8 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn checkpoint <ref> --summary "…"` | Where work stopped, for whoever resumes |
 | `cairn block <ref> --reason "…"` · `cairn unblock <ref>` | Stuck on something outside Cairn |
 | `cairn learn "<title>" --body -` | Record what we now know. Global unless `--project` or `--entity` |
+| `cairn verify <slug>` | This fact is still true. Clears the stale mark without rewriting it |
+| `cairn task delete <ref> --confirm <ref>` | For junk that should never have existed. Refused if the task has children, notes, comments or dependencies — cancel keeps the record |
 | `cairn know [<slug>\|<query>]` | Read it back, or list what applies here |
 | `cairn relearn <slug>` · `cairn unlearn <slug> --superseded-by <slug>` | Correct it, or mark it replaced |
 | `cairn entities` · `cairn entities assign <key> --project A,B` | Groupings a fact can be true of |
@@ -332,6 +335,7 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn reconcile` | Release your own claims that went quiet |
 | `cairn vitals [--all]` | Is the memory still being written — counts against the week before, and what looks wrong |
 | `cairn project rename\|archive\|restore\|delete <KEY>` | Deleting takes every task with it, and demands `--confirm <KEY>` |
+| `cairn replay` | Send writes put aside while the server was unreachable. Rarely needed by hand — any successful write drains the queue |
 | `cairn map <KEY>` | Tell Cairn which project this checkout is. Validates the key, and claims the repository so every other clone and worktree resolves too. `cairn map none` releases both |
 
 `cairn --help` is the full reference.

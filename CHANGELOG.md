@@ -7,6 +7,51 @@ Cairn is pre-1.0: the schema, API and CLI are in daily use and stable in practic
 minor bump may still change them. Anything that would break an existing install is called
 out under **Breaking** with what to do about it.
 
+## [0.4.0] — 2026-09-14
+
+### Added
+
+- **`cairn next`** says what to pick up rather than what exists. The briefing listed what was
+  held, in flight and dropped and never which one to do, so every agent invented its own
+  ranking and they disagreed. Finishing beats starting: work you hold, then work dropped with
+  a checkpoint, then dropped without one, then in-review, todo, backlog. Anything blocked,
+  waiting on an unfinished task, or actively held by another agent is absent rather than
+  ranked last. Every pick carries the reason it won.
+
+- **Knowledge ages, and says so.** `verified_at` existed and nothing used it, so half a dozen
+  entries describing the Supabase stack went on reading like facts confirmed this morning
+  after the stack was replaced. A fact whose named files several sessions have reworked since
+  it was last confirmed is marked stale in `check` and in the briefing. Marked, never hidden
+  and never expired — a wrong confidence signal is worse than none. `cairn verify <slug>`
+  confirms a fact without rewriting it.
+
+- **`cairn task delete <ref> --confirm <ref>`**, refusing any task with children, notes,
+  comments or dependencies in either direction, and pointing at cancel — which keeps the
+  record and the reason — instead.
+
+- **Writes survive a deploy.** They normally return in half a second; during a restart they
+  blocked for minutes, so an agent mid-task froze rather than carrying on. A write now has a
+  deadline, after which a note, comment, heartbeat or checkpoint is put aside and replayed by
+  the next successful write. `add` and `claim` are deliberately not queued: a ref that does
+  not exist yet, or being told you hold a task you may not have won, is worse than a clear
+  failure. `cairn replay` flushes by hand.
+
+### Changed
+
+- **Sessions record what they actually touched.** The session hook recovered task refs by
+  regex over the transcript and returned refs from documentation examples; those links feed
+  search, and a session linked to everything answers yes to everything. The CLI now drops a
+  breadcrumb per accepted write and the hook reads those, matched on time so it works for
+  Codex and OpenClaw, which name sessions in ways the CLI cannot see. The regex remains as a
+  fallback.
+
+### Breaking
+
+- `DELETE /api/v1/tasks/{ref}` now requires `?confirm=<REF>` and refuses a task that has
+  children, notes, comments or dependencies. It previously deleted anything, with no
+  confirmation. Anything scripted against it needs the parameter; anything relying on it to
+  remove a task with history should use `cancel`.
+
 ## [0.3.0] — 2026-09-13
 
 ### Added
@@ -132,7 +177,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/montytorr/cairn/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/montytorr/cairn/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/montytorr/cairn/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/montytorr/cairn/releases/tag/v0.1.0
