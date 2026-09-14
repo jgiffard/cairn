@@ -4,6 +4,8 @@ import { ok, fail } from '@/lib/api/response'
 import { searchAll, searchTasks, type SearchAllRow, type SearchRow } from '@/lib/api/search'
 import { recordSearch } from '@/lib/api/search-events'
 import { TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
+import { admin } from '@/lib/db/client'
+import { stalenessFor } from '@/lib/api/staleness'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,12 +67,53 @@ export const GET = route({
 
       const { rows, widened } = await searchAll(actor.userId, q, { project, kinds }, limit)
       await recordSearch(actor, q, kinds ?? null, rows.length, widened)
-      return ok({ count: rows.length, query: q, widened, results: rows.map(unifiedResult) })
+
+      const results = rows.map(unifiedResult)
+      await markStaleKnowledge(actor.userId, results)
+      return ok({ count: rows.length, query: q, widened, results })
     } catch (error) {
       return fail('internal_error', error instanceof Error ? error.message : 'Search failed.')
     }
   },
 })
+
+/**
+ * Marks knowledge rows whose files have moved since the fact was confirmed.
+ *
+ * Done here rather than in `search_all` because staleness is a judgement about
+ * evidence held in another table, and burying it in the ranking SQL would make
+ * it neither testable nor arguable. Mutates in place: the ordering is the
+ * database's and must not be rebuilt.
+ */
+const markStaleKnowledge = async (
+  userId: string,
+  results: ReturnType<typeof unifiedResult>[],
+) => {
+  const slugs = results.filter((r) => r.kind === 'knowledge').map((r) => r.ref)
+  if (slugs.length === 0) return
+
+  const { data } = await admin()
+    .from('knowledge')
+    .select('id, slug, body, verified_at, created_at')
+    .eq('owner_user_id', userId)
+    .in('slug', slugs)
+
+  const entries = (data ?? []) as {
+    id: string
+    slug: string
+    body: string
+    verified_at: string | null
+    created_at: string | null
+  }[]
+  if (entries.length === 0) return
+
+  const staleness = await stalenessFor(userId, entries)
+  const bySlug = new Map(entries.map((e) => [e.slug, staleness.get(e.id)]))
+  for (const row of results) {
+    if (row.kind !== 'knowledge') continue
+    row.stale = Boolean(bySlug.get(row.ref)?.stale)
+  }
+}
 
 // Rows arrive ranked by the database. Do NOT re-sort them here: ordering by
 // anything other than ts_rank discards relevance, which is exactly the
@@ -110,4 +153,10 @@ const unifiedResult = (row: SearchAllRow) => ({
   updatedAt: row.updated_at,
   loose: row.widened,
   tokens: Math.ceil(row.body_bytes / 4),
+  /**
+   * Knowledge only: the files this fact names have been reworked by several
+   * sessions since it was last confirmed. A mark, never a filter — a wrong
+   * confidence signal is worse than none, so it is the reader who decides.
+   */
+  stale: false,
 })
