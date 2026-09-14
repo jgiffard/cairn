@@ -92,6 +92,31 @@ export type SearchRow = {
  */
 const REF_QUERY = /^\s*([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,6})\s*$/
 
+/**
+ * A bare number is an address too.
+ *
+ * Typing `131` while looking at a project is how a person refers to a task —
+ * the key is the thing they already know and do not repeat. It returned twenty
+ * rows of prose that happen to contain those digits, and not the task.
+ *
+ * Without a project it is genuinely ambiguous: CAIRN-131, OD-131 and HM-131 can
+ * all exist. All of them are returned rather than one being guessed at, each
+ * carrying its own ref, and capped — someone searching `404` or `500` wants the
+ * error, and a handful of same-numbered tasks ahead of it is a nudge where
+ * twenty would be an obstruction.
+ */
+const NUMBER_QUERY = /^\s*(\d{1,6})\s*$/
+
+/**
+ * The same columns a ranked row carries. A row assembled here renders in the
+ * same list, so a stubbed priority or a missing claim would read as fact.
+ */
+const EXACT_COLUMNS =
+  'id, number, title, description, type, status, priority, resolution, ' +
+  'resolution_kind, claimed_by, external_ref, updated_at, ' +
+  'project:projects!project_id!inner(key, owner_user_id)'
+const BARE_NUMBER_LIMIT = 5
+
 type ExactTask = {
   id: string
   number: number
@@ -115,18 +140,34 @@ const keyOfProject = (project: ExactTask['project']) =>
  * The task a ref names, including through a key the project used to have —
  * the whole point of retaining former keys is that old refs keep resolving.
  */
+const tasksByNumber = async (
+  userId: string,
+  q: string,
+  project?: string,
+): Promise<ExactTask[]> => {
+  const match = NUMBER_QUERY.exec(q)
+  if (!match?.[1]) return []
+
+  let query = admin()
+    .from('tasks')
+    .select(EXACT_COLUMNS)
+    .eq('projects.owner_user_id', userId)
+    .eq('number', Number(match[1]))
+  if (project) query = query.eq('projects.key', project.toUpperCase())
+
+  const { data } = await query
+    .order('updated_at', { ascending: false })
+    .limit(BARE_NUMBER_LIMIT)
+  return (data ?? []) as unknown as ExactTask[]
+}
+
 const taskByRef = async (userId: string, q: string): Promise<ExactTask | null> => {
   const match = REF_QUERY.exec(q)
   if (!match?.[1] || !match[2]) return null
   const key = match[1].toUpperCase()
   const number = Number(match[2])
 
-  // The same columns the ranked rows carry. A row assembled here renders in the
-  // same list, so a stubbed priority or a missing claim would read as fact.
-  const columns =
-    'id, number, title, description, type, status, priority, resolution, ' +
-    'resolution_kind, claimed_by, external_ref, updated_at, ' +
-    'project:projects!project_id!inner(key, owner_user_id)'
+  const columns = EXACT_COLUMNS
 
   const { data } = await admin()
     .from('tasks')
@@ -191,37 +232,42 @@ export const searchTasks = async (
 
   // Same rule on the task-only path, which is what the UI uses the moment a
   // type or status filter is set — and what `cairn check --tasks` uses.
-  const exact = await taskByRef(userId, q)
-  if (!exact) return { rows, widened: rows.some((r) => r.widened) }
+  const byRef = await taskByRef(userId, q)
+  const addressed = byRef ? [byRef] : await tasksByNumber(userId, q, filters.project)
+  if (addressed.length === 0) return { rows, widened: rows.some((r) => r.widened) }
 
-  const key = keyOfProject(exact.project)
   // A filter the caller set is a statement about what they want back; an exact
-  // ref does not override it.
-  const excluded =
-    (filters.project && filters.project.toUpperCase() !== key) ||
-    (filters.type && filters.type !== exact.type) ||
-    (filters.status && filters.status !== exact.status)
-  if (excluded) return { rows, widened: rows.some((r) => r.widened) }
+  // address does not override it.
+  const kept = addressed.filter((task) => {
+    const key = keyOfProject(task.project)
+    if (filters.project && filters.project.toUpperCase() !== key) return false
+    if (filters.type && filters.type !== task.type) return false
+    if (filters.status && filters.status !== task.status) return false
+    return true
+  })
+  if (kept.length === 0) return { rows, widened: rows.some((r) => r.widened) }
 
-  const head: SearchRow = {
-    id: exact.id,
-    number: exact.number,
-    title: exact.title,
-    type: exact.type,
-    status: exact.status,
-    priority: exact.priority,
-    resolution: exact.resolution,
-    resolution_kind: exact.resolution_kind,
-    description: exact.description,
-    claimed_by: exact.claimed_by,
-    updated_at: exact.updated_at,
-    external_ref: exact.external_ref,
-    project_key: key ?? '',
+  const heads: SearchRow[] = kept.map((task) => ({
+    id: task.id,
+    number: task.number,
+    title: task.title,
+    type: task.type,
+    status: task.status,
+    priority: task.priority,
+    resolution: task.resolution,
+    resolution_kind: task.resolution_kind,
+    description: task.description,
+    claimed_by: task.claimed_by,
+    updated_at: task.updated_at,
+    external_ref: task.external_ref,
+    project_key: keyOfProject(task.project) ?? '',
     rank: Number.POSITIVE_INFINITY,
     coverage: 1,
     widened: false,
-  }
-  const deduped = [head, ...rows.filter((r) => r.id !== exact.id)]
+  }))
+
+  const headIds = new Set(heads.map((h) => h.id))
+  const deduped = [...heads, ...rows.filter((r) => !headIds.has(r.id))]
   return { rows: deduped.slice(0, limit), widened: rows.some((r) => r.widened) }
 }
 
@@ -269,12 +315,24 @@ export const searchAll = async (
 
   const rows = (data ?? []) as SearchAllRow[]
 
-  // The task a ref names, first, and never twice: the full-text pass can also
-  // find it legitimately, by title.
-  const exact = filters.kinds && !filters.kinds.includes('task') ? null : await taskByRef(userId, q)
-  const withExact = exact
-    ? [asSearchAllRow(exact), ...rows.filter((r) => !(r.kind === 'task' && r.id === exact.id))]
-    : rows
+  // The task an address names, first, and never twice: the full-text pass can
+  // also find it legitimately, by title.
+  const wantsTasks = !filters.kinds || filters.kinds.includes('task')
+  const addressed = wantsTasks
+    ? await (async () => {
+        const byRef = await taskByRef(userId, q)
+        return byRef ? [byRef] : await tasksByNumber(userId, q, filters.project)
+      })()
+    : []
+
+  const addressedIds = new Set(addressed.map((t) => t.id))
+  const withExact =
+    addressed.length > 0
+      ? [
+          ...addressed.map(asSearchAllRow),
+          ...rows.filter((r) => !(r.kind === 'task' && addressedIds.has(r.id))),
+        ]
+      : rows
 
   // Widened describes the full-text pass. An exact hit is not a loose match and
   // must not make the caller think the rest were precise.

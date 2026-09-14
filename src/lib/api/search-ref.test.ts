@@ -19,6 +19,12 @@ const parse = (q: string) => {
   return m ? `${(m[1] as string).toUpperCase()}-${Number(m[2])}` : null
 }
 
+const NUMBER_QUERY = /^\s*(\d{1,6})\s*$/
+const parseNumber = (q: string) => {
+  const m = NUMBER_QUERY.exec(q)
+  return m ? Number(m[1]) : null
+}
+
 describe('which queries are an exact ref', () => {
   it('accepts the refs this system issues', () => {
     expect(parse('CAIRN-131')).toBe('CAIRN-131')
@@ -59,5 +65,19 @@ describe('which queries are an exact ref', () => {
   it('rejects a ref with no number, which is a project not a task', () => {
     expect(parse('CAIRN-')).toBeNull()
     expect(parse('CAIRN')).toBeNull()
+  })
+
+  it('reads a bare number as an address, which is how people refer to a task', () => {
+    // Typing 131 while looking at a project is how a person names a task: the
+    // key is the part they already know and do not repeat. It used to return
+    // twenty rows of prose containing those digits, and not the task.
+    expect(parseNumber('131')).toBe(131)
+    expect(parseNumber(' 42 ')).toBe(42)
+  })
+
+  it('does not read prose containing a number as an address', () => {
+    expect(parseNumber('error 500')).toBeNull()
+    expect(parseNumber('131 regressions')).toBeNull()
+    expect(parseNumber('')).toBeNull()
   })
 })
