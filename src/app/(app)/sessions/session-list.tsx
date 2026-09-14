@@ -17,6 +17,7 @@ export type SessionItem = {
   platform: string
   project: string | null
   request: string | null
+  scheduled: boolean
   learned: string | null
   completed: string | null
   nextSteps: string | null

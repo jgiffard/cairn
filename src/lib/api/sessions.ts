@@ -19,7 +19,7 @@ import { recordFiles } from './files'
 
 const COLUMNS =
   'id, external_id, platform_source, agent_id, cwd, project_id, started_at, ended_at, ' +
-  'request, learned, completed, next_steps, files, task_refs, tool_calls, created_at, updated_at'
+  'request, learned, completed, next_steps, files, task_refs, tool_calls, scheduled, created_at, updated_at'
 
 export type SessionRow = {
   id: string
@@ -37,6 +37,7 @@ export type SessionRow = {
   files: string[]
   task_refs: string[]
   tool_calls: number | null
+  scheduled: boolean
   created_at: string
   updated_at: string
 }
@@ -143,6 +144,7 @@ export const upsertSession = async (actor: Actor, input: SessionUpsert) => {
     files: input.files,
     task_refs: taskRefs,
     tool_calls: input.toolCalls ?? null,
+    scheduled: input.scheduled ?? false,
   }
 
   const { data, error } = await admin()

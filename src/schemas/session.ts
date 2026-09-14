@@ -13,6 +13,8 @@ export const PLATFORM_SOURCES = ['claude', 'codex', 'openclaw', 'other'] as cons
 export const platformSource = z.enum(PLATFORM_SOURCES)
 
 export const sessionUpsert = z.object({
+  /** The run was started by a schedule rather than a person. */
+  scheduled: z.boolean().optional(),
   externalId: z.string().min(1).max(200),
   platformSource: platformSource.default('claude'),
   agentId: z.string().max(80).optional(),

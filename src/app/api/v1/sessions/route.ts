@@ -27,6 +27,7 @@ export const GET = route({
         cwd: r.cwd,
         endedAt: r.ended_at,
         request: r.request,
+        scheduled: r.scheduled,
         nextSteps: r.next_steps,
         files: (r.files ?? []).length,
         taskRefs: r.task_refs ?? [],

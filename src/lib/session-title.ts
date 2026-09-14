@@ -22,8 +22,14 @@ export const sessionTitle = (session: {
   request?: string | null
   completed?: string | null
   nextSteps?: string | null
+  scheduled?: boolean | null
 }): { text: string; machine: boolean } => {
-  if (!isMachinePrompt(session.request)) {
+  // `scheduled` is recorded; the prompt test is the fallback for rows written
+  // before the column existed. A scheduled run whose preamble was dropped has
+  // no request at all, and calling that "No request recorded." described the
+  // storage rather than the run.
+  const machine = Boolean(session.scheduled) || isMachinePrompt(session.request)
+  if (!machine) {
     return { text: session.request?.trim() || 'No request recorded.', machine: false }
   }
   const fallback = session.completed?.trim() || session.nextSteps?.trim()

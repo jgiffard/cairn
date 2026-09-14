@@ -39,3 +39,30 @@ describe('sessionTitle', () => {
     expect(isMachinePrompt('Fix the cron: it fires twice an hour')).toBe(false)
   })
 })
+
+describe('a scheduled run with no request at all', () => {
+  it('says it was scheduled rather than that nothing was recorded', () => {
+    // The hook drops a cron preamble rather than storing it as the request, so
+    // the row arrives with request: null. Reading that as "No request
+    // recorded." described the storage rather than the run, and put nineteen
+    // machine runs in front of a human looking for their own work.
+    expect(sessionTitle({ request: null, scheduled: true })).toEqual({
+      text: 'Scheduled run',
+      machine: true,
+    })
+  })
+
+  it('still prefers what the run actually finished', () => {
+    expect(
+      sessionTitle({ request: null, scheduled: true, completed: 'extracted 12 memories' }),
+    ).toEqual({ text: 'extracted 12 memories', machine: true })
+  })
+
+  it('leaves a genuine session with no request alone', () => {
+    // Not everything without a request is machinery, so the flag decides.
+    expect(sessionTitle({ request: null, scheduled: false })).toEqual({
+      text: 'No request recorded.',
+      machine: false,
+    })
+  })
+})

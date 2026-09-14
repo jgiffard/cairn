@@ -1681,6 +1681,7 @@ const commands = {
       }
       if (flags['tool-calls']) payload.toolCalls = Number(flags['tool-calls'])
       if (flags['no-checkpoint']) payload.checkpointHeld = false
+      if (flags.scheduled) payload.scheduled = true
       return emit(await request('POST', '/api/v1/sessions', payload))
     }
 

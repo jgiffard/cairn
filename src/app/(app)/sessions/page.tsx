@@ -53,6 +53,7 @@ const SessionsPage = async ({
     platform: r.platform_source,
     project: r.project_id ? (projectKeys.get(r.project_id) ?? null) : null,
     request: r.request,
+    scheduled: r.scheduled,
     learned: r.learned,
     completed: r.completed,
     nextSteps: r.next_steps,
@@ -67,8 +68,18 @@ const SessionsPage = async ({
    * either, so they sit behind a count, the way closed tasks do.
    */
   const showScheduled = scheduled === '1'
-  const scheduledCount = items.filter((i) => isMachinePrompt(i.request)).length
-  const visible = showScheduled ? items : items.filter((i) => !isMachinePrompt(i.request))
+  /**
+   * The column first, the prose second.
+   *
+   * Testing the request was the only signal available, and it stopped working
+   * the day the hook stopped storing a cron preamble as the request: nineteen
+   * scheduled runs came back as ordinary sessions headed "No request
+   * recorded." The flag is recorded now; the text test stays for rows written
+   * before the column existed, which still carry their preamble.
+   */
+  const isScheduled = (i: SessionItem) => i.scheduled || isMachinePrompt(i.request)
+  const scheduledCount = items.filter(isScheduled).length
+  const visible = showScheduled ? items : items.filter((i) => !isScheduled(i))
 
   const groups = groupByDay(visible)
   const oldest = rows.at(-1)?.ended_at

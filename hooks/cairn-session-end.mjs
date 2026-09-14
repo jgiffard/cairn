@@ -81,6 +81,18 @@ const textOf = (content) => {
  * and taking the first one blindly records "Use any available agents…" as the
  * request for every session on this machine.
  */
+/**
+ * The prompts a schedule writes, as opposed to a person.
+ *
+ * Kept separate from the rest of `isHumanTurn` because the answer is worth
+ * recording: these are not merely "not a person", they are specifically a
+ * scheduled run, and the session row should say so. The page used to work this
+ * out by testing the stored request — which stopped being possible the moment
+ * the hook, rightly, stopped storing it.
+ */
+const SCHEDULED_PROMPT =
+  /^(\[cron:[0-9a-f-]{8,}|Conversation info:|#+\s*AGENTS\.md instructions|OpenClaw \w+ context for this turn)/i
+
 const isHumanTurn = (text) =>
   text &&
   !text.startsWith('<') &&
@@ -107,6 +119,7 @@ const parseTranscript = async (path) => {
     startedAt: null,
     endedAt: null,
     prompts: [],
+    scheduled: false,
     files: new Set(),
     refs: new Set(),
     actedOn: new Set(),
@@ -136,6 +149,7 @@ const parseTranscript = async (path) => {
 
     if (row.type === 'user') {
       const text = textOf(content).trim()
+      if (SCHEDULED_PROMPT.test(text)) out.scheduled = true
       if (isHumanTurn(text)) {
         out.prompts.push(text)
         // Only what the human asked about. Scraping every user turn would pull
@@ -203,6 +217,7 @@ const parseCodexRollout = async (path) => {
     startedAt: null,
     endedAt: null,
     prompts: [],
+    scheduled: false,
     files: new Set(),
     refs: new Set(),
     actedOn: new Set(),
@@ -239,6 +254,7 @@ const parseCodexRollout = async (path) => {
       // `developer` is the skills and instructions preamble, not a person.
       const text = codexText(p.content).trim()
       if (p.role === 'user') {
+        if (SCHEDULED_PROMPT.test(text)) out.scheduled = true
         if (isHumanTurn(text)) {
           out.prompts.push(text)
           for (const m of text.matchAll(TASK_REF)) out.refs.add(m[0])
@@ -634,6 +650,10 @@ const record = async (payload) => {
 
   const request = summary.request || t.prompts[0]?.slice(0, 500)
   if (request) args.push('--request', request)
+  // Said by the only party that can still see it. The prompt is deliberately
+  // not stored as the request — it made every headline unreadable — so without
+  // this the row arrives with nothing to classify it by.
+  if (t.scheduled) args.push('--scheduled')
   for (const [key, flag] of [
     ['learned', '--learned'],
     ['completed', '--completed'],
