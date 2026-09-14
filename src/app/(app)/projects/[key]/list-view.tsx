@@ -167,8 +167,19 @@ const Row = ({
           <PriorityIcon priority={priority} />
         </QuickSelect>
 
-        <code className="text-fg-subtle hidden w-[3.875rem] shrink-0 truncate text-[0.75rem] tabular sm:block md:w-[4.5rem]">
-          {task.external_ref ?? ref}
+        {/* The Cairn ref, never the imported one.
+            This showed `external_ref` in preference, so a task migrated from
+            Linear displayed BBTRADE-1234 — an identifier that looks like a ref,
+            does not resolve anywhere in this system, and truncated to
+            "BBTRADE-1…" in a column sized for OD-70. The search route made the
+            opposite choice deliberately and says why; the list disagreed with
+            it. The old identifier is kept on the element's title, so it is
+            still there for anyone who has to match a task against Linear. */}
+        <code
+          className="text-fg-subtle hidden w-[3.875rem] shrink-0 truncate text-[0.75rem] tabular sm:block md:w-[4.5rem]"
+          title={task.external_ref ? `${ref} · imported as ${task.external_ref}` : ref}
+        >
+          {ref}
         </code>
 
         <QuickSelect
@@ -556,7 +567,12 @@ export const ListView = ({
             <button
               type="button"
               onClick={() => toggle(group.status)}
-              className="bg-bg-elevated border-border hover:bg-surface-hover sticky top-0 z-10 flex h-[2.125rem] w-full items-center gap-2 border-b px-3 text-left transition-colors"
+              // z-20, not z-10: the row's priority cell is also z-10 and comes
+              // later in the DOM, so it won the tie and painted straight through
+              // the sticky heading — a bar-chart glyph and a type pill floating
+              // over "In Progress". Same stacking context, equal z, DOM order
+              // decides. Still beneath the bulk bar (z-40) and dialogs (z-50).
+              className="bg-bg-elevated border-border hover:bg-surface-hover sticky top-0 z-20 flex h-[2.125rem] w-full items-center gap-2 border-b px-3 text-left transition-colors"
             >
               {group.status === 'recent' ? (
                 <Clock size={13} className="text-fg-subtle" />

@@ -65,7 +65,10 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
   // found the right task. Showing both is what lets them connect it by eye.
   const formerKeys = await formerKeysFor(user.id, task.project.id)
 
-  const ref = task.external_ref ?? `${task.project.key}-${task.number}`
+  // The Cairn ref, never the imported one. Preferring external_ref showed a
+  // migrated task as BBTRADE-1234 — an identifier that resolves nowhere in this
+  // system, on the page whose whole job is to tell you what you are looking at.
+  const ref = `${task.project.key}-${task.number}`
 
   return (
     <div className="flex h-dvh flex-col">
@@ -100,6 +103,17 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
           </>
         ) : null}
         <span className="text-fg-subtle shrink-0 text-[0.8125rem] tabular">{ref}</span>
+        {/* Where it came from, kept visible rather than substituted for the
+            ref: matching a task against the Linear export is a real need, and
+            it is the only place that identifier now appears. */}
+        {task.external_ref ? (
+          <span
+            className="text-fg-subtle hidden shrink-0 text-[0.6875rem] tabular sm:inline"
+            title={`Imported as ${task.external_ref}`}
+          >
+            ({task.external_ref})
+          </span>
+        ) : null}
         {formerKeys.length > 0 && !task.external_ref ? (
           <span
             className="text-fg-subtle hidden shrink-0 text-[0.6875rem] tabular sm:inline"
