@@ -12,7 +12,7 @@ import { CLAIM_LEASE_SECONDS } from '@/lib/utils'
  */
 export const takeTask = async (
   actor: Actor,
-  task: { id: string; status?: unknown; attempt?: unknown },
+  task: { id: string; status?: unknown; attempt?: unknown; project_id?: unknown },
   { agent, setDoing = true }: { agent?: string; setDoing?: boolean } = {},
 ) => {
   const holder = agent ?? actor.actorId
@@ -60,7 +60,9 @@ export const takeTask = async (
     })
   }
 
-  await admin().from('task_activity_events').insert(events)
+  await admin()
+    .from('task_activity_events')
+    .insert(events.map((e) => ({ owner_user_id: actor.userId, project_id: task.project_id ?? null, ...e })))
   return { row: (data as Record<string, unknown>[])[0], error: null }
 }
 

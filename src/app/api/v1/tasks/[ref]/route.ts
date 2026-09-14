@@ -291,7 +291,7 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
             resolution: String(task.resolution).slice(0, 2000),
           },
         },
-      ])
+      ], actor.userId)
     }
 
     return ok(alsoProjects ? { ...data, alsoProjects } : data)
@@ -392,6 +392,26 @@ export const DELETE = route<{ ref: string }>({
       .eq('task_id', task.id)
     const paths = ((files ?? []) as { storage_path: string }[]).map((f) => f.storage_path)
     if (paths.length > 0) await removeAttachments(paths)
+
+    /**
+     * The tombstone, written BEFORE the delete.
+     *
+     * task_id detaches rather than cascading now, so this row survives — but
+     * only if it exists first. Written after the delete it would have no task
+     * to hang from and the ref would already be unrecoverable. The ref and
+     * title go into `data` for the same reason: once the row is gone they are
+     * the only record of what was removed.
+     */
+    await recordActivity([
+      {
+        task_id: task.id,
+        project_id: (task.project_id as string) ?? null,
+        actor_type: actor.actorType,
+        actor_id: actor.actorId,
+        event: 'task_deleted',
+        data: { ref, title: String(task.title ?? '').slice(0, 200) },
+      },
+    ], actor.userId)
 
     const { error } = await admin().from('tasks').delete().eq('id', task.id)
     if (error) return failFromDb(error)

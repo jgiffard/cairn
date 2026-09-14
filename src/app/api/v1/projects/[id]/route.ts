@@ -3,6 +3,8 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
+import { recordActivity } from '@/lib/api/activity'
+import type { Actor } from '@/lib/api/auth'
 import { removeAttachments } from '@/lib/attachments'
 
 export const dynamic = 'force-dynamic'
@@ -41,6 +43,45 @@ export const GET = route<{ id: string }>({
   },
 })
 
+/**
+ * What changed about the project itself.
+ *
+ * Renames, key changes and archiving are the edits a reader is most likely to
+ * be confused by later — "why is this called that" — and none of them appeared
+ * anywhere. Status is split into archived/restored rather than recorded as a
+ * field change, because those are the two that mean something to a person.
+ */
+const recordProjectChanges = async (
+  actor: Actor,
+  // The row comes back from the adapter loosely typed; only these four fields
+  // are read, and they are read as strings.
+  before: Record<string, unknown>,
+  body: { title?: string; key?: string; status?: string },
+  renaming: boolean,
+) => {
+  const events: Parameters<typeof recordActivity>[0] = []
+  const id = String(before.id)
+  const key = String(before.key ?? '')
+  const title = String(before.title ?? '')
+  const status = String(before.status ?? '')
+  const base = { project_id: id, actor_type: actor.actorType, actor_id: actor.actorId }
+
+  if (renaming && body.key) {
+    events.push({ ...base, event: 'project_key_changed', data: { from: key, to: body.key } })
+  }
+  if (body.title && body.title !== title) {
+    events.push({ ...base, event: 'project_renamed', data: { from: title, to: body.title } })
+  }
+  if (body.status && body.status !== status) {
+    if (body.status === 'archived') {
+      events.push({ ...base, event: 'project_archived', data: { key } })
+    } else if (status === 'archived') {
+      events.push({ ...base, event: 'project_restored', data: { key, to: body.status } })
+    }
+  }
+  await recordActivity(events, actor.userId)
+}
+
 export const PATCH = route<{ id: string }, z.infer<typeof updateProject>>({
   schema: updateProject,
   handler: async ({ actor, params, body }) => {
@@ -77,6 +118,7 @@ export const PATCH = route<{ id: string }, z.infer<typeof updateProject>>({
         .select('id, key, title, description, status')
         .eq('id', project.id)
         .single()
+      await recordProjectChanges(actor, project, body, renaming)
       return ok({ ...(data as object), former_key: renaming ? project.key : undefined })
     }
 
@@ -88,6 +130,7 @@ export const PATCH = route<{ id: string }, z.infer<typeof updateProject>>({
       .single()
 
     if (error) return failFromDb(error)
+    await recordProjectChanges(actor, project, body, renaming)
     return ok({ ...(data as object), former_key: renaming ? project.key : undefined })
   },
 })
@@ -133,6 +176,18 @@ export const DELETE = route<{ id: string }>({
     if (paths.length > 0) {
       await removeAttachments(paths)
     }
+
+    // Before the delete: project_id detaches rather than cascading, but only a
+    // row that already exists can survive.
+    await recordActivity([
+      {
+        project_id: project.id,
+        actor_type: actor.actorType,
+        actor_id: actor.actorId,
+        event: 'project_deleted',
+        data: { key: project.key, title: project.title, tasks: count ?? 0 },
+      },
+    ], actor.userId)
 
     const { error } = await admin().from('projects').delete().eq('id', project.id)
     if (error) return failFromDb(error)

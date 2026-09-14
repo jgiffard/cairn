@@ -106,6 +106,8 @@ export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
     if (error) return failFromDb(error)
 
     await admin().from('task_activity_events').insert({
+      owner_user_id: actor.userId,
+      project_id: project.id,
       task_id: data.id,
       actor_type: actor.actorType,
       actor_id: actor.actorId,

@@ -2,6 +2,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
 import { findTask } from '@/lib/api/tasks'
+import { recordActivity } from '@/lib/api/activity'
 import {
   buildStoragePath,
   sanitizeFilename,
@@ -84,6 +85,18 @@ export const POST = route<{ ref: string }>({
       await removeAttachments([storagePath])
       return fail('internal_error', error.message)
     }
+
+    // A file arriving on a task is work, and it left no trace in the timeline.
+    await recordActivity([
+      {
+        task_id: task.id,
+        project_id: (task.project_id as string) ?? null,
+        actor_type: actor.actorType,
+        actor_id: actor.actorId,
+        event: 'attachment_added',
+        data: { name: file.name, bytes: file.size, mime: file.type || null },
+      },
+    ], actor.userId)
 
     return ok({ ...data, ...(await signUrls(storagePath, file.name, file.type)) }, { status: 201 })
   },

@@ -3,6 +3,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
+import { recordActivity } from '@/lib/api/activity'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +43,21 @@ export const POST = route({
       .insert({ ...body, owner_user_id: actor.userId })
       .select('id, key, title, description, status, created_at')
       .single()
+
+    if (!error && data) {
+      // A project appearing is activity. None of the project lifecycle was
+      // recorded anywhere, so the timeline could not answer "where did this
+      // come from" about the container every task lives in.
+      await recordActivity([
+        {
+          project_id: (data as { id: string }).id,
+          actor_type: actor.actorType,
+          actor_id: actor.actorId,
+          event: 'project_created',
+          data: { key: body.key, title: body.title },
+        },
+      ], actor.userId)
+    }
 
     if (error) {
       return failFromDb(error, { '23505': `A project with key ${body.key} already exists.` })

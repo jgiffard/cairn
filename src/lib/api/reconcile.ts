@@ -145,7 +145,7 @@ export const reconcileClaims = async (
           event: 'released',
           data: { reason: 'reconcile', heldForMinutes, reopened: reopen },
         },
-      ])
+      ], actor.userId)
     }
 
     released.push({

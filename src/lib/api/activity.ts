@@ -2,7 +2,20 @@ import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
 
 export type ActivityEvent = {
-  task_id: string
+  /**
+   * Who may see it. Filled in by `recordActivity` from the actor, because the
+   * old route to the owner — task then project — does not exist for a
+   * tombstone, and an unreachable audit row is the same as no audit row.
+   */
+  owner_user_id?: string | null
+  /** Null for an event about something that is not a task, or a tombstone. */
+  task_id?: string | null
+  /**
+   * Recorded alongside the task, and the only scope a tombstone keeps: once a
+   * task is deleted its own row is gone, so the project is the last thing that
+   * can still say where the event belonged.
+   */
+  project_id?: string | null
   actor_type: string
   actor_id: string
   event: string
@@ -13,9 +26,10 @@ export type ActivityEvent = {
  * Fire-and-forget, and deliberately so: an audit trail must never be the
  * reason a legitimate write fails. Errors are logged, not raised.
  */
-export const recordActivity = async (events: ActivityEvent[]) => {
+export const recordActivity = async (events: ActivityEvent[], owner?: string) => {
   if (events.length === 0) return
-  const { error } = await admin().from('task_activity_events').insert(events)
+  const rows = owner ? events.map((e) => ({ owner_user_id: owner, ...e })) : events
+  const { error } = await admin().from('task_activity_events').insert(rows)
   if (error) console.error('[activity] could not record', error.message, events.length)
 }
 

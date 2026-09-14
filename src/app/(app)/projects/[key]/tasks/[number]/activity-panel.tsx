@@ -71,6 +71,27 @@ const describe = (entry: ActivityEntry): React.ReactNode => {
       return <>recorded commit <code className="font-mono text-[0.6875rem]">{val(d.sha)}</code>{d.message ? <> · {String(d.message)}</> : null}</>
     case 'git_push':
       return <>pushed <code className="font-mono text-[0.6875rem]">{val(d.sha)}</code>{d.branch ? <> to {String(d.branch)}</> : null}</>
+    case 'checkpointed':
+      return <>checkpointed{d.summary ? <>: {String(d.summary)}</> : null}</>
+    case 'attachment_added':
+      return <>attached <code className="font-mono text-[0.6875rem]">{val(d.name)}</code></>
+    case 'attachment_removed':
+      return <>removed the attachment <code className="font-mono text-[0.6875rem]">{val(d.name)}</code></>
+    case 'dependency_added':
+      return (
+        <>
+          made it {d.direction === 'blocking' ? 'block' : 'depend on'}{' '}
+          <code className="font-mono text-[0.6875rem]">{val(d.ref)}</code>
+        </>
+      )
+    case 'dependency_removed':
+      return (
+        <>
+          unlinked <code className="font-mono text-[0.6875rem]">{val(d.ref)}</code>
+        </>
+      )
+    case 'task_deleted':
+      return <>deleted <code className="font-mono text-[0.6875rem]">{val(d.ref)}</code></>
     case 'run_result':
       return <>{val(d.status)} <code className="font-mono text-[0.6875rem]">{val(d.command)}</code>{d.exitCode !== undefined ? <> · exit {String(d.exitCode)}</> : null}</>
     default:

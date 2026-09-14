@@ -1,6 +1,7 @@
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
+import { recordActivity } from '@/lib/api/activity'
 import { removeAttachments, signUrls } from '@/lib/attachments'
 
 export const dynamic = 'force-dynamic'
@@ -17,7 +18,15 @@ const findOwned = async (userId: string, id: string) => {
     .eq('tasks.projects.owner_user_id', userId)
     .maybeSingle()
   return data as unknown as
-    | { id: string; original_name: string; mime_type: string; storage_path: string }
+    | {
+        id: string
+        original_name: string
+        mime_type: string
+        storage_path: string
+        // The embed is the only place the task id is available here, and the
+        // activity row needs it to attach the removal to the right timeline.
+        task?: { id: string } | { id: string }[] | null
+      }
     | null
 }
 
@@ -44,6 +53,16 @@ export const DELETE = route<{ id: string }>({
 
     const { error } = await admin().from('task_attachments').delete().eq('id', row.id)
     if (error) return fail('internal_error', error.message)
+
+    await recordActivity([
+      {
+        task_id: (Array.isArray(row.task) ? row.task[0]?.id : row.task?.id) ?? null,
+        actor_type: actor.actorType,
+        actor_id: actor.actorId,
+        event: 'attachment_removed',
+        data: { name: row.original_name },
+      },
+    ], actor.userId)
 
     return ok({ deleted: true, id: row.id })
   },

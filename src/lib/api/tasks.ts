@@ -14,7 +14,9 @@ export const TASK_FIELDS =
 /** Terse columns for list/search output. See the CLI's output discipline. */
 export const TASK_LIST_FIELDS =
   'id, number, title, type, status, priority, labels, claimed_by, heartbeat_at, ' +
-  'resolution, updated_at, project:projects!project_id!inner(key, owner_user_id)'
+  // project_id as well as the embed: an activity row records the project by id,
+  // and it is the only scope that survives the task being deleted.
+  'resolution, updated_at, project_id, project:projects!project_id!inner(key, owner_user_id)'
 
 export type TaskRef = { key: string; number: number } | { id: string }
 

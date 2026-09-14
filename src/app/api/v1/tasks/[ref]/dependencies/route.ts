@@ -3,6 +3,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
+import { recordActivity } from '@/lib/api/activity'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 
 export const dynamic = 'force-dynamic'
@@ -92,6 +93,18 @@ export const POST = route<{ ref: string }, z.infer<typeof body>>({
       return failFromDb(error, { '23505': 'That dependency already exists.' })
     }
 
+    // Which way round is the whole meaning here, so it is recorded, not implied.
+    await recordActivity([
+      {
+        task_id: task.id,
+        project_id: (task.project_id as string) ?? null,
+        actor_type: actor.actorType,
+        actor_id: actor.actorId,
+        event: 'dependency_added',
+        data: { ref: input.ref, direction: input.direction },
+      },
+    ], actor.userId)
+
     return ok({ blocked, blocking, direction: input.direction }, { status: 201 })
   },
 })
@@ -135,6 +148,17 @@ export const DELETE = route<{ ref: string }>({
     // Reported rather than swallowed: a silent no-op here looked like success
     // while the link stayed on screen.
     if (!count) return fail('not_found', `${params.ref} is not linked to ${input.ref} that way.`)
+    await recordActivity([
+      {
+        task_id: task.id,
+        project_id: (task.project_id as string) ?? null,
+        actor_type: actor.actorType,
+        actor_id: actor.actorId,
+        event: 'dependency_removed',
+        data: { ref: input.ref, direction: input.direction },
+      },
+    ], actor.userId)
+
     return ok({ removed: true })
   },
 })
