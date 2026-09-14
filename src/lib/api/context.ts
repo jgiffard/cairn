@@ -1,6 +1,7 @@
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { listKnowledge } from './knowledge'
+import { stalenessFor } from './staleness'
 import { contextForFile, type FileContext } from './files'
 import { normaliseRemote, projectKeyFromEmbed, projectKeyFromRepoRows, type RepoRow } from './repos'
 
@@ -56,7 +57,7 @@ export type ContextPayload = {
     nextSteps: string | null
     agent: string | null
   } | null
-  knowledge: { slug: string; title: string; scope: string }[]
+  knowledge: { slug: string; title: string; scope: string; stale: boolean }[]
   staleClaims: { ref: string; title: string; claimedBy: string; heldFor: string }[]
   file?: FileContext
 }
@@ -223,10 +224,18 @@ export const buildContext = async (
 
   // --- what is known here, plus what is known everywhere ----------------
   const rows = await listKnowledge(actor.userId, { project: project ?? undefined, limit: 12 })
+  // Marked where it is read. A fact whose files several sessions have reworked
+  // since it was confirmed still reads exactly like one confirmed this morning,
+  // which is how half a dozen Supabase entries outlived the stack they described.
+  const aged = await stalenessFor(
+    actor.userId,
+    rows.map((r) => ({ id: r.id, body: r.body ?? '', verified_at: r.verified_at, created_at: r.created_at })),
+  )
   const knowledge = rows.map((r) => ({
     slug: r.slug,
     title: r.title,
     scope: (r.projects ?? []).length === 0 ? 'global' : (r.projects ?? []).join(','),
+    stale: Boolean(aged.get(r.id)?.stale),
   }))
 
   // --- claims nobody is acting on ---------------------------------------

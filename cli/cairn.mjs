@@ -494,7 +494,9 @@ const renderContext = (d, { fileOnly = false } = {}) => {
 
   if (d.knowledge?.length) {
     out.push('', 'Known here (cairn know <slug>):')
-    for (const k of d.knowledge) out.push(`  ${k.slug}  -- ${truncate(k.title, 58)}`)
+    for (const k of d.knowledge) {
+      out.push(`  ${k.slug}${k.stale ? '  [stale]' : ''}  -- ${truncate(k.title, 58)}`)
+    }
   }
 
   if (d.staleClaims?.length) {
@@ -589,6 +591,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn entities assign|unassign <key> --project A,B
     cairn entities rename <key> --key <new> --title "T"
     cairn know [<slug>|<query>]    read it back, or list what applies here
+    cairn verify <slug>            it is still true — clears the stale mark
     cairn relearn <slug> --body -  correct it
     cairn unlearn <slug> [--superseded-by <slug>]
     cairn session list             recent sessions
@@ -656,7 +659,10 @@ const commands = {
         d.results.map((r) => ({
           kind: r.kind ?? 'task',
           ref: r.ref,
-          status: r.status ?? '',
+          // A stale fact is still current knowledge; what it is not is
+          // confirmed. Said in the column already read for exactly that,
+          // rather than as a column everyone learns to ignore.
+          status: r.stale ? 'stale' : (r.status ?? ''),
           type: r.type ?? '',
           answered: r.resolved ? 'yes' : '',
           tokens: `~${r.tokens}`,
@@ -1173,6 +1179,19 @@ const commands = {
       }))
     }
     emit(await request('DELETE', `/api/v1/knowledge/${slug}`))
+  },
+
+  /**
+   * Confirm a fact is still true, without rewriting it.
+   *
+   * The correction path already existed (`relearn`); the confirmation path did
+   * not, so the only way to clear a stale mark was to restate the whole body.
+   * Marking something stale and offering no cheap way to answer is how a
+   * confidence signal becomes noise everyone learns to scroll past.
+   */
+  async verify() {
+    const slug = need(positional[0], 'usage: cairn verify <slug>')
+    emit(await request('PATCH', `/api/v1/knowledge/${slug}`, { verified: true }))
   },
 
   async relearn() {
