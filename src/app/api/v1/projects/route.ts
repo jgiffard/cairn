@@ -3,6 +3,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
+import { byTitle } from '@/lib/utils'
 import { recordActivity } from '@/lib/api/activity'
 
 export const dynamic = 'force-dynamic'
@@ -31,7 +32,9 @@ export const GET = route({
       .order('created_at')
 
     if (error) return fail('internal_error', error.message)
-    return ok(data)
+    // Sorted here, not in SQL: this collation orders case-sensitively, which
+    // puts every lowercase title below every capitalised one.
+    return ok(((data ?? []) as { title?: string }[]).sort(byTitle))
   },
 })
 

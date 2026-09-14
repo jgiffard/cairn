@@ -1,4 +1,5 @@
 import { admin } from '@/lib/db/client'
+import { byTitle } from '@/lib/utils'
 import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
 
 /**
@@ -112,7 +113,7 @@ export const listBoardTasks = async (
 
   return {
     tasks,
-    projects: (projectsRes.data ?? []) as BoardProject[],
+    projects: ((projectsRes.data ?? []) as BoardProject[]).sort(byTitle),
     closedHidden: includeClosed ? 0 : (totals.count ?? 0),
   }
 }

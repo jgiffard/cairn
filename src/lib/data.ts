@@ -1,4 +1,5 @@
 import { admin } from '@/lib/db/client'
+import { byTitle } from '@/lib/utils'
 import { sessionUser } from '@/lib/auth/session'
 import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
 
@@ -76,9 +77,8 @@ export const listProjects = async (
    * Sorted by title rather than key because the title is the text a reader
    * scans; the key is the small mark at the end of the row.
    */
-  const { data } = await (includeArchived ? query : query.eq('status', 'active'))
-    .order('title')
-  return (data ?? []) as Project[]
+  const { data } = await (includeArchived ? query : query.eq('status', 'active')).order('title')
+  return ((data ?? []) as Project[]).sort(byTitle)
 }
 
 export const getProject = async (userId: string, key: string): Promise<Project | null> => {

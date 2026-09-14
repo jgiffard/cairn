@@ -29,3 +29,20 @@ export const isClaimStale = (heartbeatAt: string | null | undefined): boolean =>
   return Date.now() - new Date(heartbeatAt).getTime() > CLAIM_LEASE_SECONDS * 1000
 }
 
+/**
+ * Alphabetical the way a person reads it.
+ *
+ * Postgres sorts titles case-sensitively under this collation, so every
+ * lowercase name — `comparator`, `dispofi-api`, `n8n` — sank below every
+ * capitalised one, and `SI Contact` came before `Sales Wizard V2` because `I`
+ * precedes `a` in ASCII. Ordering in SQL and calling it alphabetical was the
+ * mistake; `localeCompare` is what the word means.
+ *
+ * Done in JS rather than as `order by lower(title)` because the adapter takes a
+ * column name, not an expression, and a project list is a few dozen rows.
+ */
+export const byTitle = <T extends { title?: string | null; key?: string | null }>(a: T, b: T) =>
+  (a.title ?? a.key ?? '').localeCompare(b.title ?? b.key ?? '', undefined, {
+    sensitivity: 'base',
+    numeric: true,
+  })
