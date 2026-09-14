@@ -312,6 +312,8 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn done <ref> --resolution "…"` | Close. The resolution is required |
 | `cairn cancel <ref> --resolution "…"` | Drop it, and say why |
 | `cairn note <ref> "…" --kind attempt` | Append to the work log — `note · attempt · finding · decision · handoff` |
+| `cairn commit <ref> <sha>` · `cairn push <ref> <sha>` | Record delivery evidence in the task history |
+| `cairn run <ref> "<command>" --status passed\|failed\|skipped` | Record a command result in the task history |
 | `cairn log <ref>` · `cairn history <ref>` | The work log, and what changed when and by whom |
 | `cairn comment <ref> "…"` | Leave something for the human |
 | `cairn attach <ref> <file>` · `cairn files <ref>` | Attachments |
@@ -348,7 +350,7 @@ schemas the routes validate against, so it cannot drift. Browsable at `/api-docs
 /tasks/{ref}                    read, update, close
 /tasks/{ref}/notes              the work log
 /tasks/{ref}/comments           for the human
-/tasks/{ref}/activity           what changed, when, and who changed it
+/tasks/{ref}/activity           read history; POST git/run delivery evidence
 /tasks/{ref}/children           sub-tasks
 /tasks/{ref}/attachments        upload; /attachments/{id} to fetch
 /tasks/{ref}/dependencies       blocked-by / blocks

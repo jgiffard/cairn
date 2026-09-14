@@ -114,6 +114,26 @@ export const createNoteSchema = z.object({
   facts: z.array(z.string().min(1).max(500)).max(50).optional(),
 })
 
+export const ACTIVITY_EVIDENCE_EVENTS = ['git_commit', 'git_push', 'run_result'] as const
+export const activityEvidenceEvent = z.enum(ACTIVITY_EVIDENCE_EVENTS)
+
+/** Structured delivery evidence agents can attach to a task timeline. */
+export const createActivityEvidenceSchema = z.object({
+  event: activityEvidenceEvent,
+  sha: z.string().regex(/^[0-9a-f]{7,64}$/i).optional(),
+  repo: z.string().min(1).max(300).optional(),
+  branch: z.string().min(1).max(250).optional(),
+  message: z.string().max(500).optional(),
+  url: z.string().url().max(2_000).optional(),
+  remote: z.string().min(1).max(250).optional(),
+  command: z.string().min(1).max(2_000).optional(),
+  status: z.enum(['passed', 'failed', 'skipped']).optional(),
+  exitCode: z.number().int().min(-255).max(255).optional(),
+  durationMs: z.number().int().min(0).max(86_400_000).optional(),
+  output: z.string().max(50_000).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+})
+
 /** `CAI-42` — the identifier agents actually use in prose. */
 export const taskRefSchema = z
   .string()

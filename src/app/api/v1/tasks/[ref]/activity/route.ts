@@ -2,6 +2,8 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { createActivityEvidenceSchema } from '@/schemas/task'
+import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,5 +31,23 @@ export const GET = route<{ ref: string }>({
 
     if (error) return fail('internal_error', error.message)
     return ok(data ?? [])
+  },
+})
+
+export const POST = route<{ ref: string }, z.infer<typeof createActivityEvidenceSchema>>({
+  schema: createActivityEvidenceSchema,
+  handler: async ({ actor, params, body }) => {
+    const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
+    if (!task) return fail('not_found', `No task ${params.ref}.`)
+
+    const { event, ...data } = body
+    const { data: row, error } = await admin()
+      .from('task_activity_events')
+      .insert({ task_id: task.id, actor_type: actor.actorType, actor_id: actor.actorId, event, data })
+      .select('id, event, data, actor_type, actor_id, created_at')
+      .single()
+
+    if (error) return fail('internal_error', error.message)
+    return ok(row, { status: 201 })
   },
 })

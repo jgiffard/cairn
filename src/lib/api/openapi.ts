@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   createNoteSchema,
+  createActivityEvidenceSchema,
   createTaskSchema,
   updateTaskSchema,
   NOTE_KINDS,
@@ -396,6 +397,13 @@ export const openapiSpec = () => ({
           'actually happened, whether anyone narrated it or not. Newest first.',
         parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', default: 100 } }],
         responses: { '200': okResponse('Events.'), '404': errorResponse },
+      },
+      post: {
+        summary: 'Record git delivery or command-run evidence',
+        description:
+          'Appends a structured git_commit, git_push, or run_result event to the task history.',
+        requestBody: body(json(createActivityEvidenceSchema)),
+        responses: { '201': okResponse('Evidence recorded.'), '404': errorResponse },
       },
     },
     '/tasks/{ref}/dependencies': {

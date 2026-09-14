@@ -67,6 +67,12 @@ const describe = (entry: ActivityEntry): React.ReactNode => {
       return <>marked it blocked{d.reason ? <>: {String(d.reason)}</> : null}</>
     case 'unblocked':
       return <>unblocked it</>
+    case 'git_commit':
+      return <>recorded commit <code className="font-mono text-[11px]">{val(d.sha)}</code>{d.message ? <> · {String(d.message)}</> : null}</>
+    case 'git_push':
+      return <>pushed <code className="font-mono text-[11px]">{val(d.sha)}</code>{d.branch ? <> to {String(d.branch)}</> : null}</>
+    case 'run_result':
+      return <>{val(d.status)} <code className="font-mono text-[11px]">{val(d.command)}</code>{d.exitCode !== undefined ? <> · exit {String(d.exitCode)}</> : null}</>
     default:
       return <>{entry.event.replace(/_/g, ' ')}</>
   }

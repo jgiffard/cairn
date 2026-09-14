@@ -470,6 +470,9 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn update <ref> --also-project HM,AT      work that spans several projects
     cairn update <ref> --project OTHER      moves it; the ref changes
     cairn note <ref> "<text>" [--kind note|finding|decision|attempt|handoff]
+    cairn commit <ref> <sha> [--repo PATH] [--branch NAME] [--message TEXT] [--url URL]
+    cairn push <ref> <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
+    cairn run <ref> "<command>" --status passed|failed|skipped [--exit-code N]
     cairn comment <ref> "<text>"
     cairn done <ref> --resolution "<what was actually done>" [--kind fixed]
     cairn cancel <ref> --resolution "<why it is being dropped>" [--kind wont-fix]
@@ -727,6 +730,44 @@ const commands = {
    */
   async cancel() {
     return closeTask('cancelled', 'wont-fix')
+  },
+
+  async commit() {
+    const ref = need(positional[0], 'usage: cairn commit <ref> <sha> [--repo PATH]')
+    const sha = need(positional[1], 'a commit SHA is required')
+    const payload = { event: 'git_commit', sha }
+    if (flags.repo) payload.repo = flags.repo
+    if (flags.branch) payload.branch = flags.branch
+    if (flags.message) payload.message = await resolveValue(flags.message)
+    if (flags.url) payload.url = flags.url
+    return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, payload))
+  },
+
+  async push() {
+    const ref = need(positional[0], 'usage: cairn push <ref> <sha> [--repo PATH]')
+    const sha = need(positional[1], 'the pushed commit SHA is required')
+    const payload = { event: 'git_push', sha }
+    if (flags.repo) payload.repo = flags.repo
+    if (flags.branch) payload.branch = flags.branch
+    if (flags.remote) payload.remote = flags.remote
+    if (flags.url) payload.url = flags.url
+    return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, payload))
+  },
+
+  async run() {
+    const ref = need(positional[0], 'usage: cairn run <ref> "<command>" --status passed|failed|skipped')
+    const command = await resolveValue(need(positional[1], 'the command is required'))
+    const status = need(flags.status, '--status is required')
+    if (!['passed', 'failed', 'skipped'].includes(status)) {
+      die('--status must be passed, failed, or skipped')
+    }
+    const payload = { event: 'run_result', command, status }
+    for (const [flag, field] of [['exit-code', 'exitCode'], ['duration-ms', 'durationMs']]) {
+      if (flags[flag] !== undefined) payload[field] = Number(flags[flag])
+    }
+    if (flags.output !== undefined) payload.output = await resolveValue(flags.output)
+    if (flags.url) payload.url = flags.url
+    return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, payload))
   },
 
   async note() {
