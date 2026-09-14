@@ -29,7 +29,12 @@ export const filesNamedIn = (body: string): string[] => {
     const candidate = (match[1] ?? '').trim()
     // A path, not a snippet: a slash, no spaces, and a real extension. Without
     // the extension test `cairn check` and `owner/repo` both read as files.
-    if (!/^[\w.@-]+(\/[\w.@-]+)+$/.test(candidate)) continue
+    //
+    // The leading ~ and / matter: the one real path in this store's own
+    // knowledge is `~/.cairn/projects.json`, and an earlier version of this
+    // regex rejected it — which would have made the whole feature inert while
+    // looking like it worked.
+    if (!/^(?:(?:~|\.\.?)?(?:\/[\w.@-]+)+|[\w.@-]+(?:\/[\w.@-]+)+)$/.test(candidate)) continue
     if (!/\.[a-z]{1,6}$/i.test(candidate)) continue
     found.add(candidate)
   }
@@ -55,6 +60,61 @@ export type AgeableEntry = {
   body: string
   verified_at?: string | null
   created_at?: string | null
+  /** The work this fact came out of, whose files it is implicitly about. */
+  source_task_id?: string | null
+  source_session_id?: string | null
+}
+
+/**
+ * The files the work behind a fact actually touched.
+ *
+ * Bodies here turn out to cite commands, tables and SQL functions far more
+ * often than paths — `to_tsvector(regconfig, text)`, `git worktree`,
+ * `project_repos` — so reading the prose alone would have left this marking
+ * almost nothing. Where a fact records the task or session it came from, the
+ * files that work touched are a better statement of what it is about than
+ * anything it says about itself.
+ */
+const filesFromSource = async (
+  userId: string,
+  entries: AgeableEntry[],
+): Promise<Map<string, string[]>> => {
+  const taskIds = entries.map((e) => e.source_task_id).filter(Boolean) as string[]
+  const sessionIds = entries.map((e) => e.source_session_id).filter(Boolean) as string[]
+  const out = new Map<string, string[]>()
+  if (taskIds.length === 0 && sessionIds.length === 0) return out
+
+  const byTask = new Map<string, string[]>()
+  const bySession = new Map<string, string[]>()
+
+  const collect = async (column: 'task_id' | 'session_id', ids: string[], into: Map<string, string[]>) => {
+    if (ids.length === 0) return
+    const { data } = await admin()
+      .from('file_touches')
+      .select(`path, ${column}`)
+      .eq('owner_user_id', userId)
+      .in(column, ids)
+      .limit(2000)
+    for (const row of (data ?? []) as Record<string, string>[]) {
+      const key = row[column]
+      if (!key || !row.path) continue
+      into.set(key, [...(into.get(key) ?? []), row.path])
+    }
+  }
+
+  await Promise.all([
+    collect('task_id', taskIds, byTask),
+    collect('session_id', sessionIds, bySession),
+  ])
+
+  for (const entry of entries) {
+    const paths = [
+      ...(entry.source_task_id ? (byTask.get(entry.source_task_id) ?? []) : []),
+      ...(entry.source_session_id ? (bySession.get(entry.source_session_id) ?? []) : []),
+    ]
+    if (paths.length > 0) out.set(entry.id, [...new Set(paths)])
+  }
+  return out
 }
 
 /**
@@ -71,8 +131,12 @@ export const stalenessFor = async (
   const out = new Map<string, Staleness>()
   const byPath = new Map<string, AgeableEntry[]>()
 
+  const sourceFiles = await filesFromSource(userId, entries)
+
   for (const entry of entries) {
-    const files = filesNamedIn(entry.body ?? '')
+    const files = [
+      ...new Set([...filesNamedIn(entry.body ?? ''), ...(sourceFiles.get(entry.id) ?? [])]),
+    ]
     out.set(entry.id, { files, touches: 0, sessions: 0, lastTouchedAt: null, stale: false })
     for (const path of files) {
       byPath.set(path, [...(byPath.get(path) ?? []), entry])

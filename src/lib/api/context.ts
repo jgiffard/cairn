@@ -229,7 +229,14 @@ export const buildContext = async (
   // which is how half a dozen Supabase entries outlived the stack they described.
   const aged = await stalenessFor(
     actor.userId,
-    rows.map((r) => ({ id: r.id, body: r.body ?? '', verified_at: r.verified_at, created_at: r.created_at })),
+    rows.map((r) => ({
+      id: r.id,
+      body: r.body ?? '',
+      verified_at: r.verified_at,
+      created_at: r.created_at,
+      source_task_id: r.source_task_id,
+      source_session_id: r.source_session_id,
+    })),
   )
   const knowledge = rows.map((r) => ({
     slug: r.slug,

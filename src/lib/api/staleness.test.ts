@@ -30,4 +30,21 @@ describe('filesNamedIn', () => {
   it('reads a bare filename as prose, since a name without a path is ambiguous', () => {
     expect(filesNamedIn('Defined in `client.ts`.')).toEqual([])
   })
+
+  it('accepts a home-relative path, which is the one real path this store holds', () => {
+    // An earlier regex required the first segment to be a word character, so
+    // `~/.cairn/projects.json` was rejected — and it is the only genuine file
+    // path in Cairn's own knowledge. The feature would have been inert while
+    // looking like it worked.
+    expect(filesNamedIn('The map lives at `~/.cairn/projects.json`.')).toEqual([
+      '~/.cairn/projects.json',
+    ])
+    expect(filesNamedIn('Installed to `/usr/local/bin/cairn.mjs`.')).toEqual([
+      '/usr/local/bin/cairn.mjs',
+    ])
+  })
+
+  it('still refuses a SQL signature, which is what these bodies are full of', () => {
+    expect(filesNamedIn('`to_tsvector(regconfig, text)` is only STABLE.')).toEqual([])
+  })
 })
