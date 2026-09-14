@@ -89,9 +89,15 @@ const textOf = (content) => {
  * scheduled run, and the session row should say so. The page used to work this
  * out by testing the stored request — which stopped being possible the moment
  * the hook, rightly, stopped storing it.
+ *
+ * ONLY the cron marker. The first version of this also matched OpenClaw's
+ * per-turn envelope ("OpenClaw <agent> context for this turn"), which wraps
+ * every turn including a real instruction from a person — so a re-sweep filed
+ * 33 sessions as scheduled where 9 were, and hid real work behind a toggle
+ * meant for machinery. `isHumanTurn` is still right to refuse those as a
+ * request; they are simply not evidence of a schedule.
  */
-const SCHEDULED_PROMPT =
-  /^(\[cron:[0-9a-f-]{8,}|Conversation info:|#+\s*AGENTS\.md instructions|OpenClaw \w+ context for this turn)/i
+const SCHEDULED_PROMPT = /^\[cron:[0-9a-f-]{8,}/i
 
 const isHumanTurn = (text) =>
   text &&
