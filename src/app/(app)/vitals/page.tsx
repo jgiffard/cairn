@@ -203,10 +203,13 @@ const VitalsPage = async ({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {/* Left-aligned, like every other page. Centring a dashboard inside a
-              shell that already has a sidebar leaves a dead column beside it
-              and makes the content look unmoored. */}
-          <div className="flex max-w-4xl flex-col gap-5 px-4 py-5 md:px-6">
+        {/* Centred in the content column, like the task page and /projects.
+            This was left-aligned on the reasoning that centring inside a shell
+            which already has a sidebar leaves a dead column — true when every
+            page did it, and no longer true the moment /projects shipped
+            centred. A rule half the app follows is not a rule, it just reads
+            as two pages somebody forgot. */}
+          <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-5 md:px-6">
           {failure ? <p className="text-danger text-[0.8125rem]">{failure}</p> : null}
 
           {vitals ? (

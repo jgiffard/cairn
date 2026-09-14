@@ -82,7 +82,7 @@ const SettingsPage = async () => {
           centred measure; a page of forms and lists inside a shell that
           already has a sidebar just ends up floating with a dead column
           beside it. */}
-    <div className="max-w-2xl px-4 py-6 md:px-8 md:py-8">
+    <div className="mx-auto max-w-2xl px-4 py-6 md:px-8 md:py-8">
       <header className="mb-8 flex items-start gap-2">
         <span className="-ml-1.5 md:hidden">
           <MobileNavButton />
