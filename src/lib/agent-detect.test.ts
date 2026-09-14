@@ -19,7 +19,7 @@ const detect = (env: Record<string, string | undefined>) => {
   if (env.CLAUDECODE === '1' || env.CLAUDE_CODE_ENTRYPOINT) return 'claude-code'
   const codexHome = env.CODEX_HOME ?? ''
   if (/openclaw/i.test(codexHome)) return 'openclaw'
-  if (env.OPENCLAW_SESSION || env.OPENCLAW_HOME) return 'openclaw'
+  if (Object.keys(env).some((name) => name.startsWith('OPENCLAW_'))) return 'openclaw'
   if (codexHome || env.CODEX_SANDBOX) return 'codex'
   if (env.CODEX_MANAGED_BY_NPM || env.CODEX_MANAGED_PACKAGE_ROOT) return 'codex'
   return ''
@@ -40,6 +40,16 @@ describe('detecting the runtime', () => {
       }),
     ).toBe('openclaw')
     expect(detect({ OPENCLAW_SESSION: 'x', CODEX_MANAGED_BY_NPM: '1' })).toBe('openclaw')
+    // The variables the live gateway actually sets. None of them is
+    // OPENCLAW_SESSION or OPENCLAW_HOME, which were the only two checked — so
+    // OpenClaw's whole identity rested on CODEX_HOME containing the word, and
+    // losing that would have filed all of its work as Codex.
+    expect(
+      detect({ OPENCLAW_SERVICE_MARKER: 'openclaw', CODEX_MANAGED_BY_NPM: '1' }),
+    ).toBe('openclaw')
+    expect(
+      detect({ OPENCLAW_SYSTEMD_UNIT: 'openclaw-gateway.service', CODEX_MANAGED_BY_NPM: '1' }),
+    ).toBe('openclaw')
   })
 
   it('recognises Codex through the wrapper, which is the path that already worked', () => {

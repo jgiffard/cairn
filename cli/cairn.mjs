@@ -80,7 +80,16 @@ const detectAgent = () => {
   // -- the same misattribution this exists to fix, pointing the other way.
   const codexHome = process.env.CODEX_HOME ?? ''
   if (/openclaw/i.test(codexHome)) return 'openclaw'
-  if (process.env.OPENCLAW_SESSION || process.env.OPENCLAW_HOME) return 'openclaw'
+
+  // Any OPENCLAW_* variable at all, rather than two guessed names.
+  //
+  // The live gateway sets OPENCLAW_SERVICE_MARKER, OPENCLAW_SYSTEMD_UNIT and
+  // eight more, and none of them is OPENCLAW_SESSION or OPENCLAW_HOME — the two
+  // that were checked here. The whole of OpenClaw's identity therefore rested
+  // on its CODEX_HOME containing the word, and if that ever stopped being true
+  // it would now fall through to the Codex markers below, which OpenClaw also
+  // sets, and file every one of its writes as Codex.
+  if (Object.keys(process.env).some((name) => name.startsWith('OPENCLAW_'))) return 'openclaw'
 
   // CODEX_MANAGED_* are set by Codex itself, and are the only markers that
   // survive being launched directly.
