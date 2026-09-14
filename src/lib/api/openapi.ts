@@ -452,6 +452,22 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('Removed.'), '404': errorResponse },
       },
     },
+    '/tasks/{ref}/notes/{id}': {
+      parameters: [
+        refParam,
+        { name: 'id', in: 'path', required: true, schema: { type: 'string' },
+          description: 'Note id.' },
+      ],
+      delete: {
+        summary: 'Withdraw a note you wrote',
+        description:
+          'Only the note\'s own author may remove it: a work log is the record of what was ' +
+          'tried, and letting one agent erase another\'s would make it untrustworthy. Exists ' +
+          'so a note written by mistake can be taken back, and so a scratch task that ' +
+          'acquired one is not left permanently undeletable.',
+        responses: { '200': okResponse('Withdrawn.'), '403': errorResponse, '404': errorResponse },
+      },
+    },
     '/tasks/{ref}/notes': {
       parameters: [refParam],
       get: {

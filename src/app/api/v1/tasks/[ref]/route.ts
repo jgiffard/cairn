@@ -316,6 +316,16 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
 // Counting on the filter column rather than `id`: task_deps is a composite
 // key and has no id, so asking for one returns an error and a count of zero —
 // a guard that reports "nothing depends on this" for every task alike.
+const countForOthers = async (table: string, taskId: string, actorId: string) => {
+  const { count, error } = await admin()
+    .from(table)
+    .select('id', { count: 'exact', head: true })
+    .eq('task_id', taskId)
+    .neq('actor_id', actorId)
+  if (error) throw new Error(`${table} count failed: ${error.message}`)
+  return count ?? 0
+}
+
 const countFor = async (table: string, column: string, id: string) => {
   const { count, error } = await admin()
     .from(table)
@@ -332,10 +342,15 @@ export const DELETE = route<{ ref: string }>({
 
     const ref = `${(task.project as { key: string } | undefined)?.key ?? ''}-${task.number as number}`
 
+    // Notes and comments the CALLER did not write. Its own are not a history
+    // worth protecting from it: a scratch task that had acquired a single note
+    // of its author's own became permanently undeletable, because delete
+    // refused a work log and nothing could remove one. That left junk no
+    // mechanism could clear, which is worse than the friction was worth.
     const [children, notes, comments, dependants, dependencies] = await Promise.all([
       countFor('tasks', 'parent_id', task.id),
-      countFor('task_notes', 'task_id', task.id),
-      countFor('task_comments', 'task_id', task.id),
+      countForOthers('task_notes', task.id, actor.actorId),
+      countForOthers('task_comments', task.id, actor.actorId),
       // Both directions: something pointing AT this task loses its dependency
       // silently, which is the failure that is hardest to notice afterwards.
       countFor('task_deps', 'blocking_id', task.id),
@@ -344,8 +359,8 @@ export const DELETE = route<{ ref: string }>({
 
     const holding = [
       children && `${children} child task${children === 1 ? '' : 's'}`,
-      notes && `${notes} work-log note${notes === 1 ? '' : 's'}`,
-      comments && `${comments} comment${comments === 1 ? '' : 's'}`,
+      notes && `${notes} work-log note${notes === 1 ? '' : 's'} from somebody else`,
+      comments && `${comments} comment${comments === 1 ? '' : 's'} from somebody else`,
       dependants && `${dependants} task${dependants === 1 ? '' : 's'} depending on it`,
       dependencies && `${dependencies} dependenc${dependencies === 1 ? 'y' : 'ies'} of its own`,
     ].filter(Boolean) as string[]

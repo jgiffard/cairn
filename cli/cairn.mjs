@@ -82,7 +82,20 @@ const detectAgent = () => {
   if (/openclaw/i.test(codexHome)) return 'openclaw'
   if (process.env.OPENCLAW_SESSION || process.env.OPENCLAW_HOME) return 'openclaw'
 
+  // CODEX_MANAGED_* are set by Codex itself, and are the only markers that
+  // survive being launched directly.
+  //
+  // Detection used to rest on CODEX_HOME, which Codex reads but does not
+  // export, so /usr/local/bin/codex was installed to set it. A live session was
+  // found running as `node /usr/bin/codex --yolo` with no CODEX_HOME at all —
+  // the wrapper bypassed — so detection returned nothing and the CLI fell back
+  // to the machine's default key, which on that host is OpenClaw's. Every
+  // Codex write was filed as OpenClaw, exactly as before the wrapper existed.
+  //
+  // These are checked after the OpenClaw tests on purpose: OpenClaw runs Codex
+  // underneath and therefore sets them too.
   if (codexHome || process.env.CODEX_SANDBOX) return 'codex'
+  if (process.env.CODEX_MANAGED_BY_NPM || process.env.CODEX_MANAGED_PACKAGE_ROOT) return 'codex'
   return ''
 }
 
@@ -94,11 +107,32 @@ const AGENT = detectAgent()
  * preferred, and the plain one is the fallback, so a machine that has not been
  * split yet keeps working exactly as before.
  */
-const KEY =
-  process.env.CAIRN_API_KEY ||
-  (AGENT && FILE_ENV[`CAIRN_API_KEY_${AGENT.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`]) ||
-  FILE_ENV.CAIRN_API_KEY ||
-  ''
+const keyNameFor = (agent) => `CAIRN_API_KEY_${agent.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`
+
+const OWN_KEY = AGENT ? FILE_ENV[keyNameFor(AGENT)] : undefined
+
+const KEY = process.env.CAIRN_API_KEY || OWN_KEY || FILE_ENV.CAIRN_API_KEY || ''
+
+/**
+ * Borrowing another runtime's identity should be a decision, not an accident.
+ *
+ * On a machine that has been split into per-agent keys, falling back to the
+ * plain one files the work under whichever agent that key belongs to. It did
+ * exactly that for weeks: Codex could not be detected, so every write it made
+ * was attributed to OpenClaw, and nothing anywhere said so — the statistics
+ * looked fine, they were just about the wrong agent.
+ *
+ * A warning rather than a refusal, because the fallback is legitimate on a
+ * machine that has not been split, and refusing would break it.
+ */
+const SPLIT_KEYS = Object.keys(FILE_ENV).filter((name) => name.startsWith('CAIRN_API_KEY_'))
+if (!process.env.CAIRN_API_KEY && !OWN_KEY && SPLIT_KEYS.length > 0 && FILE_ENV.CAIRN_API_KEY) {
+  process.stderr.write(
+    `cairn: could not tell which runtime this is${AGENT ? ` (${AGENT} has no ${keyNameFor(AGENT)})` : ''}, ` +
+      `so this write will be filed under the default key. ` +
+      `Set CAIRN_AGENT, or add ${AGENT ? keyNameFor(AGENT) : 'CAIRN_API_KEY_<AGENT>'} to ~/.cairn/env.\n`,
+  )
+}
 
 const die = (msg, code = 1) => {
   process.stderr.write(`${msg}\n`)

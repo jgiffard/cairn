@@ -9,6 +9,26 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Codex was still filing its work as OpenClaw.** Detection rested on `CODEX_HOME`, which
+  Codex reads but does not export, so a wrapper was installed to set it — and a live session
+  was found running as `node /usr/bin/codex --yolo` with the wrapper bypassed and no
+  `CODEX_HOME` at all. Detection returned nothing, the CLI fell back to the machine's
+  default key, and every Codex write was attributed to OpenClaw exactly as before the
+  wrapper existed. It now also recognises `CODEX_MANAGED_BY_NPM` and
+  `CODEX_MANAGED_PACKAGE_ROOT`, which Codex does export and which survive being launched
+  directly. Still tested after OpenClaw, which runs Codex underneath and sets them too.
+
+- On a machine split into per-agent keys, an unidentified runtime falling back to the
+  default key now says so on stderr. It borrowed another agent's identity silently, which
+  is how this went unnoticed: the statistics looked healthy, they were about the wrong agent.
+
+- **A note can be withdrawn by its author**, and `task delete` no longer counts your own
+  notes and comments as a history to protect. The two rules had met: delete refused any task
+  carrying a work log, and nothing could remove a note — so a scratch task became
+  permanently undeletable the moment anything wrote to it.
+
 ### Changed
 
 - **Working on a task claims it.** 36% of recently closed tasks across CAIRN, OD and QRY
