@@ -629,6 +629,22 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('Recorded.') },
       },
     },
+    '/next': {
+      get: {
+        summary: 'What to pick up next, ranked',
+        description:
+          'Finishing beats starting: work you already hold, then work dropped with a ' +
+          'checkpoint, then dropped without one, then in-review, todo and backlog. ' +
+          'Anything blocked, waiting on an unfinished task, or actively held by another ' +
+          'agent is absent rather than ranked last. Each pick carries the reason it won.',
+        parameters: [
+          { name: 'project', in: 'query', schema: { type: 'string' } },
+          { name: 'limit', in: 'query', schema: { type: 'integer' },
+            description: 'How many runners-up to return (default 5).' },
+        ],
+        responses: { '200': okResponse('A pick, the runners-up, and what was considered.') },
+      },
+    },
     '/context': {
       get: {
         summary: 'The briefing a session opens with',
