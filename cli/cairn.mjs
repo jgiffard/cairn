@@ -529,6 +529,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    sessions; --kinds task,note,knowledge,session
 
   read
+    cairn next [--project K]       what to pick up, and why — ranked, never blocked
     cairn list [--project K] [--status S] [--type T] [--label L] [--mine]
     cairn show <ref>               e.g. CAI-42
     cairn log <ref> [--kind K]     the work log
@@ -1195,6 +1196,39 @@ const commands = {
         })),
       columns: ['entity', 'projects', 'keys', 'title'],
     })
+  },
+
+  /**
+   * What to pick up, rather than what exists.
+   *
+   * The briefing says what is held, in flight and dropped, and never which one
+   * to do — so every agent invented its own ranking and they disagreed. The
+   * reason is printed with the pick because a recommendation nobody can check
+   * is one nobody should follow.
+   */
+  async next() {
+    const params = new URLSearchParams()
+    const project = flags.project ?? projectForDir(process.cwd())
+    if (project) params.set('project', project)
+    const data = await request('GET', `/api/v1/next?${params}`)
+
+    if (FORMAT === 'json') return emit(data)
+    if (!data.pick) {
+      const why = data.considered
+        ? `nothing workable — ${data.considered} open, all blocked, waiting on something, or held by someone else`
+        : 'nothing open'
+      process.stdout.write(`${why}\n`)
+      return
+    }
+
+    const line = (t) => `${t.ref}  ${t.title}`
+    process.stdout.write(
+      `${line(data.pick)}\n  ${data.pick.reason}\n  ${data.pick.priority} · ${data.pick.status}` +
+        `\n\n  cairn claim ${data.pick.ref}\n` +
+        (data.then?.length
+          ? `\nthen:\n${data.then.map((t) => `  ${line(t)}`).join('\n')}\n`
+          : ''),
+    )
   },
 
   // --- the briefing ------------------------------------------------------
