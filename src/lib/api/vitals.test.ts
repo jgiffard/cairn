@@ -4,7 +4,7 @@ import { assess, type Vitals } from './vitals'
 /** A healthy week, which every test bends in exactly one direction. */
 const healthy = (over: Partial<Vitals> = {}): Vitals => ({
   windowHours: 24,
-  sessions: { recent: 6, recentWithFiles: 5, baseline: 40, baselineWithFiles: 35 },
+  sessions: { recent: 6, recentWithFiles: 5, recentSummarised: 6, baseline: 40, baselineWithFiles: 35 },
   tasks: { opened: 4, closed: 5, stalled: 1, held: 2 },
   autoReleased: 0,
   knowledgeWritten: 2,
@@ -23,20 +23,20 @@ describe('assess', () => {
   })
 
   it('catches the two-day session outage', () => {
-    const v = healthy({ sessions: { recent: 0, recentWithFiles: 0, baseline: 40, baselineWithFiles: 35 } })
+    const v = healthy({ sessions: { recent: 0, recentWithFiles: 0, recentSummarised: 0, baseline: 40, baselineWithFiles: 35 } })
     expect(codes(v)).toContain('no-sessions')
   })
 
   it('does not cry outage when the week before was also quiet', () => {
     // A new install, or a fortnight off. Zero against zero is not a signal.
-    const v = healthy({ sessions: { recent: 0, recentWithFiles: 0, baseline: 0, baselineWithFiles: 0 } })
+    const v = healthy({ sessions: { recent: 0, recentWithFiles: 0, recentSummarised: 0, baseline: 0, baselineWithFiles: 0 } })
     expect(codes(v)).not.toContain('no-sessions')
   })
 
   it('catches the jsonb bug, where the total never dropped', () => {
     // Sessions kept being written; only the ones naming a file were rejected,
     // so nothing looked wrong for two days.
-    const v = healthy({ sessions: { recent: 6, recentWithFiles: 0, baseline: 40, baselineWithFiles: 35 } })
+    const v = healthy({ sessions: { recent: 6, recentWithFiles: 0, recentSummarised: 6, baseline: 40, baselineWithFiles: 35 } })
     expect(codes(v)).toContain('sessions-without-files')
   })
 
@@ -62,7 +62,7 @@ describe('assess', () => {
     const v = healthy({
       windowHours: 168,
       agents: [{ agent: 'codex', recent: 0, baseline: 90 }],
-      sessions: { recent: 6, recentWithFiles: 5, baseline: 40, baselineWithFiles: 35 },
+      sessions: { recent: 6, recentWithFiles: 5, recentSummarised: 6, baseline: 40, baselineWithFiles: 35 },
     })
     expect(codes(v)).toContain('agent-silent')
   })
@@ -83,11 +83,38 @@ describe('assess', () => {
 
   it('separates what is broken from what is merely untidy', () => {
     const v = healthy({
-      sessions: { recent: 0, recentWithFiles: 0, baseline: 40, baselineWithFiles: 35 },
+      sessions: { recent: 0, recentWithFiles: 0, recentSummarised: 0, baseline: 40, baselineWithFiles: 35 },
       tasks: { opened: 4, closed: 5, stalled: 9, held: 2 },
     })
     const bySeverity = assess(v)
     expect(bySeverity.find((f) => f.code === 'no-sessions')?.severity).toBe('alarm')
     expect(bySeverity.find((f) => f.code === 'stalled-work')?.severity).toBe('warning')
+  })
+})
+
+describe('the summariser failing silently', () => {
+  it('is an alarm when sessions are recorded and none is summarised', () => {
+    // The shape this actually had: rows present, counts healthy, every one of
+    // them half a session.
+    const codes = assess(
+      healthy({ sessions: { recent: 6, recentWithFiles: 5, recentSummarised: 0, baseline: 40, baselineWithFiles: 35 } }),
+    ).map((f) => f.code)
+    expect(codes).toContain('sessions-without-summary')
+  })
+
+  it('stays quiet when even one was summarised', () => {
+    // One is enough to prove the summariser is reachable; a session where the
+    // model honestly found nothing to say is not a fault.
+    const codes = assess(
+      healthy({ sessions: { recent: 6, recentWithFiles: 5, recentSummarised: 1, baseline: 40, baselineWithFiles: 35 } }),
+    ).map((f) => f.code)
+    expect(codes).not.toContain('sessions-without-summary')
+  })
+
+  it('stays quiet on a day too thin to judge', () => {
+    const codes = assess(
+      healthy({ sessions: { recent: 2, recentWithFiles: 2, recentSummarised: 0, baseline: 40, baselineWithFiles: 35 } }),
+    ).map((f) => f.code)
+    expect(codes).not.toContain('sessions-without-summary')
   })
 })

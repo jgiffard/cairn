@@ -72,6 +72,17 @@ const HOOKS = env('CAIRN_HOOKS_DIR', join(homedir(), '.cairn/hooks'))
 /** Where a runtime keeps transcripts nothing else will hand us. */
 const OPENCLAW_SESSIONS = env('CAIRN_OPENCLAW_SESSIONS', '')
 
+/**
+ * How the sweep reaches a summariser, when the identity it must run as cannot.
+ *
+ * The OpenClaw sweep has to be root — the transcripts live under a 0700 home —
+ * and `claude -p` as root answered "Not logged in". The hook swallows a failed
+ * summariser so as not to lose the session row, so every OpenClaw session was
+ * recorded with its files and refs and no prose at all, silently, for the life
+ * of the feature. Point this at a wrapper that can summarise.
+ */
+const SUMMARY_CLI = env('CAIRN_SUMMARY_CLI', '')
+
 /** Tasks the jobs report into. Empty disables reporting for that job. */
 const NOTIFY_FILES = env('CAIRN_NOTIFY_FILES', '')
 const NOTIFY_VITALS = env('CAIRN_NOTIFY_VITALS', '')
@@ -127,7 +138,11 @@ const JOBS = [
     why: 'OpenClaw has no session-end event, so its transcripts are swept instead.',
     requires: [OPENCLAW_SESSIONS, join(HOOKS, 'cairn-session-end.mjs'), NODE],
     every: 30,
-    env: { CAIRN_AGENT: 'openclaw', CAIRN_PLATFORM: 'openclaw' },
+    env: {
+      CAIRN_AGENT: 'openclaw',
+      CAIRN_PLATFORM: 'openclaw',
+      ...(SUMMARY_CLI ? { CAIRN_SUMMARY_CLI: SUMMARY_CLI } : {}),
+    },
     command: [NODE, join(HOOKS, 'cairn-session-end.mjs'), '--scan', OPENCLAW_SESSIONS],
   },
 ]

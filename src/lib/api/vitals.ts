@@ -19,7 +19,14 @@ import type { Actor } from './auth'
 
 export type Vitals = {
   windowHours: number
-  sessions: { recent: number; recentWithFiles: number; baseline: number; baselineWithFiles: number }
+  sessions: {
+    recent: number
+    recentWithFiles: number
+    /** Sessions whose prose half was actually written by the summariser. */
+    recentSummarised: number
+    baseline: number
+    baselineWithFiles: number
+  }
   tasks: { opened: number; closed: number; stalled: number; held: number }
   autoReleased: number
   knowledgeWritten: number
@@ -75,6 +82,32 @@ export const assess = (v: Vitals): Finding[] => {
       message:
         `${v.sessions.recent} sessions recorded in ${hours} and not one names a file. ` +
         `Sessions that touch files are failing, or the file index is not being written.`,
+    })
+  }
+
+  /**
+   * Sessions recorded, none of them summarised.
+   *
+   * A session is two halves: the files and refs, taken from the transcript,
+   * and the prose — what was asked, learned, completed, left — which costs a
+   * model call. The hook deliberately swallows a failed summariser rather than
+   * lose the row, which is right, and means the prose half can stop being
+   * written without anything failing.
+   *
+   * It did. `claude -p` as root answered "Not logged in", the OpenClaw sweep
+   * runs as root because the transcripts sit under a 0700 home, and 42 of 42
+   * OpenClaw sessions were recorded with no prose at all for the life of the
+   * feature. Nothing was broken enough to notice: the rows were there, the
+   * counts were healthy, and every one of them was half a session.
+   */
+  if (v.sessions.recent >= 3 && v.sessions.recentSummarised === 0) {
+    findings.push({
+      code: 'sessions-without-summary',
+      severity: 'alarm',
+      message:
+        `${v.sessions.recent} sessions recorded in ${hours} and not one was summarised. ` +
+        `The summariser is failing silently — the hook keeps the row when it cannot ` +
+        `reach one, so this is the only place it shows.`,
     })
   }
 
