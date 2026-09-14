@@ -258,16 +258,31 @@ tell which one is current.
 ```bash
 cairn relearn <slug> --body -                        # it changed
 cairn unlearn <old-slug> --superseded-by <new-slug>  # it was wrong
+cairn verify <slug>                                  # still true; you checked
 ```
 
-A superseded row stays findable and is marked as superseded, so someone holding the old
-belief can discover it was replaced.
+A superseded row stays findable, is marked as superseded, and now ranks below its
+replacement — so a correction beats the claim it corrects wherever both match.
+
+`verify` is the cheap half of that. A fact whose files several sessions have reworked since
+it was last confirmed is marked **stale** in `check` and in the briefing; verifying clears
+the mark without making you restate the body. Confirming an old fact is as useful as
+writing a new one, and a great deal faster.
 
 ### Knowledge or a note?
 
 A note is bound to a task and to a moment: *"tried raising pool_size on ACME-7, no change"*.
 Knowledge is bound to nothing: *"Supavisor pools are per-tenant"*. If you would want it
 surfaced while working on an unrelated project, it is knowledge.
+
+### Two more, rarely needed
+
+`cairn replay` sends writes that were put aside while the server was unreachable. Any
+successful write drains that queue on its own, so this is for looking rather than fixing.
+
+`cairn task delete <ref> --confirm <ref>` removes a task that should never have existed. It
+refuses anything carrying children, notes, comments or dependencies — for those, `cancel`
+keeps the record and the reason, which is almost always what you actually want.
 
 ## 8. Before you stop
 
@@ -305,7 +320,24 @@ one up and finish it, or close it with a resolution saying why it is not worth f
 Leaving them is how a tracker fills with work that looks live and is not.
 
 `cairn map CAIRN` tells Cairn that this directory is that project, which is what makes the
-briefing project-aware. Do it once per checkout.
+briefing project-aware. Do it once per repository — it claims the repo, so a second clone
+and a `git worktree` resolve without being mapped again.
+
+### Which one to pick up
+
+```bash
+cairn next                     # the recommendation, and why it won
+cairn next --project CAIRN
+```
+
+The briefing says what exists; this says what to do. Finishing beats starting, so work you
+already hold ranks above work dropped with a checkpoint, which ranks above anything not
+begun. Anything blocked, waiting on an unfinished task, or actively held by another agent
+is **absent rather than ranked last** — a list ending in things you must not pick has to be
+read to the bottom before it is safe to use.
+
+Every pick carries the reason it won. If you disagree with the reason, that is information:
+the ranking is wrong, or the task is mis-filed.
 
 ## 10. Dependencies
 

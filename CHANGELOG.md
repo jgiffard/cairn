@@ -7,71 +7,110 @@ Cairn is pre-1.0: the schema, API and CLI are in daily use and stable in practic
 minor bump may still change them. Anything that would break an existing install is called
 out under **Breaking** with what to do about it.
 
-## [Unreleased]
-
-### Fixed
-
-- **Codex was still filing its work as OpenClaw.** Detection rested on `CODEX_HOME`, which
-  Codex reads but does not export, so a wrapper was installed to set it — and a live session
-  was found running as `node /usr/bin/codex --yolo` with the wrapper bypassed and no
-  `CODEX_HOME` at all. Detection returned nothing, the CLI fell back to the machine's
-  default key, and every Codex write was attributed to OpenClaw exactly as before the
-  wrapper existed. It now also recognises `CODEX_MANAGED_BY_NPM` and
-  `CODEX_MANAGED_PACKAGE_ROOT`, which Codex does export and which survive being launched
-  directly. Still tested after OpenClaw, which runs Codex underneath and sets them too.
-
-- On a machine split into per-agent keys, an unidentified runtime falling back to the
-  default key now says so on stderr. It borrowed another agent's identity silently, which
-  is how this went unnoticed: the statistics looked healthy, they were about the wrong agent.
-
-- **A note can be withdrawn by its author**, and `task delete` no longer counts your own
-  notes and comments as a history to protect. The two rules had met: delete refused any task
-  carrying a work log, and nothing could remove a note — so a scratch task became
-  permanently undeletable the moment anything wrote to it.
-
-### Changed
-
-- **Working on a task claims it.** 36% of recently closed tasks across CAIRN, OD and QRY
-  were never claimed, so they never showed as In Progress while somebody was on them. The
-  cause was structural rather than a lapse: nothing cost anything when it was skipped, and
-  the rule had been stated plainly in the skill for weeks. A note or a checkpoint from an
-  agent on an open task nobody holds now claims it and says so. It never steals a live
-  claim — noting on a colleague's task stays a note — never reopens closed work, and never
-  applies to humans, who coordinate by talking. `cairn add --start` files and claims in one
-  call, for the file-it-then-do-it pattern that skipped claiming most often.
-
-### Fixed
-
-- **A resolution can no longer be written without closing the task.** It was accepted
-  silently: the agent wrote the answer, believed it had finished, and the task sat in
-  backlog carrying an answered dot — which also offered it to `check` as settled prior
-  work. Refused rather than auto-closed, because `done` and `cancelled` are different
-  claims about the work and only the caller knows which one it is making.
-
-## [Unreleased]
+## [0.5.0] — 2026-09-14
 
 ### Added
 
-- **Projects can be created and curated from the UI.** Creating one meant the API or the
-  CLI, and renaming or archiving meant the same, so the only way to tidy the thing you look
-  at every day was to leave it. `/projects` lists every project with live open and total
-  counts, creates one, renames in place, archives and restores, and deletes behind a typed
-  confirmation that says how many tasks go with it and points at archiving instead.
+- **`cairn next`** answers which task to pick up, not just what exists. Finishing beats
+  starting: work you hold, then work dropped with a checkpoint, then in-review, todo,
+  backlog. Anything blocked, waiting on an unfinished task, or actively held by another
+  agent is absent rather than ranked last. Every pick carries the reason it won.
 
-- **In Progress and Todo tabs** in the task list, and **In Progress is now the default** —
-  what is being worked on is the question the page is usually open to answer. Its empty
-  state offers Todo, Backlog and All rather than dead-ending, because an empty In Progress
-  is an ordinary state rather than an empty project.
+- **Knowledge ages.** A fact whose named files several sessions have reworked since it was
+  last confirmed is marked stale in `check` and in the briefing. Marked, never hidden and
+  never expired. `cairn verify <slug>` confirms one without rewriting it.
+
+- **Projects are created and curated from the UI** at `/projects` — create, rename,
+  archive, restore, and delete behind a typed confirmation that names the task count.
+  Settings no longer carries a weaker copy of the archived list.
+
+- **In Progress and Todo tabs**, with In Progress the default, and an empty state that
+  offers somewhere to go rather than dead-ending.
+
+- **`--kind verified`**, for closing a task after finding somebody else's commit already
+  fixed it. `fixed` claims their work and makes the close indistinguishable from one where
+  nobody read anything.
+
+- **`in-review` is documented** as the gate between working and finished — written but not
+  merged, or merged but not deployed. It existed in the vocabulary and no guidance
+  mentioned it, so the lifecycle jumped straight from doing to done.
+
+- **Delivery evidence in the timeline**: `cairn commit`, `push` and `run` record what
+  shipped and what passed. They record; none of them executes anything.
+
+- **The timeline records what it was missing** — checkpoints, attachments, dependency
+  changes, and the project lifecycle — and now outlives what it describes. Deleting a task
+  detaches its events instead of erasing them, so the record that something was deleted
+  survives the deletion.
+
+- **`cairn task delete`**, refusing any task with children, notes, comments or
+  dependencies; **`cairn replay`** for writes put aside while the server was unreachable;
+  **`cairn add --start`** to file and claim in one call.
 
 ### Changed
 
-- **Everything is larger, and scales from one number.** Every size in the app was written
-  in fixed pixels — 343 text sizes and 192 dimensions, including 83 heights — so raising
-  the type alone would have pushed text out of rows that could not grow with it. All of it
-  is expressed in rem now and the root is 18px — body text 13px to 14.6px, about an eighth
-  larger, while the task list stays dense. Change that one value in `globals.css` to
-  change the whole interface. Hairlines and one-pixel nudges stay in pixels, where a
-  fraction of a pixel is not a thing a browser draws consistently.
+- **A checkpoint claims an unheld task; a note does not.** The first version claimed on any
+  work-log write and was too broad: an agent annotating a backlog put a task into `doing`
+  that nobody was working on, reverted it, then did the real work without re-claiming.
+  Annotating is most of what reading a backlog is. `cairn note` now says the task is
+  unclaimed rather than deciding for you.
+
+- **Everything is larger, and scales from one number.** Every size was a fixed pixel value —
+  343 text sizes and 192 dimensions — so raising the type alone would have pushed text out
+  of rows that could not grow. All of it is rem now, with the root at 18px.
+
+- **Every page keeps itself current, or says why it does not.** The live-update stream
+  watched only tasks, so the pages that go stale fastest could never have been helped by
+  it. `cairn_pulse` covers tasks, sessions, knowledge and activity.
+
+- **Projects are alphabetical everywhere**, case-insensitively — the collation sorted
+  lowercase titles below every capitalised one.
+
+- **Sessions say what came of them.** The API returned the request and the next steps and
+  omitted what was learned and completed, so every reader outside the web UI got a session
+  that said what was wanted and never what happened.
+
+- Sessions record whether a run was **scheduled** rather than inferring it from prose the
+  hook had deliberately discarded.
+
+### Fixed
+
+- **Every OpenClaw session was recorded as half a record.** `claude -p` as root answers
+  "Not logged in", the transcript sweep must run as root, and the hook keeps the row when
+  it cannot reach a summariser — so 42 of 42 sessions held their files and no prose at all,
+  silently, for the life of the feature. Vitals now counts sessions actually summarised and
+  alarms when none are.
+
+- **Codex filed its work as OpenClaw.** Detection rested on `CODEX_HOME`, which Codex reads
+  but does not export; the wrapper installed to set it was being bypassed. Detection now
+  uses markers Codex does export, and OpenClaw is recognised by any `OPENCLAW_*` variable
+  rather than two guessed names.
+
+- **`check --project` ignored the filter for knowledge.** Three of four branches scoped;
+  knowledge did not, so a scoped search returned other projects' facts and absence read as
+  "this is new". Global facts still appear, and entity-scoped facts appear for projects in
+  that entity.
+
+- **A correction now outranks the claim it corrects.** Superseded knowledge was marked and
+  never ranked below, so a stale fact could beat its own replacement.
+
+- **A resolution cannot be written without closing the task**, and a task ref resolves in
+  search — `CAIRN-131` used to return every task that mentioned it and never itself. A bare
+  number works too.
+
+- **The supersede picker searched instead of listing.** It was a select holding every
+  current entry, capped at 300 against a corpus of 348, so 48 could not be chosen and
+  nothing said so.
+
+- Renaming a project key keeps old refs working; the list view shows the Cairn ref rather
+  than an imported identifier that resolves nowhere; the sticky group heading is no longer
+  painted over by the rows beneath it; settings and vitals are centred like every other
+  page; and `/activity`'s "Load older" says that it is working.
+
+### Breaking
+
+- `DELETE /api/v1/tasks/{ref}` requires `?confirm=<REF>` and refuses a task with children,
+  notes, comments or dependencies. It previously deleted anything without confirmation.
 
 ## [0.4.0] — 2026-09-14
 
@@ -243,7 +282,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/montytorr/cairn/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/montytorr/cairn/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/montytorr/cairn/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/montytorr/cairn/compare/v0.1.0...v0.2.0

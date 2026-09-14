@@ -310,7 +310,8 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn show <ref>` · `cairn list --project K` · `cairn projects` | Read one, many, or the project index |
 | `cairn add "<title>" --project K` | File work. Warns if something similar already exists |
 | `cairn update <ref> --status S --priority P` | Change fields; `--project` moves it, `--also-project` widens it |
-| `cairn done <ref> --resolution "…"` | Close. The resolution is required |
+| `cairn done <ref> --resolution "…"` | Close. The resolution is required. `--kind verified` when you closed it because somebody else's fix was already there — `fixed` would claim their work |
+| `cairn update <ref> --status in-review` | Written but not landed: merged and undeployed, or done and unmerged |
 | `cairn cancel <ref> --resolution "…"` | Drop it, and say why |
 | `cairn note <ref> "…" --kind attempt` | Append to the work log — `note · attempt · finding · decision · handoff` |
 | `cairn commit <ref> <sha>` · `cairn push <ref> <sha>` | Record delivery evidence in the task history |
