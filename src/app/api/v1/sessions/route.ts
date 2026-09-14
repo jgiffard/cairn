@@ -28,6 +28,12 @@ export const GET = route({
         endedAt: r.ended_at,
         request: r.request,
         scheduled: r.scheduled,
+        // The reason the row is worth keeping. The list returned the request
+        // and the next steps and omitted both halves in between, so every
+        // reader outside the web UI — the CLI, an agent, the MCP facade — got
+        // a session that said what was asked and never what came of it.
+        learned: r.learned,
+        completed: r.completed,
         nextSteps: r.next_steps,
         files: (r.files ?? []).length,
         taskRefs: r.task_refs ?? [],

@@ -1692,14 +1692,17 @@ const commands = {
       if (flags.limit) params.set('limit', flags.limit)
       const data = await request('GET', `/api/v1/sessions?${params}`)
       return emit(data, {
+        // What came of it, not only what was asked. A list of requests is a
+        // list of intentions; the reason to keep a session is the answer.
         rows: (d) => d.results.map((r) => ({
           ended: (r.endedAt ?? '').slice(0, 16).replace('T', ' '),
           agent: r.agent ?? r.platform,
           files: r.files,
           tasks: (r.taskRefs ?? []).join(','),
-          request: truncate(r.request ?? '', 60),
+          request: truncate(r.request ?? (r.scheduled ? 'scheduled run' : ''), 44),
+          outcome: truncate(r.completed ?? r.learned ?? '', 52),
         })),
-        columns: ['ended', 'agent', 'files', 'tasks', 'request'],
+        columns: ['ended', 'agent', 'files', 'tasks', 'request', 'outcome'],
       })
     }
 
