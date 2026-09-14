@@ -101,7 +101,7 @@ export const POST = route<{ ref: string }, z.infer<typeof body>>({
         actor_type: actor.actorType,
         actor_id: actor.actorId,
         event: 'dependency_added',
-        data: { ref: input.ref, direction: input.direction },
+        data: { other: input.ref, direction: input.direction },
       },
     ], actor.userId)
 
@@ -155,7 +155,7 @@ export const DELETE = route<{ ref: string }>({
         actor_type: actor.actorType,
         actor_id: actor.actorId,
         event: 'dependency_removed',
-        data: { ref: input.ref, direction: input.direction },
+        data: { other: input.ref, direction: input.direction },
       },
     ], actor.userId)
 

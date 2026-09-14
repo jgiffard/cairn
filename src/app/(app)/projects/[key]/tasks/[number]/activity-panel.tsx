@@ -81,13 +81,13 @@ const describe = (entry: ActivityEntry): React.ReactNode => {
       return (
         <>
           made it {d.direction === 'blocking' ? 'block' : 'depend on'}{' '}
-          <code className="font-mono text-[0.6875rem]">{val(d.ref)}</code>
+          <code className="font-mono text-[0.6875rem]">{val(d.other ?? d.ref)}</code>
         </>
       )
     case 'dependency_removed':
       return (
         <>
-          unlinked <code className="font-mono text-[0.6875rem]">{val(d.ref)}</code>
+          unlinked <code className="font-mono text-[0.6875rem]">{val(d.other ?? d.ref)}</code>
         </>
       )
     case 'task_deleted':

@@ -413,6 +413,16 @@ export const DELETE = route<{ ref: string }>({
       },
     ], actor.userId)
 
+    /**
+     * Every event this task leaves behind gets its ref, while the ref is still
+     * knowable.
+     *
+     * task_id detaches on delete, so the rows survive — but the feed resolves a
+     * name through the task, and a detached row had nothing to show but the
+     * project key. Stamping it now is the last moment anything can.
+     */
+    await admin().rpc('cairn_stamp_ref', { p_task: task.id, p_ref: ref })
+
     const { error } = await admin().from('tasks').delete().eq('id', task.id)
     if (error) return failFromDb(error)
     return ok({ deleted: true, ref, id: task.id, attachmentsRemoved: paths.length })
