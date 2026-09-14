@@ -301,6 +301,80 @@ const RECENT_MS = 6 * 60 * 60 * 1000
  * the session itself. Either way the id is there, which is what makes
  * `--dry-run <path>` work for both without a hook payload to read it from.
  */
+/**
+ * The refs this session actually wrote to, from the CLI's own breadcrumbs.
+ *
+ * Recovering refs by regex over a transcript is a guess, and it was wrong in a
+ * way that mattered: a dry run returned CAI-42 and BBTRADE-1164, refs out of
+ * documentation examples, rather than the tasks worked on. Session -> task
+ * links feed search, and a session linked to everything answers yes to
+ * everything.
+ *
+ * The CLI records `{t, ref, verb, cwd, agent}` per accepted write, so this is
+ * evidence instead. Matched on time because a session id is not knowable at
+ * write time across Codex, OpenClaw and Claude alike, but every runtime shares
+ * a clock and the transcript gives both ends of the window.
+ */
+const ACTED_PATH = join(homedir(), '.cairn', 'acted.jsonl')
+
+/** A write can land after the last transcript line, never meaningfully before. */
+const ACTED_SLACK_MS = 2 * 60 * 1000
+
+const actedFromBreadcrumbs = ({ startedAt, endedAt, cwd }) => {
+  if (!startedAt) return null
+  let lines
+  try {
+    lines = readFileSync(ACTED_PATH, 'utf8').trim().split('\n')
+  } catch {
+    return null // no CLI breadcrumbs on this machine, or none yet
+  }
+
+  const from = Date.parse(startedAt)
+  const to = (endedAt ? Date.parse(endedAt) : Date.now()) + ACTED_SLACK_MS
+  if (Number.isNaN(from)) return null
+
+  const inWindow = []
+  for (const line of lines) {
+    let row
+    try {
+      row = JSON.parse(line)
+    } catch {
+      continue // a torn last line, or a file written by something else
+    }
+    if (!row?.ref || !row?.t) continue
+    const at = Date.parse(row.t)
+    if (Number.isNaN(at) || at < from || at > to) continue
+    inWindow.push(row)
+  }
+  if (inWindow.length === 0) return null
+
+  // Two agents working in parallel share the clock, so the window alone can
+  // pick up a sibling's writes. Its directory separates them when it can, and
+  // when nothing matches the window is still better than a regex over prose.
+  const here = cwd ? inWindow.filter((row) => row.cwd === cwd) : []
+  const chosen = here.length > 0 ? here : inWindow
+  return new Set(chosen.map((row) => row.ref))
+}
+
+/**
+ * Breadcrumbs first, then the `cairn`-command heuristic, then bare mentions.
+ *
+ * The fallbacks stay because a session can write through the API directly, run
+ * an older CLI, or be swept from a rollout long after its breadcrumbs were
+ * trimmed — and a guessed link is still better than no link at all.
+ */
+const chooseRefs = (t, cwd) =>
+  actedFromBreadcrumbs({ startedAt: t.startedAt, endedAt: t.endedAt, cwd }) ??
+  (t.actedOn.size > 0 ? t.actedOn : t.refs)
+
+/** Which of the three answered, so a dry run says how much to trust it. */
+const refSource = (t, cwd) =>
+  actedFromBreadcrumbs({ startedAt: t.startedAt, endedAt: t.endedAt, cwd })
+    ? 'breadcrumbs'
+    : t.actedOn.size > 0
+      ? 'cairn-commands'
+      : 'mentions'
+
 const idFromRollout = (path) => {
   const name = path.split('/').pop() ?? ''
   return (
@@ -516,7 +590,8 @@ const record = async (payload) => {
           prompts: t.prompts.length,
           toolCalls: t.toolCalls,
           files: keepFiles(t.files, payload.cwd ?? t.cwd).length,
-          refs: [...(t.actedOn.size > 0 ? t.actedOn : t.refs)].slice(0, 12),
+          refs: [...chooseRefs(t, payload.cwd ?? t.cwd)].slice(0, 12),
+          refsFrom: refSource(t, payload.cwd ?? t.cwd),
           firstPrompt: t.prompts[0]?.slice(0, 120) ?? null,
         },
         null,
@@ -553,7 +628,7 @@ const record = async (payload) => {
 
   if (t.startedAt) args.push('--started', t.startedAt)
   if (files.length) args.push('--files', files.join(','))
-  const refs = t.actedOn.size > 0 ? t.actedOn : t.refs
+  const refs = chooseRefs(t, cwd ?? process.cwd())
   if (refs.size) args.push('--tasks', [...refs].slice(0, 400).join(','))
   if (process.env.CAIRN_AGENT) args.push('--agent', process.env.CAIRN_AGENT)
 

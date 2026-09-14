@@ -337,7 +337,16 @@ export const openapiSpec = () => ({
           '404': errorResponse,
         },
       },
-      delete: { summary: 'Delete a task', responses: { '200': okResponse('Deleted.'), '404': errorResponse } },
+      delete: {
+        summary: 'Delete a task permanently',
+        description:
+          'For junk that should never have existed. Refused if the task has children, ' +
+          'notes, comments or dependencies in either direction — cancel it instead, which ' +
+          'keeps the record and the reason. Requires `?confirm=<REF>`.',
+        parameters: [{ name: 'confirm', in: 'query', required: true, schema: { type: 'string' },
+          description: 'The task ref, repeated back.' }],
+        responses: { '200': okResponse('Deleted.'), '400': errorResponse, '404': errorResponse },
+      },
     },
     '/tasks/{ref}/claim': {
       parameters: [refParam],

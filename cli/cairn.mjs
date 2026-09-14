@@ -13,7 +13,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -196,6 +196,10 @@ const request = async (method, path, body, { soft = false } = {}) => {
     // 409 gets its own exit code so a caller can branch on "someone else has it".
     die(`${payload.error}${extra}`, payload.code === 'already_claimed' ? 9 : 1)
   }
+
+  // Recorded here rather than at each call site: one place that already knows
+  // the method, the path and that the server said yes.
+  if (method !== 'GET') rememberWrite(method, path, payload.data)
   return payload.data
 }
 
@@ -297,6 +301,72 @@ const emit = (data, opts = {}) => {
  * subdirectory can override its parent.
  */
 const PROJECT_MAP_PATH = join(homedir(), '.cairn', 'projects.json')
+
+/**
+ * A breadcrumb per successful write, so a session does not have to be guessed at.
+ *
+ * The session-end hook used to recover task refs with a regex over the
+ * transcript, preferring refs on a line that also contained a `cairn` command.
+ * A good heuristic, and still a guess: a dry run returned CAI-42 and
+ * BBTRADE-1164 — refs out of documentation examples — instead of the tasks the
+ * session actually worked. Those links feed search, and a session linked to
+ * everything answers yes to everything, which is the same as knowing nothing.
+ *
+ * This end knows exactly what it acted on and whether the server accepted it.
+ * Keyed on time rather than a session id on purpose: Codex and OpenClaw name
+ * sessions in ways this process cannot see, but every runtime agrees on a
+ * clock, and the hook already reads the transcript's first and last timestamps.
+ */
+const ACTED_PATH = join(homedir(), '.cairn', 'acted.jsonl')
+const ACTED_MAX_BYTES = 256 * 1024
+const ACTED_KEEP_LINES = 2000
+
+/** Which ref a write acted on, from the server's answer or failing that the path. */
+const refOfWrite = (path, data) => {
+  const fromBody = typeof data?.ref === 'string' ? data.ref : null
+  if (fromBody && /^[A-Z][A-Z0-9]{1,9}-\d+$/.test(fromBody)) return fromBody
+  const fromPath = /\/api\/v1\/tasks\/([^/?]+)/.exec(path)?.[1]
+  if (!fromPath) return null
+  const decoded = decodeURIComponent(fromPath).toUpperCase()
+  return /^[A-Z][A-Z0-9]{1,9}-\d+$/.test(decoded) ? decoded : null
+}
+
+/** `claim`, `note`, `done` — the sub-resource, or the method when there is none. */
+const verbOfWrite = (method, path) => {
+  const tail = /\/api\/v1\/tasks\/[^/?]+\/([a-z-]+)/.exec(path)?.[1]
+  if (tail) return tail
+  if (path.includes('/tasks') && method === 'POST') return 'add'
+  return { POST: 'add', PATCH: 'update', DELETE: 'delete' }[method] ?? method.toLowerCase()
+}
+
+/**
+ * Append-only and self-trimming. A file that grows forever on a machine an
+ * agent writes to every few seconds is a slow leak, and one that is rewritten
+ * on every call would lose a concurrent write from a sibling agent.
+ */
+const rememberWrite = (method, path, data) => {
+  const ref = refOfWrite(path, data)
+  if (!ref) return
+  try {
+    mkdirSync(dirname(ACTED_PATH), { recursive: true })
+    if (existsSync(ACTED_PATH) && statSync(ACTED_PATH).size > ACTED_MAX_BYTES) {
+      const kept = readFileSync(ACTED_PATH, 'utf8').trim().split('\n').slice(-ACTED_KEEP_LINES)
+      writeFileSync(ACTED_PATH, `${kept.join('\n')}\n`)
+    }
+    appendFileSync(
+      ACTED_PATH,
+      `${JSON.stringify({
+        t: new Date().toISOString(),
+        ref,
+        verb: verbOfWrite(method, path),
+        cwd: process.cwd(),
+        agent: AGENT,
+      })}\n`,
+    )
+  } catch {
+    // A breadcrumb is a convenience for the hook. Never fail a write over one.
+  }
+}
 
 const readProjectMap = () => {
   try {
@@ -502,6 +572,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn project archive <KEY>                  hides it; the tasks stay searchable
     cairn project restore <KEY>
     cairn project delete <KEY> --confirm <KEY>   deletes every task in it
+    cairn task delete <ref> --confirm <ref>       junk only; refuses a task with history
 
   memory
     cairn context                  the briefing: what you hold, what is in flight,
@@ -865,6 +936,40 @@ const commands = {
       rows: (d) => d.map((l) => ({ label: l.label, tasks: l.task_count })),
       columns: ['label', 'tasks'],
     })
+  },
+
+  /**
+   * Deleting a task, which almost nobody should be doing.
+   *
+   * `cancel` keeps the record and the reason and is what this store is for;
+   * this is for junk that should never have existed. The server refuses a task
+   * with children, notes, comments or dependants, and demands the ref back.
+   */
+  async task() {
+    const sub = need(positional[0], 'usage: cairn task delete <ref> --confirm <ref>')
+    if (sub !== 'delete') die(`unknown subcommand "${sub}" — expected delete`)
+    const ref = need(positional[1], 'a task ref is required, e.g. CAI-42')
+
+    // Ask before telling: the ref the server knows is canonical (a former
+    // project key still resolves), and confirming with a spelling the server
+    // will not echo back would fail for a reason nobody could see.
+    const task = await request('GET', `/api/v1/tasks/${encodeURIComponent(ref)}`)
+    const canonical = `${task.project.key}-${task.number}`
+
+    if (flags.confirm !== canonical) {
+      die(
+        `This permanently deletes ${canonical} — "${task.title}" — and cannot be undone.\n` +
+          `Cancelling keeps the record: cairn cancel ${canonical} --resolution "..."\n` +
+          `Re-run with --confirm ${canonical} if deletion is really what you want.`,
+      )
+    }
+
+    emit(
+      await request(
+        'DELETE',
+        `/api/v1/tasks/${encodeURIComponent(canonical)}?confirm=${encodeURIComponent(canonical)}`,
+      ),
+    )
   },
 
   async project() {
