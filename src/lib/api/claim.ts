@@ -65,25 +65,35 @@ export const takeTask = async (
 }
 
 /**
- * Writing to a task's work log IS working on it, so it claims the task.
+ * A checkpoint claims the task. A note does not.
  *
- * 36% of recently closed tasks were never claimed, so they never showed as In
- * Progress while somebody was on them — and the reason is structural rather
- * than a lapse of discipline. Nothing cost anything when it was skipped: an
- * agent could note, checkpoint and close an unclaimed task and never perceive
- * a difference. Restating the rule in the skill does not change that; making
- * the ordinary path produce the right state does.
+ * The first version claimed on any work-log write, to fix a real problem: 36%
+ * of closed tasks were never claimed, so they never showed as In Progress
+ * while somebody was on them, and no amount of restating the rule had changed
+ * that.
  *
- * Three deliberate limits:
+ * It was too broad, and an agent reported it against real history. Triaging a
+ * backlog, it wrote a `finding` on a task it was only READING; the task went
+ * to `doing`; that read as false, so the agent reverted it; minutes later it
+ * began actually working and never re-claimed. The task was never `doing`
+ * during the only window when it was genuinely being worked — the exact
+ * failure the auto-claim existed to prevent, caused by the auto-claim.
+ *
+ * A note is an annotation, and annotating is most of what reading a backlog
+ * is. A checkpoint is not: it says "here is where I got to", which nobody
+ * writes about work they are not doing. So the inference moved to the one
+ * signal that carries it unambiguously, and `cairn note` says plainly when a
+ * task is unclaimed instead of quietly deciding for you.
+ *
+ * Three limits, unchanged:
  *   - agents only. Humans coordinate by talking, and a person leaving a
  *     comment does not mean they have picked the work up.
- *   - never steals. If somebody else holds a live lease this does nothing, so
- *     noting on a colleague's task stays a note.
+ *   - never steals. If somebody else holds a live lease this does nothing.
  *   - never reopens. A note on a closed task is a postscript, not a restart.
  */
 export const shouldClaimByWorking = (
   actor: { actorType: string },
-  task: { status?: unknown; claimed_by?: unknown },
+  task: Record<string, unknown>,
 ): boolean => {
   if (actor.actorType !== 'agent') return false
   if (task.claimed_by) return false

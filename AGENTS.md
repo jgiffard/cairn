@@ -76,13 +76,13 @@ cairn release ACME-42      # or: cairn done ACME-42 --resolution "..."
 
 - **`claim` sets the status to `doing`**; `cairn add --start` does both at once.
 - `cairn commit|push|run` record what you shipped or ran; they execute nothing.
-- **Noting or checkpointing claims an unheld task for you**, so the board is right even
-  when you forget. It never steals a live claim, never reopens closed work.
+- **A checkpoint claims an unheld task for you**; a note does not, so annotating a
+  backlog stays annotation. It never steals a live claim, never reopens closed work.
+- `in-review` is for written-but-not-landed; `--kind verified` for a fix already there.
 - **A resolution is refused unless the status is closing.**
 - A claim is execution state: a task can be `doing` and unclaimed (a human is on it).
-- If `claim` fails, another agent holds it — **pick different work**, do not force it.
-- A lease goes stale after 15 minutes of silence and can be taken over; two hours releases
-  it and returns the task to `todo`.
+- `claim` failing means someone holds it: pick different work. A lease goes stale after
+  15 minutes of silence and can be taken over; two hours returns the task to `todo`.
 - Leave a `checkpoint` before you stop. Notes and checkpoints survive a release, and the
   checkpoint is the only part that tells whoever picks it up where you got to.
 

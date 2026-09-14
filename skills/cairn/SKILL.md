@@ -35,9 +35,30 @@ For every non-trivial request, follow this sequence and leave evidence at each b
    it with `relearn`) instead of leaving it only in a task note.
 4. **Checkpoint:** after each meaningful milestone and before pausing, delegating, or
    yielding, run `cairn checkpoint <ref> --summary "..."`; use `beat` during long work.
-5. **Close:** when the work is actually complete, run `cairn done <ref> --resolution
+5. **Hand over, if it is written but not landed:** `cairn update <ref> --status in-review`.
+   This is the most common real state and the lifecycle used to jump straight past it —
+   the code is correct and not merged, or merged and not deployed. `done` would be a lie
+   and `doing` says someone is still typing. Say which in a note: uncommitted, unmerged,
+   or awaiting deploy.
+6. **Close:** when the work is actually complete, run `cairn done <ref> --resolution
    "..." --kind fixed` (or the accurate non-fixed kind), then verify with `show` or
    `history`. Release a claim only when handing work back unfinished.
+
+   **`--kind verified` when the fix was already there.** Closing a task after reading the
+   code and finding somebody else's commit had already fixed it is not `fixed` — that
+   claims their work, and makes your close indistinguishable from one where nobody read
+   anything. The verification IS the value; name it.
+
+### Sweeping many tasks at once
+
+Triaging a backlog is not the shape above, and reading it literally goes wrong in both
+directions: claiming thirty-one tasks falsely asserts thirty-one pieces of in-flight work,
+and claiming none makes the sweep itself invisible while it runs.
+
+File **one** task for the sweep, claim that, and work the rest without claiming them —
+`note` what you found on each, `update --status` where the state is now clear, and close
+the ones you can with an honest `--kind`. Writing a note does not claim a task, precisely
+so that annotating thirty of them stays annotation.
 
 Do not finish a durable task with only a chat reply, a dashboard update, or a vague note.
 If work is incomplete, leave the task doing with a checkpoint and explicit handoff; never

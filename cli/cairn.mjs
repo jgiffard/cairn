@@ -1035,7 +1035,21 @@ const commands = {
   async note() {
     const ref = need(positional[0], 'usage: cairn note <ref> "<text>"')
     const note = await resolveValue(need(positional[1], 'a note body is required'))
-    emit(await request('POST', `/api/v1/tasks/${ref}/notes`, { note, kind: flags.kind ?? 'note' }))
+    const result = await request('POST', `/api/v1/tasks/${ref}/notes`, {
+      note,
+      kind: flags.kind ?? 'note',
+    })
+    emit(result)
+
+    // Said, not inferred. Writing a note used to claim the task, which put
+    // work in `doing` that nobody was doing — annotating is most of what
+    // reading a backlog is. Pointing at the claim leaves the judgement with
+    // the only party that knows which of the two this was.
+    if (result?.unclaimed && FORMAT === 'tsv') {
+      process.stderr.write(
+        `${ref} is open and unclaimed — \`cairn claim ${ref}\` if you are working it\n`,
+      )
+    }
   },
 
   async log() {

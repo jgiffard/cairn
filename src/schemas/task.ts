@@ -27,6 +27,15 @@ export const TASK_PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const
 
 export const RESOLUTION_KINDS = [
   'fixed',
+  /**
+   * The fix was already there; this close is the record that somebody checked.
+   *
+   * Six tasks in one triage were closed after reading the current code and
+   * finding the defect already gone. `fixed` was the only kind that fit and it
+   * claims authorship of somebody else's commit — and makes the close
+   * indistinguishable from one where nobody read anything.
+   */
+  'verified',
   'wont-fix',
   'duplicate',
   'not-reproducible',

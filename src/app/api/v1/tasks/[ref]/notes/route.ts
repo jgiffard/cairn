@@ -4,7 +4,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
-import { claimByWorking } from '@/lib/api/claim'
+import { shouldClaimByWorking } from '@/lib/api/claim'
 import { createNoteSchema, NOTE_KINDS } from '@/schemas/task'
 
 export const dynamic = 'force-dynamic'
@@ -65,13 +65,14 @@ export const POST = route<{ ref: string }, z.infer<typeof createNoteSchema>>({
 
     if (error) return fail('internal_error', error.message)
 
-    // Writing to the work log is working on it, so an agent noting on an
-    // unheld open task takes it. Reported back so the caller can see what
-    // happened rather than discovering it in the UI later.
-    const claimed = await claimByWorking(actor, task)
+    // A note does NOT claim the task. Annotating is most of what reading a
+    // backlog is, and claiming on it put a task into `doing` that nobody was
+    // working on. Said rather than inferred: the caller is told the task is
+    // unheld and can decide, which is the part a wrong guess took away.
+    const unclaimed = shouldClaimByWorking(actor, task)
 
     // A duplicate write returns no row; report it as a success, not an error.
     const payload = data ?? { duplicate: true }
-    return ok(claimed ? { ...payload, claimed } : payload, { status: data ? 201 : 200 })
+    return ok(unclaimed ? { ...payload, unclaimed: true } : payload, { status: data ? 201 : 200 })
   },
 })
