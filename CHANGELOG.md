@@ -7,6 +7,27 @@ Cairn is pre-1.0: the schema, API and CLI are in daily use and stable in practic
 minor bump may still change them. Anything that would break an existing install is called
 out under **Breaking** with what to do about it.
 
+## [Unreleased]
+
+### Changed
+
+- **Working on a task claims it.** 36% of recently closed tasks across CAIRN, OD and QRY
+  were never claimed, so they never showed as In Progress while somebody was on them. The
+  cause was structural rather than a lapse: nothing cost anything when it was skipped, and
+  the rule had been stated plainly in the skill for weeks. A note or a checkpoint from an
+  agent on an open task nobody holds now claims it and says so. It never steals a live
+  claim — noting on a colleague's task stays a note — never reopens closed work, and never
+  applies to humans, who coordinate by talking. `cairn add --start` files and claims in one
+  call, for the file-it-then-do-it pattern that skipped claiming most often.
+
+### Fixed
+
+- **A resolution can no longer be written without closing the task.** It was accepted
+  silently: the agent wrote the answer, believed it had finished, and the task sat in
+  backlog carrying an answered dot — which also offered it to `check` as settled prior
+  work. Refused rather than auto-closed, because `done` and `cancelled` are different
+  claims about the work and only the caller knows which one it is making.
+
 ## [0.4.0] — 2026-09-14
 
 ### Added

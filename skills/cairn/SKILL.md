@@ -136,9 +136,19 @@ cairn release ACME-42
 
 - **Claiming starts the task.** `claim` sets the status to `doing` for you — there is no
   second command to remember, and no reason to skip it because it looks like ceremony.
-- **Claim the task you just filed, if you are about to do it.** Filing and closing without
-  claiming leaves the work invisible while it happens; on a machine running more than one
-  agent that is exactly when a second one picks up the same thing.
+- **Claim the task you just filed, if you are about to do it**, or use `cairn add --start`
+  which files and claims in one call. Filing and closing without claiming leaves the work
+  invisible while it happens; on a machine running more than one agent that is exactly
+  when a second one picks up the same thing.
+- **You do not have to remember.** A note or a checkpoint on an open task nobody holds
+  claims it for you, and says so in its reply. This exists because the rule above was
+  stated plainly for weeks and 36% of closed tasks were still never claimed — discipline
+  that costs nothing to skip gets skipped, so the ordinary path now produces the right
+  state. It never steals a live claim: noting on a colleague's task stays a note.
+- **Closing is still yours to do.** A resolution is refused unless the status is closing,
+  because "here is how it ended" while the task stays open is a contradiction — and one
+  that used to be accepted silently, leaving the task carrying an answered dot and
+  offering itself to `check` as settled.
 - **Exit 9 means pick different work.** Do not force it.
 - A claim is independent of `status` — a task can be `doing` and unclaimed, which is what a
   human working on it looks like.

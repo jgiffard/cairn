@@ -3,6 +3,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { claimByWorking } from '@/lib/api/claim'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,10 @@ export const POST = route<{ ref: string }, z.infer<typeof checkpointBody>>({
       .single()
 
     if (error) return fail('internal_error', error.message)
-    return ok(data)
+
+    // A checkpoint says where the work got to, which only makes sense if the
+    // work is yours. Same rule as a note.
+    const claimed = await claimByWorking(actor, task)
+    return ok(claimed ? { ...(data as object), claimed } : data)
   },
 })

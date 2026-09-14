@@ -326,6 +326,7 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn checkpoint <ref> --summary "…"` | Where work stopped, for whoever resumes |
 | `cairn block <ref> --reason "…"` · `cairn unblock <ref>` | Stuck on something outside Cairn |
 | `cairn learn "<title>" --body -` | Record what we now know. Global unless `--project` or `--entity` |
+| `cairn add ... --start` | File it and claim it, for work you are starting now |
 | `cairn verify <slug>` | This fact is still true. Clears the stale mark without rewriting it |
 | `cairn task delete <ref> --confirm <ref>` | For junk that should never have existed. Refused if the task has children, notes, comments or dependencies — cancel keeps the record |
 | `cairn know [<slug>\|<query>]` | Read it back, or list what applies here |

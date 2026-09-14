@@ -74,16 +74,17 @@ cairn checkpoint ACME-42 --summary "migration written, tests not yet run"
 cairn release ACME-42      # or: cairn done ACME-42 --resolution "..."
 ```
 
-- **`claim` sets the status to `doing`.** One command, not two — and claim the task you
-  just filed if you are about to do it, or the work is invisible while it happens.
-- A claim is **execution state** and is independent of `status`. A task can be `doing` and
-  unclaimed (a human is on it), or `todo` and claimed.
+- **`claim` sets the status to `doing`**; `cairn add --start` does both at once.
+- **Noting or checkpointing claims an unheld task for you**, so the board is right even
+  when you forget. It never steals a live claim, never reopens closed work.
+- **A resolution is refused unless the status is closing** — saying how it ended while
+  leaving it open is a contradiction, and was accepted silently until now.
+- A claim is execution state: a task can be `doing` and unclaimed (a human is on it).
 - If `claim` fails, another agent holds it — **pick different work**, do not force it.
-- A claim whose heartbeat has stopped for 15 minutes is stale and can be taken over.
-- Leave a `checkpoint` before you stop. It is what lets a different agent resume without
-  reading your transcript. Two hours of silence releases the claim and moves the task back
-  to `todo`; the notes and checkpoint stay, and the checkpoint is the only part that tells
-  whoever picks it up where you got to.
+- A lease goes stale after 15 minutes of silence and can be taken over; two hours releases
+  it and returns the task to `todo`.
+- Leave a `checkpoint` before you stop. Notes and checkpoints survive a release, and the
+  checkpoint is the only part that tells whoever picks it up where you got to.
 
 ## 6. Vocabulary
 

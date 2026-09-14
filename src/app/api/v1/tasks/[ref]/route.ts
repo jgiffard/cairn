@@ -77,6 +77,28 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       )
     }
 
+    /**
+     * And the other half of the same rule: a resolution is the statement
+     * "this is settled, and here is how", so writing one without closing is a
+     * contradiction the store cannot represent honestly.
+     *
+     * It was accepted silently. An agent wrote the answer, believed it had
+     * finished, and the task sat in backlog carrying an answered dot — which
+     * also offers it to `check` as settled prior work, the failure CAIRN-120
+     * found on OD-36. Refused rather than auto-closed, because `done` and
+     * `cancelled` are different claims about the work and only the caller
+     * knows which one it is making.
+     */
+    if (body.resolution !== undefined && body.resolution !== null && !isTerminal(nextStatus as never)) {
+      return fail(
+        'validation_failed',
+        `A resolution says a task is settled, so it cannot be written while ${params.ref} is ` +
+          `"${nextStatus}". Send a terminal status with it — "done" if it was, "cancelled" if ` +
+          `it will not be — or record it as a note instead if the work is still open.`,
+        { status: nextStatus, terminal: ['done', 'cancelled'] },
+      )
+    }
+
     const patch: Record<string, unknown> = {}
     if (body.title !== undefined) patch.title = body.title
     if (body.description !== undefined) patch.description = body.description

@@ -666,6 +666,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
 
   write
     cairn add "<title>" --project K [--type bug] [--priority high] [--body -]
+    cairn add ... --start          file it and claim it, when you are starting now
     cairn update <ref> [--title T] [--status S] [--type T] [--priority P]
     cairn update <ref> --also-project HM,AT      work that spans several projects
     cairn update <ref> --project OTHER      moves it; the ref changes
@@ -898,7 +899,16 @@ const commands = {
     for (const k of ['type', 'status', 'priority']) if (flags[k]) body[k] = flags[k]
     if (flags.label) body.labels = String(flags.label).split(',')
     if (flags.parent) body.parentRef = flags.parent
-    emit(await request('POST', `/api/v1/projects/${project}/tasks`, body))
+    const created = await request('POST', `/api/v1/projects/${project}/tasks`, body)
+
+    // File-and-work-it-now is the pattern that skips claiming: the agent that
+    // files a task and finishes it in the same session never perceives a
+    // difference, so the board shows backlog while the work happens.
+    if (flags.start) {
+      const held = await request('POST', `/api/v1/tasks/${created.ref}/claim`, {})
+      return emit({ ...created, status: held.status, claimed_by: held.claimed_by })
+    }
+    emit(created)
   },
 
   async update() {

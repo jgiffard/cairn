@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
-import { admin } from '@/lib/db/client'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { takeTask } from '@/lib/api/claim'
 import { CLAIM_LEASE_SECONDS } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -28,32 +28,17 @@ export const POST = route<{ ref: string }, z.infer<typeof claimBody>>({
     const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
 
-    const agent = body.agent ?? actor.actorId
-    const now = new Date()
-    const staleBefore = new Date(now.getTime() - CLAIM_LEASE_SECONDS * 1000).toISOString()
+    const { row, error } = await takeTask(actor, task, {
+      agent: body.agent,
+      setDoing: body.setDoing,
+    })
+    if (error) return fail('internal_error', error)
 
-    const patch: Record<string, unknown> = {
-      claimed_by: agent,
-      claimed_at: now.toISOString(),
-      heartbeat_at: now.toISOString(),
-      attempt: ((task.attempt as number) ?? 0) + 1,
-    }
-    if (body.setDoing) patch.status = 'doing'
-
-    const { data, error } = await admin()
-      .from('tasks')
-      .update(patch)
-      .eq('id', task.id)
-      .or(`claimed_by.is.null,heartbeat_at.lt.${staleBefore}`)
-      .select('id, number, status, claimed_by, claimed_at, heartbeat_at, attempt')
-
-    if (error) return fail('internal_error', error.message)
-
-    if (!data || data.length === 0) {
+    if (!row) {
       const holder = task.claimed_by as string | null
       const lastBeat = task.heartbeat_at as string | null
       const agoMinutes = lastBeat
-        ? Math.floor((now.getTime() - new Date(lastBeat).getTime()) / 60000)
+        ? Math.floor((Date.now() - new Date(lastBeat).getTime()) / 60000)
         : null
       return fail(
         'already_claimed',
@@ -63,38 +48,6 @@ export const POST = route<{ ref: string }, z.infer<typeof claimBody>>({
       )
     }
 
-    /**
-     * Claiming moves the task to `doing`, and that move has to be recorded
-     * like any other.
-     *
-     * It was not, so history showed a task going straight from `backlog` to
-     * `done` with a claim somewhere in the middle, and any question of the
-     * form "do agents ever start their work" came back wrong. Measured on
-     * seven days of real data, the honest answer turned out to be the reverse
-     * of what the events implied.
-     */
-    const events: Record<string, unknown>[] = [
-      {
-        task_id: task.id,
-        actor_type: actor.actorType,
-        actor_id: actor.actorId,
-        event: 'claimed',
-        data: { agent, attempt: patch.attempt },
-      },
-    ]
-
-    if (patch.status && patch.status !== task.status) {
-      events.push({
-        task_id: task.id,
-        actor_type: actor.actorType,
-        actor_id: actor.actorId,
-        event: 'status_changed',
-        data: { from: task.status, to: patch.status, via: 'claim' },
-      })
-    }
-
-    await admin().from('task_activity_events').insert(events)
-
-    return ok(data[0])
+    return ok(row)
   },
 })
