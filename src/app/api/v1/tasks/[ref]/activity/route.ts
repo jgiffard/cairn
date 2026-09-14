@@ -1,5 +1,6 @@
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
+import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 import { createActivityEvidenceSchema } from '@/schemas/task'
@@ -47,7 +48,30 @@ export const POST = route<{ ref: string }, z.infer<typeof createActivityEvidence
       .select('id, event, data, actor_type, actor_id, created_at')
       .single()
 
-    if (error) return fail('internal_error', error.message)
+    /**
+     * A commit recorded twice is the same commit.
+     *
+     * This is written by hooks and CI steps — callers that time out and retry —
+     * so a second attempt must not add a second line to the timeline claiming
+     * the work happened twice. A note has been idempotent on its content hash
+     * for the same reason; evidence had no such protection. The index that
+     * makes this reachable is partial: a run_result has no sha, and running the
+     * tests again after a fix is a different fact, not a duplicate.
+     */
+    if (error?.code === '23505') {
+      const { data: existing } = await admin()
+        .from('task_activity_events')
+        .select('id, event, data, actor_type, actor_id, created_at')
+        .eq('task_id', task.id)
+        .eq('event', event)
+        .limit(50)
+      const match = ((existing ?? []) as { data: { sha?: string } }[]).find(
+        (row) => row.data?.sha === data.sha,
+      )
+      return ok(match ?? { duplicate: true }, { status: 200 })
+    }
+
+    if (error) return failFromDb(error)
     return ok(row, { status: 201 })
   },
 })

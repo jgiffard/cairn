@@ -106,6 +106,25 @@ is as valuable as a fix. Notes are deduplicated, so a retry after a timeout is s
 
 Use `cairn comment` instead when you are addressing the human rather than the next agent.
 
+### Evidence, as opposed to narration
+
+A note is what you chose to say. These are what actually happened, and they go in the task
+timeline where a reader can check them:
+
+```bash
+cairn commit ACME-42 a1b2c3d --message "cap pool_size at 15"
+cairn push   ACME-42 a1b2c3d --branch main
+cairn run    ACME-42 "npm test" --status passed --exit-code 0
+```
+
+**They record; none of them runs anything.** `cairn run` does not execute the command — you
+have already run it, and this is you writing down what it did.
+
+Worth doing when you ship something or a test decides an argument, because "I fixed it" and
+`run_result failed exit 1` are very different claims and only one of them can be checked.
+Recording the same commit against the same task twice is one line, not two, so a retry
+after a timeout is safe.
+
 ## 4. Closing requires saying how
 
 ```bash

@@ -717,6 +717,9 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn commit <ref> <sha> [--repo PATH] [--branch NAME] [--message TEXT] [--url URL]
     cairn push <ref> <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
     cairn run <ref> "<command>" --status passed|failed|skipped [--exit-code N]
+                                   these three RECORD what you already did;
+                                   none of them runs anything. Recording the
+                                   same commit twice is one line, not two.
     cairn comment <ref> "<text>"
     cairn done <ref> --resolution "<what was actually done>" [--kind fixed]
     cairn cancel <ref> --resolution "<why it is being dropped>" [--kind wont-fix]
