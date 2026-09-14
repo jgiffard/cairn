@@ -23,9 +23,10 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
   const [projects, entities, others, supersededMap, suggested] = await Promise.all([
     listProjects(user.id),
     listEntities(user.id),
-    // Candidates for "supersede": everything but this row and anything
-    // already retired, so the picker cannot chain a superseded row to
-    // another one.
+    // Only for the label suggestions now. The supersede picker used to be fed
+    // from here — every current entry, shipped to the browser on every page
+    // view and capped at 300 against a corpus of 348 — and now searches the
+    // server instead.
     listKnowledge(user.id, { limit: 300, includeSuperseded: false }),
     row.superseded_by ? supersededByInfo(user.id, [row.superseded_by]) : Promise.resolve(new Map()),
     // What this could plausibly be scoped to, given the projects it already
@@ -68,9 +69,6 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
           allProjects={projects.map((p) => ({ key: p.key, title: p.title }))}
           allEntities={entities.map((e) => ({ key: e.key, title: e.title }))}
           allLabels={[...new Set(others.flatMap((o) => o.labels))].sort()}
-          candidates={others
-            .filter((o) => o.slug !== slug)
-            .map((o) => ({ slug: o.slug, title: o.title }))}
           suggestedEntities={suggested}
         />
       </div>

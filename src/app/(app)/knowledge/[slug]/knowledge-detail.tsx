@@ -10,6 +10,7 @@ import { Button, Field, Input, Select, Textarea } from '@/components/ui/control'
 import { LabelEditor } from '../../projects/[key]/label-editor'
 import { fullDateTime, shortDate } from '@/lib/dates'
 import { cn } from '@/lib/utils'
+import { KnowledgePicker } from '@/components/knowledge-picker'
 
 type Row = {
   title: string
@@ -84,7 +85,6 @@ export const KnowledgeDetail = ({
   allProjects,
   allEntities,
   allLabels,
-  candidates,
   suggestedEntities,
 }: {
   slug: string
@@ -92,7 +92,6 @@ export const KnowledgeDetail = ({
   allProjects: KeyTitle[]
   allEntities: KeyTitle[]
   allLabels: string[]
-  candidates: SlugTitle[]
   suggestedEntities: string[]
 }) => {
   const router = useRouter()
@@ -109,6 +108,7 @@ export const KnowledgeDetail = ({
   const [draftVerified, setDraftVerified] = useState(row.verified)
 
   const [supersedeTarget, setSupersedeTarget] = useState('')
+  const [supersedeTitle, setSupersedeTitle] = useState('')
   const [supersedeBusy, setSupersedeBusy] = useState(false)
 
   const startEdit = () => {
@@ -158,7 +158,7 @@ export const KnowledgeDetail = ({
     setError(null)
     try {
       await patch(slug, { supersededBy: supersedeTarget })
-      const target = candidates.find((c) => c.slug === supersedeTarget)
+      const target = supersedeTitle ? { slug: supersedeTarget, title: supersedeTitle } : null
       setCurrent({
         ...current,
         superseded: true,
@@ -267,20 +267,35 @@ export const KnowledgeDetail = ({
           {!current.superseded && (
             <div className="border-border mt-8 flex flex-wrap items-center gap-2 border-t pt-4">
               <span className="text-fg-subtle text-[0.75rem]">Mark superseded by:</span>
-              <Select
-                size="sm"
-                value={supersedeTarget}
-                onChange={(e) => setSupersedeTarget(e.target.value)}
-                aria-label="Replacement entry"
-                className="w-auto max-w-[13.75rem]"
-              >
-                <option value="">Choose an entry…</option>
-                {candidates.map((c) => (
-                  <option key={c.slug} value={c.slug}>
-                    {c.title}
-                  </option>
-                ))}
-              </Select>
+              {/* Searched, not listed. This was a select holding every current
+                  entry, which is unusable at 348 and was silently capped at
+                  300 — so a corrected fact could point at 300 of its possible
+                  replacements and there was no way to tell. */}
+              <KnowledgePicker
+                exclude={slug}
+                placeholder="Search for the entry that replaces this…"
+                onPick={(hit) => {
+                  setSupersedeTarget(hit.slug)
+                  setSupersedeTitle(hit.title)
+                }}
+              />
+              {supersedeTarget && (
+                <span className="text-fg flex items-center gap-1 text-[0.75rem]">
+                  <span className="text-fg-subtle">→</span>
+                  <span className="max-w-[16rem] truncate">{supersedeTitle || supersedeTarget}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSupersedeTarget('')
+                      setSupersedeTitle('')
+                    }}
+                    className="text-fg-subtle hover:text-fg"
+                    aria-label="Clear the chosen entry"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
               <Button
                 size="sm"
                 variant="secondary"
