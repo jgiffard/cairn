@@ -31,6 +31,10 @@ export const POST = route<{ ref: string }, z.infer<typeof checkpointBody>>({
     const idempotencyHeader = req.headers.get('idempotency-key')
     const parsedMutation = z.string().uuid().safeParse(idempotencyHeader)
     if (idempotencyHeader && !parsedMutation.success) return fail('validation_failed', 'Invalid idempotency key.')
+    const existingClaim = task.claimed_by !== null && task.claimed_by !== undefined
+    if (existingClaim && (body.ownershipVersion === undefined || body.checkpointVersion === undefined)) {
+      return fail('conflict', 'Checkpoint requires ownership and checkpoint predecessors for an existing claim.')
+    }
     if (idempotencyHeader && (body.ownershipVersion === undefined || body.checkpointVersion === undefined)) {
       return fail('conflict', 'Queued checkpoint has no ownership/checkpoint generation; replay refused.')
     }
@@ -67,6 +71,9 @@ export const POST = route<{ ref: string }, z.infer<typeof checkpointBody>>({
     }
     if (result.code === 'checkpoint_changed') {
       return fail('conflict', 'Checkpoint sequence changed; out-of-order checkpoint refused.')
+    }
+    if (result.code === 'missing_predecessor') {
+      return fail('conflict', 'Checkpoint requires ownership and checkpoint predecessors for an existing claim.')
     }
     if (result.code === 'terminal') return fail('conflict', 'Closed tasks do not accept checkpoints.')
     return ok({ ...(result.data ?? {}), ...(result.claimed ? { claimed: true } : {}), replay: result.code })

@@ -13,6 +13,17 @@ describe('release validation boundary', () => {
     expect(deploy).toContain('workflow_run.head_repository.full_name == github.repository')
     expect(deploy).not.toContain('workflow_dispatch:')
     expect(deploy).not.toMatch(/\n\s+push:\s*\n/)
+
+    const workflowRun = {
+      conclusion: 'success', event: 'pull_request', head_branch: 'main',
+      head_repository: { full_name: 'attacker/cairn' },
+    }
+    const repository = 'montytorr/cairn'
+    const canDeploy = workflowRun.conclusion === 'success' &&
+      workflowRun.event === 'push' &&
+      workflowRun.head_branch === 'main' &&
+      workflowRun.head_repository.full_name === repository
+    expect(canDeploy).toBe(false)
   })
 
   it('makes PostgreSQL integrity coverage a blocking CI job', () => {

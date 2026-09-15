@@ -91,6 +91,11 @@ describe('ownership generations and checkpoint ordering', () => {
       [taskId, ownerId, 'next despite skewed clock', randomUUID(), new Date(acceptedAt.getTime() - 60_000), version2, 1],
     )
     expect(nextInSequence.rows[0].row.code).toBe('ok')
+    const missingPredecessor = await pool().query(
+      `select checkpoint_task_atomic($1,$2,'agent','integration-agent',$3,null,$4,$5,null,null) as row`,
+      [taskId, ownerId, 'missing predecessor', randomUUID(), new Date()],
+    )
+    expect(missingPredecessor.rows[0].row.code).toBe('missing_predecessor')
     const current = await pool().query('select checkpoint_summary, claimed_by from tasks where id = $1', [taskId])
     expect(current.rows[0]).toMatchObject({ checkpoint_summary: 'next despite skewed clock', claimed_by: 'integration-agent' })
   })

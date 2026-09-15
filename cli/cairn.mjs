@@ -422,11 +422,12 @@ const flushOutbox = async () => {
     } catch {
       response = '<response unavailable>'
     }
+    let acknowledgedData = null
     if (res.ok) {
       sent += 1
       try {
         const payload = JSON.parse(response)
-        if (payload?.success) updateRememberedOwnership(item.path, payload.data)
+        if (payload?.success) acknowledgedData = payload.data
       } catch { /* a successful legacy endpoint may have no JSON body */ }
       if (TEST_CRASH_AFTER_SEND) process.kill(process.pid, 'SIGKILL')
     } else {
@@ -441,6 +442,10 @@ const flushOutbox = async () => {
     if (TEST_FAIL_PERSIST_AFTER_SEND) throw new Error('test failpoint: replay persistence failed')
     writeFileSync(temp, remaining.length ? `${remaining.join('\n')}\n` : '', { mode: 0o600 })
     renameSync(temp, processingPath)
+    // Advance local checkpoint state only after the acknowledged record has
+    // been durably removed from the processing file. Otherwise a local
+    // persistence failure leaves a phantom sequence gap for the next queue.
+    if (acknowledgedData) updateRememberedOwnership(item.path, acknowledgedData)
   }
 
     const left = lines.slice(index)

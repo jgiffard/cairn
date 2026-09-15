@@ -171,6 +171,50 @@ describe('durable CLI outbox', () => {
     expect(attempts[0]).toBe(attempts[1])
   })
 
+  it('recovers an orphaned processing file through the next ordinary successful write', async () => {
+    await run(home, base, ['comment', 'CAIRN-163', 'orphan recovery'])
+    mode = 'success'
+    const crashed = await run(
+      home,
+      base,
+      ['replay'],
+      'crn_integration_key',
+      { CAIRN_TEST_CRASH_AFTER_SEND: '1' },
+    )
+    expect(crashed.code).not.toBe(0)
+
+    const ordinary = await run(home, base, ['comment', 'CAIRN-163', 'ordinary write'])
+    expect(ordinary.code).toBe(0)
+    expect(received).toHaveLength(2)
+    expect(attempts.some((id, index) => id && attempts.indexOf(id) < index)).toBe(true)
+    expect(new Set(received.map((request) => request.id)).size).toBe(2)
+  })
+
+  it('does not reserve a checkpoint sequence twice after local progress persistence fails', async () => {
+    const ownershipDir = join(home, '.cairn', 'ownership')
+    await mkdir(ownershipDir, { recursive: true })
+    await writeFile(
+      join(ownershipDir, 'CAIRN-163.json'),
+      JSON.stringify({ ownershipVersion: 7, checkpointVersion: 3, agent: 'integration-agent' }),
+    )
+    await run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'acknowledged'])
+    mode = 'success'
+    const failed = await run(
+      home,
+      base,
+      ['replay'],
+      'crn_integration_key',
+      { CAIRN_TEST_FAIL_PERSIST_AFTER_SEND: '1' },
+    )
+    expect(failed.code).not.toBe(0)
+
+    mode = 'fail'
+    await run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'next'])
+    const lines = (await readFile(join(home, '.cairn', 'outbox.jsonl'), 'utf8')).trim().split('\n')
+    const versions = lines.map((line) => JSON.parse(line).body.checkpointVersion).sort()
+    expect(versions).toEqual([3, 4])
+  })
+
   it('retains an acknowledged item when local replay persistence fails', async () => {
     await run(home, base, ['comment', 'CAIRN-163', 'persistence recovery'])
     mode = 'success'
