@@ -11,6 +11,7 @@ const checkpointBody = z.object({
   summary: z.string().min(1).max(10_000),
   payload: z.record(z.string(), z.unknown()).optional(),
   ownershipVersion: z.number().int().nonnegative().optional(),
+  checkpointVersion: z.number().int().nonnegative().optional(),
 })
 
 /**
@@ -30,8 +31,8 @@ export const POST = route<{ ref: string }, z.infer<typeof checkpointBody>>({
     const idempotencyHeader = req.headers.get('idempotency-key')
     const parsedMutation = z.string().uuid().safeParse(idempotencyHeader)
     if (idempotencyHeader && !parsedMutation.success) return fail('validation_failed', 'Invalid idempotency key.')
-    if (idempotencyHeader && body.ownershipVersion === undefined) {
-      return fail('conflict', 'Queued checkpoint has no ownership generation; replay refused.')
+    if (idempotencyHeader && (body.ownershipVersion === undefined || body.checkpointVersion === undefined)) {
+      return fail('conflict', 'Queued checkpoint has no ownership/checkpoint generation; replay refused.')
     }
     const mutationId = parsedMutation.success ? parsedMutation.data : randomUUID()
     const queuedHeader = req.headers.get('x-cairn-queued-at')
@@ -53,6 +54,7 @@ export const POST = route<{ ref: string }, z.infer<typeof checkpointBody>>({
       p_mutation_id: mutationId,
       p_queued_at: queuedAt,
       p_expected_version: body.ownershipVersion ?? null,
+      p_expected_checkpoint_version: body.checkpointVersion ?? null,
     })
 
     if (error) return fail('internal_error', error.message)
@@ -62,6 +64,9 @@ export const POST = route<{ ref: string }, z.infer<typeof checkpointBody>>({
     }
     if (result.code === 'ownership_changed') {
       return fail('conflict', 'Claim ownership changed; stale checkpoint refused.')
+    }
+    if (result.code === 'checkpoint_changed') {
+      return fail('conflict', 'Checkpoint sequence changed; out-of-order checkpoint refused.')
     }
     if (result.code === 'terminal') return fail('conflict', 'Closed tasks do not accept checkpoints.')
     return ok({ ...(result.data ?? {}), ...(result.claimed ? { claimed: true } : {}), replay: result.code })

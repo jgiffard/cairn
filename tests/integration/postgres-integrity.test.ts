@@ -63,31 +63,36 @@ describe('ownership generations and checkpoint ordering', () => {
     expect(staleRelease.rows[0].row).toBeNull()
 
     const staleCheckpoint = await pool().query(
-      `select checkpoint_task_atomic($1,$2,'agent','integration-agent',$3,null,$4,$5,$6) as row`,
-      [taskId, ownerId, 'stale', randomUUID(), new Date(), version1],
+      `select checkpoint_task_atomic($1,$2,'agent','integration-agent',$3,null,$4,$5,$6,$7) as row`,
+      [taskId, ownerId, 'stale', randomUUID(), new Date(), version1, 0],
     )
     expect(staleCheckpoint.rows[0].row.code).toBe('ownership_changed')
 
     const acceptedAt = new Date()
     const mutationId = randomUUID()
     const accepted = await pool().query(
-      `select checkpoint_task_atomic($1,$2,'agent','integration-agent',$3,null,$4,$5,$6) as row`,
-      [taskId, ownerId, 'current', mutationId, acceptedAt, version2],
+      `select checkpoint_task_atomic($1,$2,'agent','integration-agent',$3,null,$4,$5,$6,$7) as row`,
+      [taskId, ownerId, 'current', mutationId, acceptedAt, version2, 0],
     )
     expect(accepted.rows[0].row.code).toBe('ok')
     const duplicate = await pool().query(
-      `select checkpoint_task_atomic($1,$2,'agent','integration-agent',$3,null,$4,$5,$6) as row`,
-      [taskId, ownerId, 'current', mutationId, acceptedAt, version2],
+      `select checkpoint_task_atomic($1,$2,'agent','integration-agent',$3,null,$4,$5,$6,$7) as row`,
+      [taskId, ownerId, 'current', mutationId, acceptedAt, version2, 0],
     )
     expect(duplicate.rows[0].row.code).toBe('duplicate')
 
     const outOfOrder = await pool().query(
-      `select checkpoint_task_atomic($1,$2,'agent','integration-agent',$3,null,$4,$5,$6) as row`,
-      [taskId, ownerId, 'older replay', randomUUID(), new Date(acceptedAt.getTime() - 1_000), version2],
+      `select checkpoint_task_atomic($1,$2,'agent','integration-agent',$3,null,$4,$5,$6,$7) as row`,
+      [taskId, ownerId, 'out of sequence', randomUUID(), new Date(acceptedAt.getTime() + 1_000), version2, 0],
     )
-    expect(outOfOrder.rows[0].row.code).toBe('stale_checkpoint')
+    expect(outOfOrder.rows[0].row.code).toBe('checkpoint_changed')
+    const nextInSequence = await pool().query(
+      `select checkpoint_task_atomic($1,$2,'agent','integration-agent',$3,null,$4,$5,$6,$7) as row`,
+      [taskId, ownerId, 'next despite skewed clock', randomUUID(), new Date(acceptedAt.getTime() - 60_000), version2, 1],
+    )
+    expect(nextInSequence.rows[0].row.code).toBe('ok')
     const current = await pool().query('select checkpoint_summary, claimed_by from tasks where id = $1', [taskId])
-    expect(current.rows[0]).toMatchObject({ checkpoint_summary: 'current', claimed_by: 'integration-agent' })
+    expect(current.rows[0]).toMatchObject({ checkpoint_summary: 'next despite skewed clock', claimed_by: 'integration-agent' })
   })
 
   it('makes reconcile lose safely when heartbeat state changes after its snapshot', async () => {

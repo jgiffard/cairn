@@ -99,7 +99,8 @@ create or replace function checkpoint_task_atomic(
   p_payload jsonb,
   p_mutation_id uuid,
   p_queued_at timestamptz,
-  p_expected_version bigint default null
+  p_expected_version bigint default null,
+  p_expected_checkpoint_version bigint default null
 ) returns jsonb language plpgsql as $$
 declare
   current_row tasks%rowtype;
@@ -114,9 +115,6 @@ begin
   if current_row.checkpoint_mutation_id = p_mutation_id then
     return jsonb_build_object('code', 'duplicate', 'data', to_jsonb(current_row));
   end if;
-  if current_row.checkpoint_at is not null and p_queued_at <= current_row.checkpoint_at then
-    return jsonb_build_object('code', 'stale_checkpoint', 'data', to_jsonb(current_row));
-  end if;
   if current_row.status in ('done', 'cancelled') then
     return jsonb_build_object('code', 'terminal');
   end if;
@@ -127,6 +125,12 @@ begin
   if p_expected_version is not null and
      (current_row.claimed_by is null or current_row.ownership_version <> p_expected_version) then
     return jsonb_build_object('code', 'ownership_changed', 'version', current_row.ownership_version);
+  end if;
+
+  if p_expected_checkpoint_version is not null and
+     current_row.checkpoint_version <> p_expected_checkpoint_version then
+    return jsonb_build_object('code', 'checkpoint_changed',
+      'version', current_row.checkpoint_version);
   end if;
 
   if current_row.claimed_by is null and p_actor_type = 'agent' then
@@ -143,7 +147,7 @@ begin
   update tasks set
     checkpoint_summary = p_summary,
     checkpoint_payload = p_payload,
-    checkpoint_at = p_queued_at,
+    checkpoint_at = now(),
     checkpoint_version = checkpoint_version + 1,
     checkpoint_mutation_id = p_mutation_id,
     heartbeat_at = case when claimed_by = p_actor_id then now() else heartbeat_at end
@@ -165,6 +169,7 @@ begin
   values
     (p_owner_user_id, current_row.project_id, current_row.id, p_actor_type, p_actor_id,
      'checkpointed', jsonb_build_object('summary', left(p_summary, 300),
+       'queuedAt', p_queued_at,
        'checkpointVersion', current_row.checkpoint_version,
        'ownershipVersion', current_row.ownership_version));
 

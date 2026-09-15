@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -7,7 +7,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 const cli = join(process.cwd(), 'cli', 'cairn.mjs')
 
-const run = (home: string, base: string, args: string[], key = 'crn_integration_key') =>
+const run = (
+  home: string,
+  base: string,
+  args: string[],
+  key = 'crn_integration_key',
+  extraEnv: Record<string, string> = {},
+) =>
   new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
     const child = spawn(process.execPath, [cli, ...args], {
       env: {
@@ -21,6 +27,7 @@ const run = (home: string, base: string, args: string[], key = 'crn_integration_
         HTTP_PROXY: '',
         HTTPS_PROXY: '',
         ALL_PROXY: '',
+        ...extraEnv,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -37,10 +44,14 @@ describe('durable CLI outbox', () => {
   let base: string
   let mode: 'fail' | 'success' = 'fail'
   const received: { id: string | undefined; body: string }[] = []
+  const attempts: string[] = []
+  const seen = new Map<string, number>()
 
   beforeEach(async () => {
     home = await mkdtemp(join(tmpdir(), 'cairn-outbox-'))
     received.length = 0
+    attempts.length = 0
+    seen.clear()
     mode = 'fail'
     server = createServer((req, res) => {
       let body = ''
@@ -51,7 +62,15 @@ describe('durable CLI outbox', () => {
           res.end(JSON.stringify({ success: false, error: 'offline' }))
           return
         }
-        received.push({ id: req.headers['idempotency-key'] as string | undefined, body })
+        const id = req.headers['idempotency-key'] as string | undefined
+        attempts.push(id ?? '')
+        if (id && seen.has(id)) {
+          res.writeHead(200, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ success: true, data: { id: seen.get(id) } }))
+          return
+        }
+        received.push({ id, body })
+        if (id) seen.set(id, received.length)
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ success: true, data: { id: received.length } }))
       })
@@ -97,5 +116,78 @@ describe('durable CLI outbox', () => {
     expect(received).toHaveLength(0)
     const rejected = await readFile(join(home, '.cairn', 'outbox.jsonl.rejected'), 'utf8')
     expect(rejected).toContain('replay context mismatch')
+  })
+
+  it('serializes concurrent replay workers without duplicating side effects', async () => {
+    await Promise.all(Array.from({ length: 12 }, (_, index) =>
+      run(home, base, ['comment', 'CAIRN-163', `concurrent-${index}`]),
+    ))
+    mode = 'success'
+    const results = await Promise.all([
+      run(home, base, ['replay']),
+      run(home, base, ['replay']),
+    ])
+    expect(results.every((result) => result.code === 0)).toBe(true)
+    expect(received).toHaveLength(12)
+    expect(new Set(received.map((request) => request.id)).size).toBe(12)
+  })
+
+  it('reserves monotonic checkpoint sequences under concurrent offline writes', async () => {
+    const ownershipDir = join(home, '.cairn', 'ownership')
+    await mkdir(ownershipDir, { recursive: true })
+    await writeFile(
+      join(ownershipDir, 'CAIRN-163.json'),
+      JSON.stringify({ ownershipVersion: 7, checkpointVersion: 3, agent: 'integration-agent' }),
+    )
+    const queued = await Promise.all([
+      run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'first']),
+      run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'second']),
+    ])
+    expect(queued.every((result) => result.code === 0)).toBe(true)
+
+    const lines = (await readFile(join(home, '.cairn', 'outbox.jsonl'), 'utf8')).trim().split('\n')
+    const versions = lines.map((line) => JSON.parse(line).body.checkpointVersion).sort()
+    expect(versions).toEqual([3, 4])
+    expect(lines.every((line) => JSON.parse(line).body.ownershipVersion === 7)).toBe(true)
+  })
+
+  it('recovers a dead worker processing file immediately after an acknowledged send', async () => {
+    await run(home, base, ['comment', 'CAIRN-163', 'crash recovery'])
+    mode = 'success'
+    const crashed = await run(
+      home,
+      base,
+      ['replay'],
+      'crn_integration_key',
+      { CAIRN_TEST_CRASH_AFTER_SEND: '1' },
+    )
+    expect(crashed.code).not.toBe(0)
+
+    const recovered = await run(home, base, ['replay'])
+    expect(recovered.code).toBe(0)
+    expect(recovered.stdout).toContain('still queued 0')
+    expect(received).toHaveLength(1)
+    expect(attempts).toHaveLength(2)
+    expect(attempts[0]).toBe(attempts[1])
+  })
+
+  it('retains an acknowledged item when local replay persistence fails', async () => {
+    await run(home, base, ['comment', 'CAIRN-163', 'persistence recovery'])
+    mode = 'success'
+    const failed = await run(
+      home,
+      base,
+      ['replay'],
+      'crn_integration_key',
+      { CAIRN_TEST_FAIL_PERSIST_AFTER_SEND: '1' },
+    )
+    expect(failed.code).not.toBe(0)
+
+    const recovered = await run(home, base, ['replay'])
+    expect(recovered.code).toBe(0)
+    expect(recovered.stdout).toContain('still queued 0')
+    expect(received).toHaveLength(1)
+    expect(attempts).toHaveLength(2)
+    expect(attempts[0]).toBe(attempts[1])
   })
 })
