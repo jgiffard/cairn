@@ -119,6 +119,14 @@ begin
     return jsonb_build_object('code', 'terminal');
   end if;
 
+  -- Existing claims must carry both predecessors. Nulls are reserved for the
+  -- atomic initial-claim path below; otherwise a stale caller could bypass
+  -- generation and checkpoint ordering by omitting its headers.
+  if current_row.claimed_by is not null and
+     (p_expected_version is null or p_expected_checkpoint_version is null) then
+    return jsonb_build_object('code', 'missing_predecessor');
+  end if;
+
   -- A queued checkpoint that belonged to a released generation must not
   -- resurrect that claim. Only a live checkpoint with no prior generation may
   -- infer an initial claim.
