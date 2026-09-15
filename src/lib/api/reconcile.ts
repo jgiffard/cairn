@@ -1,6 +1,5 @@
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
-import { recordActivity } from './activity'
 
 /**
  * The backstop for runtimes with no session-end event.
@@ -47,7 +46,7 @@ export const reconcileClaims = async (
     .from('tasks')
     .select(
       'id, number, status, claimed_at, heartbeat_at, checkpoint_at, updated_at, ' +
-        'checkpoint_summary, project:projects!project_id!inner(key, owner_user_id)',
+        'checkpoint_summary, ownership_version, project:projects!project_id!inner(key, owner_user_id)',
     )
     .eq('projects.owner_user_id', actor.userId)
     .eq('claimed_by', actor.actorId)
@@ -63,6 +62,7 @@ export const reconcileClaims = async (
     checkpoint_at: string | null
     updated_at: string | null
     checkpoint_summary: string | null
+    ownership_version: number
     project: { key: string }
   }[]
 
@@ -106,46 +106,29 @@ export const reconcileClaims = async (
     const reopen = task.status === 'doing'
 
     if (!options.dryRun) {
-      const { error: releaseError } = await admin()
-        .from('tasks')
-        .update({
-          claimed_by: null,
-          claimed_at: null,
-          heartbeat_at: null,
-          ...(reopen ? { status: 'todo' } : {}),
-        })
-        .eq('id', task.id)
+      const note =
+        `Claim released automatically: nothing happened on this task for ${quietFor} minutes. ` +
+        (task.checkpoint_summary
+          ? 'The checkpoint above is where it was left. '
+          : 'No checkpoint was recorded, so the state is whatever the last note says. ') +
+        (reopen
+          ? 'Moved back to todo, because nobody is working on it — pick it up and finish it, or close it with a resolution.'
+          : '')
+      const { data: didRelease, error: releaseError } = await admin().rpc<boolean>('reconcile_task_atomic', {
+        p_task_id: task.id,
+        p_owner_user_id: actor.userId,
+        p_actor_type: actor.actorType,
+        p_actor_id: actor.actorId,
+        p_expected_holder: actor.actorId,
+        p_expected_version: task.ownership_version,
+        p_expected_heartbeat: task.heartbeat_at,
+        p_expected_updated_at: task.updated_at,
+        p_reopen: reopen,
+        p_note: note,
+        p_content_hash: `reconcile-${task.id}-${task.ownership_version}-${task.heartbeat_at ?? 'none'}`,
+      })
       if (releaseError) throw new Error(releaseError.message)
-
-      // Say why it was let go, so the next reader is not left guessing whether
-      // the work stopped deliberately.
-      await admin()
-        .from('task_notes')
-        .insert({
-          task_id: task.id,
-          actor_type: actor.actorType,
-          actor_id: actor.actorId,
-          kind: 'handoff',
-          note:
-            `Claim released automatically: nothing happened on this task for ${quietFor} minutes. ` +
-            (task.checkpoint_summary
-              ? 'The checkpoint above is where it was left. '
-              : 'No checkpoint was recorded, so the state is whatever the last note says. ') +
-            (reopen
-              ? 'Moved back to todo, because nobody is working on it — pick it up and finish it, or close it with a resolution.'
-              : ''),
-          content_hash: `reconcile-${task.id}-${task.heartbeat_at ?? 'none'}`,
-        })
-
-      await recordActivity([
-        {
-          task_id: task.id,
-          actor_type: actor.actorType,
-          actor_id: actor.actorId ?? 'unknown',
-          event: 'released',
-          data: { reason: 'reconcile', heldForMinutes, reopened: reopen },
-        },
-      ], actor.userId)
+      if (!didRelease) continue
     }
 
     released.push({

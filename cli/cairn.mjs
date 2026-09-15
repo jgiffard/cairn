@@ -13,7 +13,21 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -213,18 +227,56 @@ let FLUSHING = false
  */
 const OUTBOX_PATH = join(homedir(), '.cairn', 'outbox.jsonl')
 const REJECTED_OUTBOX_PATH = `${OUTBOX_PATH}.rejected`
+const OUTBOX_LOCK_PATH = `${OUTBOX_PATH}.lock`
+const OUTBOX_PREFIX = 'outbox.jsonl.'
 const QUEUEABLE = /\/(notes|comments|beat|checkpoint)$/
+const KEY_ID = KEY ? createHash('sha256').update(KEY).digest('hex').slice(0, 24) : ''
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /** Put a write aside so the agent can carry on, and say so plainly. */
-const enqueue = (method, path, body, why) => {
+const withOutboxLock = async (run) => {
+  mkdirSync(dirname(OUTBOX_PATH), { recursive: true })
+  const deadline = Date.now() + Math.max(DEADLINE_MS, 5_000)
+  let handle
+  while (handle === undefined) {
+    try {
+      handle = openSync(OUTBOX_LOCK_PATH, 'wx', 0o600)
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error
+      try {
+        if (Date.now() - statSync(OUTBOX_LOCK_PATH).mtimeMs > Math.max(DEADLINE_MS * 4, 60_000)) {
+          unlinkSync(OUTBOX_LOCK_PATH)
+          continue
+        }
+      } catch {
+        continue
+      }
+      if (Date.now() >= deadline) throw new Error('timed out waiting for the outbox lock')
+      await sleep(20)
+    }
+  }
   try {
-    mkdirSync(dirname(OUTBOX_PATH), { recursive: true })
-    appendFileSync(
-      OUTBOX_PATH,
-      `${JSON.stringify({ t: new Date().toISOString(), method, path, body, agent: AGENT })}\n`,
-    )
+    return await run()
+  } finally {
+    closeSync(handle)
+    try { unlinkSync(OUTBOX_LOCK_PATH) } catch { /* stale recovery may already have removed it */ }
+  }
+}
+
+const enqueue = async (method, path, body, why) => {
+  const item = {
+    id: randomUUID(),
+    t: new Date().toISOString(),
+    method,
+    path,
+    body,
+    agent: AGENT,
+    base: BASE,
+    keyId: KEY_ID,
+  }
+  try {
+    await withOutboxLock(() => appendFileSync(OUTBOX_PATH, `${JSON.stringify(item)}\n`, { mode: 0o600 }))
   } catch (error) {
     die(`${why}, and it could not be queued either: ${error.message}`)
   }
@@ -241,38 +293,84 @@ const enqueue = (method, path, body, why) => {
  * moved to a rejected sidecar with the response, never silently discarded.
  */
 const flushOutbox = async () => {
-  let lines
-  try {
-    lines = readFileSync(OUTBOX_PATH, 'utf8').trim().split('\n').filter(Boolean)
-  } catch {
-    return { sent: 0, rejected: 0, left: 0 }
-  }
-  if (lines.length === 0) return { sent: 0, rejected: 0, left: 0 }
-
   let sent = 0
   let rejected = 0
-  let index = 0
-  for (; index < lines.length; index += 1) {
+  const claimId = `${process.pid}-${randomUUID()}`
+  let claimed = []
+  try {
+    claimed = await withOutboxLock(() => {
+      const dir = dirname(OUTBOX_PATH)
+      for (const name of readdirSync(dir)) {
+        if (!name.startsWith(`${OUTBOX_PREFIX}processing-`)) continue
+        const path = join(dir, name)
+        try {
+          if (Date.now() - statSync(path).mtimeMs > Math.max(DEADLINE_MS * 4, 60_000)) {
+            renameSync(path, join(dir, `${OUTBOX_PREFIX}pending-${randomUUID()}`))
+          }
+        } catch { /* another recovery won the rename */ }
+      }
+      if (existsSync(OUTBOX_PATH) && statSync(OUTBOX_PATH).size > 0) {
+        renameSync(OUTBOX_PATH, join(dir, `${OUTBOX_PREFIX}pending-${randomUUID()}`))
+      }
+      const paths = []
+      for (const name of readdirSync(dir)) {
+        if (!name.startsWith(`${OUTBOX_PREFIX}pending-`)) continue
+        const from = join(dir, name)
+        const to = join(dir, `${OUTBOX_PREFIX}processing-${claimId}-${randomUUID()}`)
+        try {
+          renameSync(from, to)
+          paths.push(to)
+        } catch { /* another replay process claimed it */ }
+      }
+      return paths
+    })
+  } catch {
+    return { sent: 0, rejected: 0, left: existsSync(OUTBOX_PATH) ? 1 : 0 }
+  }
+
+  const reject = (entry) => {
+    appendFileSync(REJECTED_OUTBOX_PATH, `${JSON.stringify(entry)}\n`, { mode: 0o600 })
+    rejected += 1
+  }
+
+  for (const processingPath of claimed) {
+    let lines
+    try {
+      lines = readFileSync(processingPath, 'utf8').split('\n').filter(Boolean)
+    } catch {
+      continue
+    }
+    let index = 0
+    for (; index < lines.length; index += 1) {
     let item
     try {
       item = JSON.parse(lines[index])
     } catch {
       try {
-        appendFileSync(
-          REJECTED_OUTBOX_PATH,
-          `${JSON.stringify({ rejectedAt: new Date().toISOString(), reason: 'invalid JSON', raw: lines[index] })}\n`,
-        )
+        reject({ rejectedAt: new Date().toISOString(), reason: 'invalid JSON', raw: lines[index] })
       } catch {
         break
       }
-      rejected += 1
+      continue
+    }
+    if (!item.id || item.base !== BASE || item.agent !== AGENT || item.keyId !== KEY_ID) {
+      try {
+        reject({ rejectedAt: new Date().toISOString(), reason: 'replay context mismatch', item })
+      } catch {
+        break
+      }
       continue
     }
     let res
     try {
       res = await fetch(`${BASE}${item.path}`, {
         method: item.method,
-        headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${KEY}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': item.id,
+          'X-Cairn-Queued-At': item.t,
+        },
         body: item.body === undefined ? undefined : JSON.stringify(item.body),
       })
     } catch {
@@ -288,33 +386,42 @@ const flushOutbox = async () => {
         response = '<response unavailable>'
       }
       try {
-        appendFileSync(
-          REJECTED_OUTBOX_PATH,
-          `${JSON.stringify({ rejectedAt: new Date().toISOString(), status: res.status, response, item })}\n`,
-        )
+        reject({ rejectedAt: new Date().toISOString(), status: res.status, response, item })
       } catch {
         break
       }
-      rejected += 1
     }
+    const remaining = lines.slice(index + 1)
+    const temp = `${processingPath}.tmp`
+    writeFileSync(temp, remaining.length ? `${remaining.join('\n')}\n` : '', { mode: 0o600 })
+    renameSync(temp, processingPath)
   }
 
-  // Whatever the loop stopped before. A break leaves lines[index] unsent, and
-  // running to the end leaves nothing — so the index is the whole answer, and
-  // the counters are only for reporting.
-  const left = lines.slice(index)
-  try {
-    if (left.length === 0) rmSync(OUTBOX_PATH, { force: true })
-    else writeFileSync(OUTBOX_PATH, `${left.join('\n')}\n`)
-  } catch {
-    // Leaving the file as it was replays a few writes twice, which is a note
-    // appearing twice. Losing it loses work. The duplicate is the better bug.
+    const left = lines.slice(index)
+    if (left.length > 0) {
+      try {
+        await withOutboxLock(() => appendFileSync(OUTBOX_PATH, `${left.join('\n')}\n`, { mode: 0o600 }))
+      } catch {
+        continue
+      }
+    }
+    rmSync(processingPath, { force: true })
   }
-  return { sent, rejected, left: left.length }
+
+  let left = 0
+  try { left = readFileSync(OUTBOX_PATH, 'utf8').split('\n').filter(Boolean).length } catch { /* empty */ }
+  for (const path of claimed) if (existsSync(path)) {
+    try { left += readFileSync(path, 'utf8').split('\n').filter(Boolean).length } catch { /* retry later */ }
+  }
+  return { sent, rejected, left }
 }
 
 const request = async (method, path, body, { soft = false } = {}) => {
   if (!KEY) die('CAIRN_API_KEY is not set (env, or ~/.cairn/env).')
+  const ownershipVersion = rememberedOwnership(path)
+  if (ownershipVersion !== null && body && typeof body === 'object') {
+    body = { ...body, ownershipVersion }
+  }
   let res
   const startedAt = Date.now()
   const spent = () => Date.now() - startedAt
@@ -323,7 +430,12 @@ const request = async (method, path, body, { soft = false } = {}) => {
   // ones whose answer the caller does not need; everything else fails fast,
   // which is still far better than blocking for minutes.
   const giveUp = (why) => {
-    if (method !== 'GET' && QUEUEABLE.test(path.split('?')[0])) return enqueue(method, path, body, why)
+    if (method !== 'GET' && QUEUEABLE.test(path.split('?')[0])) {
+      if (path.split('?')[0].endsWith('/checkpoint') && rememberedOwnership(path) === null) {
+        die(`${why}; checkpoint cannot be queued without a known ownership generation`)
+      }
+      return enqueue(method, path, body, why)
+    }
     die(`${why} (${Math.round(spent() / 1000)}s)`)
   }
 
@@ -383,6 +495,7 @@ const request = async (method, path, body, { soft = false } = {}) => {
   // the method, the path and that the server said yes.
   if (method !== 'GET') {
     rememberWrite(method, path, payload.data)
+    updateRememberedOwnership(path, payload.data)
     // The server just answered, so anything put aside while it was down can go
     // now. No cron and nothing to remember to run: the next write drains it.
     if (!FLUSHING && existsSync(OUTBOX_PATH)) {
@@ -496,6 +609,38 @@ const emit = (data, opts = {}) => {
  * subdirectory can override its parent.
  */
 const PROJECT_MAP_PATH = join(homedir(), '.cairn', 'projects.json')
+const OWNERSHIP_DIR = join(homedir(), '.cairn', 'ownership')
+
+const ownershipPath = (ref) => join(OWNERSHIP_DIR, `${ref.toUpperCase().replace(/[^A-Z0-9-]/g, '_')}.json`)
+
+const rememberedOwnership = (path) => {
+  const raw = /\/api\/v1\/tasks\/([^/?]+)\/(?:beat|checkpoint|release)$/.exec(path)?.[1]
+  if (!raw) return null
+  try {
+    const value = JSON.parse(readFileSync(ownershipPath(decodeURIComponent(raw)), 'utf8'))
+    return Number.isSafeInteger(value?.ownershipVersion) ? value.ownershipVersion : null
+  } catch {
+    return null
+  }
+}
+
+const updateRememberedOwnership = (path, data) => {
+  const match = /\/api\/v1\/tasks\/([^/?]+)\/(claim|checkpoint|release)$/.exec(path)
+  if (!match) return
+  const target = ownershipPath(decodeURIComponent(match[1]))
+  try {
+    mkdirSync(OWNERSHIP_DIR, { recursive: true })
+    if (match[2] === 'release') return rmSync(target, { force: true })
+    const version = Number(data?.ownership_version)
+    if (!Number.isSafeInteger(version)) return
+    const temp = `${target}.${process.pid}.tmp`
+    writeFileSync(temp, `${JSON.stringify({ ownershipVersion: version, agent: AGENT })}\n`, { mode: 0o600 })
+    renameSync(temp, target)
+  } catch {
+    // The server remains authoritative. Missing local context makes an offline
+    // checkpoint fail closed instead of guessing an ownership generation.
+  }
+}
 
 /**
  * A breadcrumb per successful write, so a session does not have to be guessed at.

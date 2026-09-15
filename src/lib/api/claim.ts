@@ -19,51 +19,18 @@ export const takeTask = async (
   const now = new Date()
   const staleBefore = new Date(now.getTime() - CLAIM_LEASE_SECONDS * 1000).toISOString()
 
-  const patch: Record<string, unknown> = {
-    claimed_by: holder,
-    claimed_at: now.toISOString(),
-    heartbeat_at: now.toISOString(),
-    attempt: ((task.attempt as number) ?? 0) + 1,
-  }
-  if (setDoing) patch.status = 'doing'
-
-  const { data, error } = await admin()
-    .from('tasks')
-    .update(patch)
-    .eq('id', task.id)
-    .or(`claimed_by.is.null,heartbeat_at.lt.${staleBefore}`)
-    .select('id, number, status, claimed_by, claimed_at, heartbeat_at, attempt')
+  const { data, error } = await admin().rpc<Record<string, unknown> | null>('claim_task_atomic', {
+    p_task_id: task.id,
+    p_owner_user_id: actor.userId,
+    p_actor_type: actor.actorType,
+    p_actor_id: actor.actorId,
+    p_holder: holder,
+    p_stale_before: staleBefore,
+    p_set_doing: setDoing,
+  })
 
   if (error) return { row: null, error: error.message }
-  if (!data || data.length === 0) return { row: null, error: null } // somebody else holds it
-
-  const events: Record<string, unknown>[] = [
-    {
-      task_id: task.id,
-      actor_type: actor.actorType,
-      actor_id: actor.actorId,
-      event: 'claimed',
-      data: { agent: holder, attempt: patch.attempt },
-    },
-  ]
-
-  // Claiming moves the task to `doing`, and that move is recorded like any
-  // other — without it, history showed tasks going straight from backlog to
-  // done and "do agents start their work" answered the opposite of the truth.
-  if (patch.status && patch.status !== task.status) {
-    events.push({
-      task_id: task.id,
-      actor_type: actor.actorType,
-      actor_id: actor.actorId,
-      event: 'status_changed',
-      data: { from: task.status, to: patch.status, via: 'claim' },
-    })
-  }
-
-  await admin()
-    .from('task_activity_events')
-    .insert(events.map((e) => ({ owner_user_id: actor.userId, project_id: task.project_id ?? null, ...e })))
-  return { row: (data as Record<string, unknown>[])[0], error: null }
+  return { row: data, error: null }
 }
 
 /**

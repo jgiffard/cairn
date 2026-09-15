@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
@@ -6,8 +7,11 @@ import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 export const dynamic = 'force-dynamic'
 
 /** Keeps a claim alive. Only the holder may beat it. */
-export const POST = route<{ ref: string }>({
-  handler: async ({ actor, params }) => {
+const beatBody = z.object({ ownershipVersion: z.number().int().nonnegative().optional() })
+
+export const POST = route<{ ref: string }, z.infer<typeof beatBody>>({
+  schema: beatBody,
+  handler: async ({ actor, params, body, req }) => {
     const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
 
@@ -17,15 +21,20 @@ export const POST = route<{ ref: string }>({
       return fail('already_claimed', `Held by ${holder}, not you.`, { claimedBy: holder })
     }
 
-    const { data, error } = await admin()
+    if (req.headers.get('idempotency-key') && body.ownershipVersion === undefined) {
+      return fail('conflict', 'Queued heartbeat has no ownership generation; replay refused.')
+    }
+
+    let update = admin()
       .from('tasks')
       .update({ heartbeat_at: new Date().toISOString() })
       .eq('id', task.id)
       .eq('claimed_by', holder)
-      .select('id, number, claimed_by, heartbeat_at')
-      .single()
+    if (body.ownershipVersion !== undefined) update = update.eq('ownership_version', body.ownershipVersion)
+    const { data, error } = await update.select('id, number, claimed_by, heartbeat_at, ownership_version').maybeSingle()
 
     if (error) return fail('internal_error', error.message)
+    if (!data) return fail('conflict', 'Claim ownership changed; stale heartbeat refused.')
     return ok(data)
   },
 })

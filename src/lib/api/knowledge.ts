@@ -1,4 +1,4 @@
-import { admin } from '@/lib/db/client'
+import { admin, normalizeDatabaseValue, transaction } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { slugify, type KnowledgeCreate, type KnowledgeUpdate } from '@/schemas/knowledge'
 import { findTask } from './tasks'
@@ -56,20 +56,6 @@ const resolveEntities = async (userId: string, keys: string[]) => {
     ids: wanted.map((k) => found.get(k)).filter((id): id is string => Boolean(id)),
     missing: wanted.filter((k) => !found.has(k)),
   }
-}
-
-const relinkEntities = async (knowledgeId: string, entityIds: string[]) => {
-  const { error: clearError } = await admin()
-    .from('knowledge_entities')
-    .delete()
-    .eq('knowledge_id', knowledgeId)
-  if (clearError) throw new Error(clearError.message)
-
-  if (entityIds.length === 0) return
-  const { error } = await admin()
-    .from('knowledge_entities')
-    .insert(entityIds.map((entity_id) => ({ knowledge_id: knowledgeId, entity_id })))
-  if (error) throw new Error(error.message)
 }
 
 /** Project keys -> ids, owner-scoped. Unknown keys are reported, never ignored. */
@@ -331,36 +317,38 @@ export const createKnowledge = async (actor: Actor, input: KnowledgeCreate) => {
     sourceTaskId = task.id
   }
 
-  const { data, error } = await admin()
-    .from('knowledge')
-    .insert({
-      owner_user_id: actor.userId,
-      slug,
-      title: input.title,
-      body: input.body,
-      labels: input.labels,
-      actor_type: actor.actorType,
-      actor_id: actor.actorId,
-      source_task_id: sourceTaskId,
-      source_session_id: input.sourceSessionId ?? null,
-      verified_at: input.verified ? new Date().toISOString() : null,
+  let data: KnowledgeRow
+  try {
+    data = await transaction(async (client) => {
+      const inserted = await client.query(
+        `insert into knowledge
+          (owner_user_id, slug, title, body, labels, actor_type, actor_id,
+           source_task_id, source_session_id, verified_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *`,
+        [actor.userId, slug, input.title, input.body, input.labels, actor.actorType,
+          actor.actorId, sourceTaskId, input.sourceSessionId ?? null,
+          input.verified ? new Date().toISOString() : null],
+      )
+      const row = inserted.rows[0] as KnowledgeRow
+      if (ids.length > 0) {
+        await client.query(
+          `insert into knowledge_projects (knowledge_id, project_id)
+           select $1, unnest($2::uuid[])`, [row.id, ids],
+        )
+      }
+      if (entities.ids.length > 0) {
+        await client.query(
+          `insert into knowledge_entities (knowledge_id, entity_id)
+           select $1, unnest($2::uuid[])`, [row.id, entities.ids],
+        )
+      }
+      return normalizeDatabaseValue(row) as KnowledgeRow
     })
-    .select(COLUMNS)
-    .single<KnowledgeRow>()
-
-  if (error) {
-    if (error.code === '23505') throw new Error(`Knowledge "${slug}" already exists.`)
-    throw new Error(error.message)
+  } catch (error) {
+    const candidate = error as { code?: string; message?: string }
+    if (candidate.code === '23505') throw new Error(`Knowledge "${slug}" already exists.`)
+    throw error
   }
-
-  if (ids.length > 0) {
-    const { error: linkError } = await admin()
-      .from('knowledge_projects')
-      .insert(ids.map((project_id) => ({ knowledge_id: data.id, project_id })))
-    if (linkError) throw new Error(linkError.message)
-  }
-
-  if (entities.ids.length > 0) await relinkEntities(data.id, entities.ids)
 
   const [row] = await withProjects([data as unknown as KnowledgeRow])
   return row
@@ -389,42 +377,57 @@ export const updateKnowledge = async (actor: Actor, slug: string, patch: Knowled
     }
   }
 
-  if (Object.keys(fields).length > 0) {
-    const { error } = await admin()
-      .from('knowledge')
-      .update(fields)
-      .eq('id', existing.id)
-      .eq('owner_user_id', actor.userId)
-    if (error) throw new Error(error.message)
-  }
-
+  let entityIds: string[] | undefined
   if (patch.entities !== undefined) {
     const entities = await resolveEntities(actor.userId, patch.entities)
     if (entities.missing.length > 0) {
       throw new Error(`No such entity: ${entities.missing.join(', ')}`)
     }
-    await relinkEntities(existing.id, entities.ids)
+    entityIds = entities.ids
   }
 
   // Project links are replaced wholesale when given: an explicit list is a
   // statement about where this applies, not an addition to it.
+  let projectIds: string[] | undefined
   if (patch.projects !== undefined) {
     const { ids, missing } = await resolveProjects(actor.userId, patch.projects)
     if (missing.length > 0) throw new Error(`No such project: ${missing.join(', ')}`)
-
-    const { error: clearError } = await admin()
-      .from('knowledge_projects')
-      .delete()
-      .eq('knowledge_id', existing.id)
-    if (clearError) throw new Error(clearError.message)
-
-    if (ids.length > 0) {
-      const { error: linkError } = await admin()
-        .from('knowledge_projects')
-        .insert(ids.map((project_id) => ({ knowledge_id: existing.id, project_id })))
-      if (linkError) throw new Error(linkError.message)
-    }
+    projectIds = ids
   }
+
+  await transaction(async (client) => {
+    if (Object.keys(fields).length > 0) {
+      const columns = Object.keys(fields)
+      const allowed = new Set(['title', 'body', 'labels', 'verified_at', 'superseded_by'])
+      if (columns.some((column) => !allowed.has(column))) throw new Error('Unsafe knowledge update field')
+      const values = Object.values(fields)
+      const assignments = columns.map((column, index) => `"${column}" = $${index + 1}`).join(', ')
+      const result = await client.query(
+        `update knowledge set ${assignments} where id = $${values.length + 1}
+          and owner_user_id = $${values.length + 2}`,
+        [...values, existing.id, actor.userId],
+      )
+      if (result.rowCount !== 1) throw new Error(`Knowledge "${slug}" changed or disappeared.`)
+    }
+    if (entityIds !== undefined) {
+      await client.query('delete from knowledge_entities where knowledge_id = $1', [existing.id])
+      if (entityIds.length > 0) {
+        await client.query(
+          `insert into knowledge_entities (knowledge_id, entity_id)
+           select $1, unnest($2::uuid[])`, [existing.id, entityIds],
+        )
+      }
+    }
+    if (projectIds !== undefined) {
+      await client.query('delete from knowledge_projects where knowledge_id = $1', [existing.id])
+      if (projectIds.length > 0) {
+        await client.query(
+          `insert into knowledge_projects (knowledge_id, project_id)
+           select $1, unnest($2::uuid[])`, [existing.id, projectIds],
+        )
+      }
+    }
+  })
 
   return getKnowledge(actor.userId, slug)
 }

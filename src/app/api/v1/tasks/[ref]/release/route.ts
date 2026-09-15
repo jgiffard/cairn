@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
@@ -9,27 +10,27 @@ export const dynamic = 'force-dynamic'
  * Drops a claim without closing the task. This is the whole of "handoff" —
  * release, having left a checkpoint. No contract, no invitation, no accept.
  */
-export const POST = route<{ ref: string }>({
-  handler: async ({ actor, params }) => {
+const releaseBody = z.object({ ownershipVersion: z.number().int().nonnegative().optional() })
+
+export const POST = route<{ ref: string }, z.infer<typeof releaseBody>>({
+  schema: releaseBody,
+  handler: async ({ actor, params, body }) => {
     const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
 
-    const { data, error } = await admin()
-      .from('tasks')
-      .update({ claimed_by: null, claimed_at: null, heartbeat_at: null })
-      .eq('id', task.id)
-      .select('id, number, status, claimed_by')
-      .single()
+    const version = body.ownershipVersion ?? Number(task.ownership_version ?? 0)
+    const expectedHolder = actor.actorType === 'agent' ? actor.actorId : null
+    const { data, error } = await admin().rpc<Record<string, unknown> | null>('release_task_atomic', {
+      p_task_id: task.id,
+      p_owner_user_id: actor.userId,
+      p_actor_type: actor.actorType,
+      p_actor_id: actor.actorId,
+      p_expected_version: version,
+      p_expected_holder: expectedHolder,
+    })
 
     if (error) return fail('internal_error', error.message)
-
-    await admin().from('task_activity_events').insert({
-      task_id: task.id,
-      actor_type: actor.actorType,
-      actor_id: actor.actorId,
-      event: 'released',
-      data: { previousHolder: task.claimed_by },
-    })
+    if (!data) return fail('conflict', 'Claim ownership changed; nothing was released.')
 
     return ok(data)
   },

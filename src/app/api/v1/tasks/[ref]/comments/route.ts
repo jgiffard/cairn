@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
@@ -27,22 +28,25 @@ export const GET = route<{ ref: string }>({
 /** Conversation aimed at the human. Findings and dead ends belong in notes. */
 export const POST = route<{ ref: string }, z.infer<typeof createComment>>({
   schema: createComment,
-  handler: async ({ actor, params, body }) => {
+  handler: async ({ actor, params, body, req }) => {
     const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
 
+    const supplied = z.string().uuid().safeParse(req.headers.get('idempotency-key'))
+    const mutationId = supplied.success ? supplied.data : randomUUID()
     const { data, error } = await admin()
       .from('task_comments')
-      .insert({
+      .upsert({
         task_id: task.id,
         actor_type: actor.actorType,
         actor_id: actor.actorId,
         content: body.content,
-      })
+        mutation_id: mutationId,
+      }, { onConflict: 'task_id,mutation_id', ignoreDuplicates: true })
       .select('id, content, comment_type, actor_type, actor_id, created_at')
-      .single()
+      .maybeSingle()
 
     if (error) return fail('internal_error', error.message)
-    return ok(data, { status: 201 })
+    return ok(data ?? { duplicate: true }, { status: data ? 201 : 200 })
   },
 })

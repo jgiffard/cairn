@@ -1,16 +1,16 @@
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
-import { recordActivity } from '@/lib/api/activity'
-import { claimByWorking } from '@/lib/api/claim'
 
 export const dynamic = 'force-dynamic'
 
 const checkpointBody = z.object({
   summary: z.string().min(1).max(10_000),
   payload: z.record(z.string(), z.unknown()).optional(),
+  ownershipVersion: z.number().int().nonnegative().optional(),
 })
 
 /**
@@ -23,43 +23,47 @@ const checkpointBody = z.object({
  */
 export const POST = route<{ ref: string }, z.infer<typeof checkpointBody>>({
   schema: checkpointBody,
-  handler: async ({ actor, params, body }) => {
+  handler: async ({ actor, params, body, req }) => {
     const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
 
-    const now = new Date().toISOString()
-    const { data, error } = await admin()
-      .from('tasks')
-      .update({
-        checkpoint_summary: body.summary,
-        checkpoint_payload: body.payload ?? null,
-        checkpoint_at: now,
-        heartbeat_at: task.claimed_by === actor.actorId ? now : (task.heartbeat_at as string | null),
-      })
-      .eq('id', task.id)
-      .select('id, number, checkpoint_summary, checkpoint_at')
-      .single()
+    const idempotencyHeader = req.headers.get('idempotency-key')
+    const parsedMutation = z.string().uuid().safeParse(idempotencyHeader)
+    if (idempotencyHeader && !parsedMutation.success) return fail('validation_failed', 'Invalid idempotency key.')
+    if (idempotencyHeader && body.ownershipVersion === undefined) {
+      return fail('conflict', 'Queued checkpoint has no ownership generation; replay refused.')
+    }
+    const mutationId = parsedMutation.success ? parsedMutation.data : randomUUID()
+    const queuedHeader = req.headers.get('x-cairn-queued-at')
+    const queuedAt = queuedHeader && !Number.isNaN(Date.parse(queuedHeader))
+      ? new Date(queuedHeader).toISOString()
+      : new Date().toISOString()
+    const { data: result, error } = await admin().rpc<{
+      code: string
+      data?: Record<string, unknown>
+      claimed?: boolean
+      holder?: string
+    }>('checkpoint_task_atomic', {
+      p_task_id: task.id,
+      p_owner_user_id: actor.userId,
+      p_actor_type: actor.actorType,
+      p_actor_id: actor.actorId,
+      p_summary: body.summary,
+      p_payload: body.payload ?? null,
+      p_mutation_id: mutationId,
+      p_queued_at: queuedAt,
+      p_expected_version: body.ownershipVersion ?? null,
+    })
 
     if (error) return fail('internal_error', error.message)
-
-    // A checkpoint says where the work got to, which only makes sense if the
-    // work is yours. Same rule as a note.
-    const claimed = await claimByWorking(actor, task)
-
-    // And it belongs in the timeline. A checkpoint is the most useful thing an
-    // agent writes — it is what lets a different one resume without reading a
-    // transcript — and it was the only major act that left no trace there.
-    await recordActivity([
-      {
-        task_id: task.id,
-        project_id: (task.project_id as string) ?? null,
-        actor_type: actor.actorType,
-        actor_id: actor.actorId,
-        event: 'checkpointed',
-        data: { summary: body.summary.slice(0, 300) },
-      },
-    ], actor.userId)
-
-    return ok(claimed ? { ...(data as object), claimed } : data)
+    if (!result || result.code === 'not_found') return fail('not_found', `No task ${params.ref}.`)
+    if (result.code === 'already_claimed') {
+      return fail('already_claimed', `Held by ${result.holder}, not you.`, { claimedBy: result.holder })
+    }
+    if (result.code === 'ownership_changed') {
+      return fail('conflict', 'Claim ownership changed; stale checkpoint refused.')
+    }
+    if (result.code === 'terminal') return fail('conflict', 'Closed tasks do not accept checkpoints.')
+    return ok({ ...(result.data ?? {}), ...(result.claimed ? { claimed: true } : {}), replay: result.code })
   },
 })

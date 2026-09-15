@@ -1,9 +1,9 @@
 name: deploy
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
 
 # One deploy at a time. A second push mid-build would otherwise race the
 # first for the same container name.
@@ -13,20 +13,25 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
     # Runs on the box it deploys to, so there is no registry and no secrets
     # in transit — the image is built where it runs.
     runs-on: [self-hosted, cairn]
     timeout-minutes: 20
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: notify push and deploy start
         env:
           PUSHER: ${{ github.actor }}
         run: |
           set -euo pipefail
-          short="${GITHUB_SHA::7}"
+          short="${DEPLOY_SHA::7}"
           subject="$(git log -1 --pretty=%s | head -c 180)"
           subject="${subject//@/＠}"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
@@ -58,7 +63,7 @@ jobs:
           CAIRN_DOMAIN=${CAIRN_DOMAIN}
           CAIRN_PROXY_NETWORK=${CAIRN_PROXY_NETWORK}
           CAIRN_DATABASE_NETWORK=${CAIRN_DATABASE_NETWORK}
-          GIT_SHA=${GITHUB_SHA::7}
+          GIT_SHA=${DEPLOY_SHA::7}
           ENV
           cp docker-compose.example.yml docker-compose.yml
 
@@ -104,7 +109,7 @@ jobs:
           set -euo pipefail
           code=$(curl -s -o /dev/null -w '%{http_code}' "https://${CAIRN_DOMAIN}/api/v1/health")
           [ "$code" = "200" ] || { echo "health endpoint returned $code"; exit 1; }
-          echo "deployed $GITHUB_SHA"
+          echo "deployed $DEPLOY_SHA"
 
       - name: roll back on failure
         if: failure()
@@ -146,7 +151,7 @@ jobs:
           DEPLOY_STATUS: ${{ job.status }}
         run: |
           set -u
-          short="${GITHUB_SHA::7}"
+          short="${DEPLOY_SHA::7}"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           case "$DEPLOY_STATUS" in
             success) message="✅ **Cairn deployed** \`${short}\` · healthy and smoke-tested · <${run_url}>" ;;
