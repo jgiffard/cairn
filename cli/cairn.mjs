@@ -212,6 +212,7 @@ let FLUSHING = false
  * failed. Those fail fast instead.
  */
 const OUTBOX_PATH = join(homedir(), '.cairn', 'outbox.jsonl')
+const REJECTED_OUTBOX_PATH = `${OUTBOX_PATH}.rejected`
 const QUEUEABLE = /\/(notes|comments|beat|checkpoint)$/
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -237,26 +238,34 @@ const enqueue = (method, path, body, why) => {
  * Stops at the first transient failure and keeps the rest: the server is still
  * coming back, and draining into a restarting container would lose the queue
  * for the same reason it was written. A write the server actively rejects is
- * dropped and reported — replaying a 4xx forever is a queue that never empties.
+ * moved to a rejected sidecar with the response, never silently discarded.
  */
 const flushOutbox = async () => {
   let lines
   try {
     lines = readFileSync(OUTBOX_PATH, 'utf8').trim().split('\n').filter(Boolean)
   } catch {
-    return { sent: 0, dropped: 0, left: 0 }
+    return { sent: 0, rejected: 0, left: 0 }
   }
-  if (lines.length === 0) return { sent: 0, dropped: 0, left: 0 }
+  if (lines.length === 0) return { sent: 0, rejected: 0, left: 0 }
 
   let sent = 0
-  let dropped = 0
+  let rejected = 0
   let index = 0
   for (; index < lines.length; index += 1) {
     let item
     try {
       item = JSON.parse(lines[index])
     } catch {
-      dropped += 1
+      try {
+        appendFileSync(
+          REJECTED_OUTBOX_PATH,
+          `${JSON.stringify({ rejectedAt: new Date().toISOString(), reason: 'invalid JSON', raw: lines[index] })}\n`,
+        )
+      } catch {
+        break
+      }
+      rejected += 1
       continue
     }
     let res
@@ -271,7 +280,23 @@ const flushOutbox = async () => {
     }
     if (TRANSIENT.has(res.status)) break
     if (res.ok) sent += 1
-    else dropped += 1
+    else {
+      let response = ''
+      try {
+        response = (await res.text()).slice(0, 2_000)
+      } catch {
+        response = '<response unavailable>'
+      }
+      try {
+        appendFileSync(
+          REJECTED_OUTBOX_PATH,
+          `${JSON.stringify({ rejectedAt: new Date().toISOString(), status: res.status, response, item })}\n`,
+        )
+      } catch {
+        break
+      }
+      rejected += 1
+    }
   }
 
   // Whatever the loop stopped before. A break leaves lines[index] unsent, and
@@ -285,7 +310,7 @@ const flushOutbox = async () => {
     // Leaving the file as it was replays a few writes twice, which is a note
     // appearing twice. Losing it loses work. The duplicate is the better bug.
   }
-  return { sent, dropped, left: left.length }
+  return { sent, rejected, left: left.length }
 }
 
 const request = async (method, path, body, { soft = false } = {}) => {
@@ -1402,9 +1427,9 @@ const commands = {
     const result = await flushOutbox()
     emit(result, {
       lines: (d) =>
-        d.sent + d.dropped + d.left === 0
+        d.sent + d.rejected + d.left === 0
           ? ['nothing queued']
-          : [`sent ${d.sent}, dropped ${d.dropped}, still queued ${d.left}`],
+          : [`sent ${d.sent}, rejected ${d.rejected}, still queued ${d.left}`],
     })
   },
 
