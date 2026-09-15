@@ -141,6 +141,7 @@ describe('atomic knowledge writes', () => {
       entities: [],
       verified: false,
     })
+    if (!created) throw new Error('knowledge creation returned no row')
     await pool().query(`
       create or replace function fail_integrity_link() returns trigger language plpgsql as $$
       begin raise exception 'fault injected'; end $$;
