@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -280,5 +280,18 @@ describe('durable CLI outbox', () => {
     expect(recovered.code).toBe(0)
     expect(received).toHaveLength(1)
     expect(recovered.stdout).toContain('still queued 0')
+  })
+
+  it('does not leave acknowledgement markers for non-checkpoint writes', async () => {
+    await run(home, base, ['comment', 'CAIRN-163', 'marker comment'])
+    await run(home, base, ['note', 'CAIRN-163', 'marker note'])
+    await run(home, base, ['beat', 'CAIRN-163'])
+    mode = 'success'
+
+    const replay = await run(home, base, ['replay'])
+    expect(replay.code).toBe(0)
+    expect(replay.stdout).toContain('sent 3, rejected 0, still queued 0')
+    const artifacts = await readdir(join(home, '.cairn'))
+    expect(artifacts.filter((name) => name.includes('.ack-')).length).toBe(0)
   })
 })

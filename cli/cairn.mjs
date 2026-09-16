@@ -455,17 +455,18 @@ const flushOutbox = async () => {
     const remaining = lines.slice(index + 1)
     const temp = `${processingPath}.tmp`
     if (TEST_FAIL_PERSIST_AFTER_SEND) throw new Error('test failpoint: replay persistence failed')
+    const isCheckpoint = item.path.split('?')[0].endsWith('/checkpoint')
     const ackPath = `${OUTBOX_PREFIX}ack-${randomUUID()}.json`
-    if (acknowledgedData) {
+    if (acknowledgedData && isCheckpoint) {
       writeFileSync(join(dirname(OUTBOX_PATH), ackPath), `${JSON.stringify({ path: item.path, data: acknowledgedData })}\n`, { mode: 0o600 })
     }
     writeFileSync(temp, remaining.length ? `${remaining.join('\n')}\n` : '', { mode: 0o600 })
     renameSync(temp, processingPath)
-    if (TEST_CRASH_AFTER_RENAME_BEFORE_STATE && acknowledgedData) process.kill(process.pid, 'SIGKILL')
+    if (TEST_CRASH_AFTER_RENAME_BEFORE_STATE && acknowledgedData && isCheckpoint) process.kill(process.pid, 'SIGKILL')
     // Advance local checkpoint state only after the acknowledged record has
     // been durably removed from the processing file. Otherwise a local
     // persistence failure leaves a phantom sequence gap for the next queue.
-    if (acknowledgedData && updateRememberedOwnership(item.path, acknowledgedData)) {
+    if (acknowledgedData && isCheckpoint && updateRememberedOwnership(item.path, acknowledgedData)) {
       rmSync(join(dirname(OUTBOX_PATH), ackPath), { force: true })
     }
   }
