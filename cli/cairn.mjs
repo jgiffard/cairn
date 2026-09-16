@@ -233,6 +233,8 @@ const QUEUEABLE = /\/(notes|comments|beat|checkpoint)$/
 const KEY_ID = KEY ? createHash('sha256').update(KEY).digest('hex').slice(0, 24) : ''
 const TEST_CRASH_AFTER_SEND = process.env.CAIRN_TEST_CRASH_AFTER_SEND === '1'
 const TEST_FAIL_PERSIST_AFTER_SEND = process.env.CAIRN_TEST_FAIL_PERSIST_AFTER_SEND === '1'
+const TEST_CRASH_AFTER_RENAME_BEFORE_STATE = process.env.CAIRN_TEST_CRASH_AFTER_RENAME_BEFORE_STATE === '1'
+const TEST_FAIL_REJECT_PERSIST = process.env.CAIRN_TEST_FAIL_REJECT_PERSIST === '1'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -313,7 +315,8 @@ const hasReplayableOutbox = () => {
     return readdirSync(dirname(OUTBOX_PATH)).some((name) =>
       name === basename(OUTBOX_PATH) ||
       name.startsWith(`${OUTBOX_PREFIX}pending-`) ||
-      (name.startsWith(`${OUTBOX_PREFIX}processing-`) && !name.endsWith('.tmp')),
+      (name.startsWith(`${OUTBOX_PREFIX}processing-`) && !name.endsWith('.tmp') && !name.endsWith('.ack')) ||
+      name.startsWith(`${OUTBOX_PREFIX}ack-`),
     )
   } catch {
     return false
@@ -336,8 +339,19 @@ const flushOutbox = async () => {
   try {
     claimed = await withOutboxLock(() => {
       const dir = dirname(OUTBOX_PATH)
+      // Recover acknowledgements journaled before a crash between processing
+      // file compaction and local ownership persistence.
+      for (const name of readdirSync(dir)) {
+        if (!name.startsWith(`${OUTBOX_PREFIX}ack-`) || !name.endsWith('.json')) continue
+        const path = join(dir, name)
+        try {
+          const marker = JSON.parse(readFileSync(path, 'utf8'))
+          if (updateRememberedOwnership(marker.path, marker.data)) rmSync(path, { force: true })
+        } catch { /* retain the marker for the next recovery attempt */ }
+      }
       for (const name of readdirSync(dir)) {
         if (!name.startsWith(`${OUTBOX_PREFIX}processing-`)) continue
+        if (name.endsWith('.ack') || name.endsWith('.tmp')) continue
         const path = join(dir, name)
         try {
           if (
@@ -368,6 +382,7 @@ const flushOutbox = async () => {
   }
 
   const reject = (entry) => {
+    if (TEST_FAIL_REJECT_PERSIST) throw new Error('test failpoint: rejected-sidecar persistence failed')
     appendFileSync(REJECTED_OUTBOX_PATH, `${JSON.stringify(entry)}\n`, { mode: 0o600 })
     rejected += 1
   }
@@ -440,12 +455,19 @@ const flushOutbox = async () => {
     const remaining = lines.slice(index + 1)
     const temp = `${processingPath}.tmp`
     if (TEST_FAIL_PERSIST_AFTER_SEND) throw new Error('test failpoint: replay persistence failed')
+    const ackPath = `${OUTBOX_PREFIX}ack-${randomUUID()}.json`
+    if (acknowledgedData) {
+      writeFileSync(join(dirname(OUTBOX_PATH), ackPath), `${JSON.stringify({ path: item.path, data: acknowledgedData })}\n`, { mode: 0o600 })
+    }
     writeFileSync(temp, remaining.length ? `${remaining.join('\n')}\n` : '', { mode: 0o600 })
     renameSync(temp, processingPath)
+    if (TEST_CRASH_AFTER_RENAME_BEFORE_STATE && acknowledgedData) process.kill(process.pid, 'SIGKILL')
     // Advance local checkpoint state only after the acknowledged record has
     // been durably removed from the processing file. Otherwise a local
     // persistence failure leaves a phantom sequence gap for the next queue.
-    if (acknowledgedData) updateRememberedOwnership(item.path, acknowledgedData)
+    if (acknowledgedData && updateRememberedOwnership(item.path, acknowledgedData)) {
+      rmSync(join(dirname(OUTBOX_PATH), ackPath), { force: true })
+    }
   }
 
     const left = lines.slice(index)
@@ -719,14 +741,14 @@ const pendingCheckpointCount = (path, ownershipVersion) => {
 
 const updateRememberedOwnership = (path, data) => {
   const match = /\/api\/v1\/tasks\/([^/?]+)\/(claim|checkpoint|release)$/.exec(path)
-  if (!match) return
+  if (!match) return false
   const target = ownershipPath(decodeURIComponent(match[1]))
   try {
     mkdirSync(OWNERSHIP_DIR, { recursive: true })
-    if (match[2] === 'release') return rmSync(target, { force: true })
+    if (match[2] === 'release') { rmSync(target, { force: true }); return true }
     const version = Number(data?.ownership_version)
     const checkpointVersion = Number(data?.checkpoint_version)
-    if (!Number.isSafeInteger(version)) return
+    if (!Number.isSafeInteger(version)) return false
     const temp = `${target}.${process.pid}.tmp`
     writeFileSync(temp, `${JSON.stringify({
       ownershipVersion: version,
@@ -734,9 +756,11 @@ const updateRememberedOwnership = (path, data) => {
       agent: AGENT,
     })}\n`, { mode: 0o600 })
     renameSync(temp, target)
+    return true
   } catch {
     // The server remains authoritative. Missing local context makes an offline
     // checkpoint fail closed instead of guessing an ownership generation.
+    return false
   }
 }
 

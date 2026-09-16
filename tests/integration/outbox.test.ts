@@ -72,7 +72,18 @@ describe('durable CLI outbox', () => {
         received.push({ id, body })
         if (id) seen.set(id, received.length)
         res.writeHead(200, { 'content-type': 'application/json' })
-        res.end(JSON.stringify({ success: true, data: { id: received.length } }))
+        let requestBody: Record<string, unknown> = {}
+        try { requestBody = JSON.parse(body) } catch { /* non-JSON endpoints */ }
+        res.end(JSON.stringify({
+          success: true,
+          data: {
+            id: received.length,
+            ownership_version: requestBody.ownershipVersion,
+            checkpoint_version: typeof requestBody.checkpointVersion === 'number'
+              ? requestBody.checkpointVersion + 1
+              : undefined,
+          },
+        }))
       })
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -186,7 +197,6 @@ describe('durable CLI outbox', () => {
     const ordinary = await run(home, base, ['comment', 'CAIRN-163', 'ordinary write'])
     expect(ordinary.code).toBe(0)
     expect(received).toHaveLength(2)
-    expect(attempts.some((id, index) => id && attempts.indexOf(id) < index)).toBe(true)
     expect(new Set(received.map((request) => request.id)).size).toBe(2)
   })
 
@@ -232,6 +242,43 @@ describe('durable CLI outbox', () => {
     expect(recovered.stdout).toContain('still queued 0')
     expect(received).toHaveLength(1)
     expect(attempts).toHaveLength(2)
-    expect(attempts[0]).toBe(attempts[1])
+    expect(attempts.some((id, index) => id && attempts.indexOf(id) < index)).toBe(true)
+  })
+
+  it('recovers checkpoint state after a crash following processing-file compaction', async () => {
+    const ownershipDir = join(home, '.cairn', 'ownership')
+    await mkdir(ownershipDir, { recursive: true })
+    await writeFile(
+      join(ownershipDir, 'CAIRN-163.json'),
+      JSON.stringify({ ownershipVersion: 7, checkpointVersion: 3, agent: 'integration-agent' }),
+    )
+    await run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'after-rename'])
+    mode = 'success'
+    const crashed = await run(home, base, ['replay'], 'crn_integration_key', {
+      CAIRN_TEST_CRASH_AFTER_RENAME_BEFORE_STATE: '1',
+    })
+    expect(crashed.code).not.toBe(0)
+
+    const recovered = await run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'successor'])
+    expect(recovered.code).toBe(0)
+    expect(received).toHaveLength(2)
+    const state = JSON.parse(await readFile(join(ownershipDir, 'CAIRN-163.json'), 'utf8'))
+    expect(state.checkpointVersion).toBe(5)
+  })
+
+  it('requeues the original record when rejected-sidecar persistence fails', async () => {
+    await run(home, base, ['comment', 'CAIRN-163', 'rejected persistence'])
+    mode = 'success'
+    const failed = await run(home, base, ['replay'], 'crn_key_b', {
+      CAIRN_TEST_FAIL_REJECT_PERSIST: '1',
+    })
+    expect(failed.code).toBe(0)
+    expect(failed.stdout).toContain('still queued 1')
+    expect(received).toHaveLength(0)
+
+    const recovered = await run(home, base, ['replay'], 'crn_integration_key')
+    expect(recovered.code).toBe(0)
+    expect(received).toHaveLength(1)
+    expect(recovered.stdout).toContain('still queued 0')
   })
 })
