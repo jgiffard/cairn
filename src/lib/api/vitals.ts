@@ -111,16 +111,20 @@ export const assess = (v: Vitals): Finding[] => {
     })
   }
 
-  // An agent that has gone silent is the clearest sign its wiring broke, and
-  // it is invisible in any total: the others go on writing.
+  // Historical activity does not mean a runtime is expected to be active in
+  // every window. In particular, direct Codex may be idle while OpenClaw
+  // (which can run Codex underneath it) and Claude Code continue writing.
+  // Keep this as a qualified warning, not an alarm: silence is a prompt to
+  // verify runtime usage, never proof that hooks or keys are broken.
   for (const agent of v.agents) {
     if (agent.recent === 0 && expected(agent.baseline) >= 3) {
       findings.push({
         code: 'agent-silent',
-        severity: 'alarm',
+        severity: 'warning',
         message:
           `${agent.agent} has written nothing in ${hours}, against ${agent.baseline} in the week ` +
-          `before. Its hooks or its key may have stopped working.`,
+          `before. This may simply be an idle runtime; verify it was expected to be active ` +
+          `before investigating hooks or keys.`,
       })
     }
   }

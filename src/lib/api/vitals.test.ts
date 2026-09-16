@@ -49,6 +49,8 @@ describe('assess', () => {
     })
     const finding = assess(v).find((f) => f.code === 'agent-silent')
     expect(finding?.message).toContain('codex')
+    expect(finding?.severity).toBe('warning')
+    expect(finding?.message).toContain('idle runtime')
   })
 
   it('ignores an agent that barely wrote in the baseline either', () => {
