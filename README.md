@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/montytorr/cairn/actions/workflows/ci.yml/badge.svg)](https://github.com/montytorr/cairn/actions/workflows/ci.yml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](./LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.5.1-blue.svg)](./CHANGELOG.md)
 
 **The tracker your agents read before they start, and write to as they work.**
 
@@ -277,6 +277,11 @@ problem.
 - A claim / heartbeat / checkpoint protocol so several agents can work one backlog without
   colliding. A lease whose holder has gone quiet for 15 minutes becomes stealable — one
   conditional UPDATE, no reaper, no cron, no lease table.
+- **Durable writes and integrity boundaries.** Notes, comments, heartbeats and checkpoints
+  can queue locally during an outage and replay without silently losing rejected or malformed
+  records. Checkpoints carry the ownership generation and a monotonic sequence, so stale,
+  duplicated or concurrently replayed writes cannot resurrect a released claim or overwrite
+  newer work. The server applies claim, release, checkpoint and knowledge mutations atomically.
 - `cairn reconcile` releases claims an agent walked away from, leaving a note saying why —
   the backstop for runtimes with no session-end event. It never closes anything: a task
   with a resolution nobody meant is worse than one plainly still open.

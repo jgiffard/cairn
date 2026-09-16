@@ -7,6 +7,26 @@ Cairn is pre-1.0: the schema, API and CLI are in daily use and stable in practic
 minor bump may still change them. Anything that would break an existing install is called
 out under **Breaking** with what to do about it.
 
+## [0.5.1] — 2026-09-16
+
+### Fixed
+
+- **P0 integrity boundaries:** claim, release, checkpoint and knowledge mutations now use
+  atomic server-side transitions with ownership generations and monotonic checkpoint versions.
+  Stale, duplicate and concurrent writes are rejected instead of overwriting newer work or
+  resurrecting a released claim.
+- **Durable outbox replay:** malformed and rejected queued writes are retained in a rejected
+  sidecar, crashed replay workers are recovered, and checkpoint acknowledgements survive a
+  crash between local compaction and state persistence. Non-checkpoint writes no longer leave
+  acknowledgement markers behind.
+
+### Changed
+
+- Added migrations `043_integrity_boundaries.sql` and
+  `044_checkpoint_predecessor_boundary.sql`, applied by the normal deployment migration step.
+- CI now runs the PostgreSQL integrity suite, and production deployment is gated on the
+  successful same-repository `main` workflow before building and smoke-testing the release.
+
 ## [0.5.0] — 2026-09-14
 
 ### Added
