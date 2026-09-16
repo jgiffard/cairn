@@ -39,6 +39,7 @@ begin
          ownership_version = ownership_version + 1,
          status = case when p_set_doing then 'doing' else status end
    where id = p_task_id
+     and status not in ('done', 'cancelled')
      and (claimed_by is null or heartbeat_at < p_stale_before)
   returning * into claimed;
   if not found then return null; end if;

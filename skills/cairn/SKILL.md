@@ -190,6 +190,9 @@ cairn release ACME-42
   that used to be accepted silently, leaving the task carrying an answered dot and
   offering itself to `check` as settled.
 - **Exit 9 means pick different work.** Do not force it.
+- **Only claim open work.** A task in `done` or `cancelled` is settled history;
+  claiming it must not reopen it. If the work genuinely needs revision, explicitly
+  move it back to an open status first, then claim it.
 - A claim is independent of `status` — a task can be `doing` and unclaimed, which is what a
   human working on it looks like.
 - A lease goes stale after 15 minutes of silence and can then be taken over. Two hours of

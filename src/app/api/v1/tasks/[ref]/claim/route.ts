@@ -28,6 +28,16 @@ export const POST = route<{ ref: string }, z.infer<typeof claimBody>>({
     const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
 
+    // A terminal task is settled history, not available work. Keep the public
+    // claim endpoint from reopening a task that already has a resolution; the
+    // database function enforces the same invariant for direct RPC callers.
+    if (task.status === 'done' || task.status === 'cancelled') {
+      return fail(
+        'validation_failed',
+        `Cannot claim ${params.ref}: it is already ${task.status}. Reopen it explicitly first if the work needs revision.`,
+      )
+    }
+
     const { row, error } = await takeTask(actor, task, {
       agent: body.agent,
       setDoing: body.setDoing,
