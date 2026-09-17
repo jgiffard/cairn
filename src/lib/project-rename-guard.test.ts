@@ -53,4 +53,11 @@ describe('renaming a project key keeps old refs working', () => {
     // One former key, one project, per owner — the constraint the refusal rests on.
     expect(migration).toMatch(/primary key \(owner_user_id, key\)/)
   })
+
+  it('keeps live and retired keys in one workspace namespace', () => {
+    const migration = read('migrations/047_shared_workspace_boundaries.sql')
+    expect(migration).toContain('guard_project_key_namespace')
+    expect(migration).toContain('projects_key_namespace_guard')
+    expect(migration).toContain('former_keys_namespace_guard')
+  })
 })

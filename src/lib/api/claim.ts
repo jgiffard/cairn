@@ -1,5 +1,6 @@
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
+import { actorLabel } from './actor'
 import { CLAIM_LEASE_SECONDS } from '@/lib/utils'
 
 /**
@@ -15,7 +16,9 @@ export const takeTask = async (
   task: { id: string; status?: unknown; attempt?: unknown; project_id?: unknown },
   { agent, setDoing = true }: { agent?: string; setDoing?: boolean } = {},
 ) => {
-  const holder = agent ?? actor.actorId
+  const holder = agent
+    ? actorLabel('agent', agent, actor.userDisplayName)
+    : actor.actorId
   const now = new Date()
   const staleBefore = new Date(now.getTime() - CLAIM_LEASE_SECONDS * 1000).toISOString()
 

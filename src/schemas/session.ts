@@ -17,7 +17,9 @@ export const sessionUpsert = z.object({
   scheduled: z.boolean().optional(),
   externalId: z.string().min(1).max(200),
   platformSource: platformSource.default('claude'),
-  agentId: z.string().max(80).optional(),
+  agentId: z.string().max(80).optional().describe(
+    'Runtime name reported by the session hook. The server qualifies it with the authenticated user identity.',
+  ),
   cwd: z.string().max(500).optional(),
   project: z.string().max(10).optional(),
   startedAt: z.string().datetime().optional(),

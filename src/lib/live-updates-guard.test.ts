@@ -22,6 +22,8 @@ const DELIBERATELY_STATIC: Record<string, string> = {
     'results are a snapshot of a query; re-running it under the reader would move rows they were looking at',
   'settings/page.tsx':
     'everything here changes only because you changed it, and the page already refreshes after its own writes',
+  'users/page.tsx':
+    'administrator actions refresh the page after every write; remote account changes are deliberately not applied mid-form',
   'vitals/page.tsx':
     'a five-minute cached rollup — refreshing it faster than the cache would repaint identical numbers',
   'api-docs/page.tsx': 'the spec changes on deploy, not while you read',

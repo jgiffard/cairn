@@ -51,13 +51,13 @@ const BOARD_COLUMNS =
 const PREVIEW_CHARS = 280
 
 /**
- * Every task across every active project the user owns, plus the project
+ * Every task across every active project in the shared workspace, plus the project
  * list itself (columns and filters need it even for projects with nothing
  * currently showing). Closed tasks are excluded by default, same convention
  * as the per-project board.
  */
 export const listBoardTasks = async (
-  userId: string,
+  _userId: string,
   { includeClosed = false, limit = 2000 }: { includeClosed?: boolean; limit?: number } = {},
 ): Promise<{ tasks: BoardTask[]; projects: BoardProject[]; closedHidden: number }> => {
   const closed = ['done', 'cancelled']
@@ -66,30 +66,26 @@ export const listBoardTasks = async (
     admin()
       .from('projects')
       .select('id, key, title')
-      .eq('owner_user_id', userId)
       .eq('status', 'active')
       .order('title')
       .order('created_at'),
     (() => {
       let q = admin()
         .from('tasks')
-        .select(`${BOARD_COLUMNS}, project:projects!project_id!inner(key, owner_user_id)`)
-        .eq('projects.owner_user_id', userId)
+        .select(`${BOARD_COLUMNS}, project:projects!project_id!inner(key)`)
       if (!includeClosed) q = q.not('status', 'in', `(${closed.join(',')})`)
       return q.order('updated_at', { ascending: false }).limit(limit)
     })(),
     admin()
       .from('tasks')
-      .select('id, project:projects!project_id!inner(owner_user_id)', { count: 'exact', head: true })
-      .eq('projects.owner_user_id', userId)
+      .select('id', { count: 'exact', head: true })
       .in('status', closed),
     admin().from('task_projects').select('task_id, project:projects(key)'),
   ])
 
   type Row = Omit<BoardTask, 'project_key'> & { project: { key: string } | { key: string }[] }
 
-  // RLS is bypassed by the service role, so the link rows are narrowed to the
-  // tasks this query already established belong to this owner.
+  // Link rows are workspace-wide, just like the tasks and projects above.
   const guestKeys = new Map<string, string[]>()
   for (const row of (links.data ?? []) as unknown as {
     task_id: string

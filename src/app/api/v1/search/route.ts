@@ -95,7 +95,6 @@ const markStaleKnowledge = async (
   const { data } = await admin()
     .from('knowledge')
     .select('id, slug, body, verified_at, created_at, source_task_id, source_session_id')
-    .eq('owner_user_id', userId)
     .in('slug', slugs)
 
   const entries = (data ?? []) as {

@@ -64,7 +64,7 @@ export type ContextPayload = {
 
 const TASK_SELECT =
   'id, number, title, status, claimed_by, claimed_at, heartbeat_at, updated_at, ' +
-  'project:projects!project_id!inner(key, owner_user_id)'
+  'project:projects!project_id!inner(key)'
 
 type TaskRow = {
   id: string
@@ -96,11 +96,10 @@ const humanDuration = (fromIso: string | null): string => {
  * available evidence, and they are self-correcting — file work under a new
  * directory once and every later session there resolves.
  */
-const projectForCwd = async (userId: string, cwd: string): Promise<string | null> => {
+const projectForCwd = async (_userId: string, cwd: string): Promise<string | null> => {
   const { data, error } = await admin()
     .from('sessions')
     .select('project:projects(key)')
-    .eq('owner_user_id', userId)
     .eq('cwd', cwd)
     .not('project_id', 'is', null)
     .order('ended_at', { ascending: false, nullsFirst: false })
@@ -118,11 +117,10 @@ const projectForCwd = async (userId: string, cwd: string): Promise<string | null
  * inference: the remote is the same string in every clone and every worktree,
  * where a path is true of one machine only.
  */
-const projectForRepo = async (userId: string, remote: string): Promise<string | null> => {
+const projectForRepo = async (_userId: string, remote: string): Promise<string | null> => {
   const { data, error } = await admin()
     .from('project_repos')
     .select('project:projects(key)')
-    .eq('owner_user_id', userId)
     .eq('remote', normaliseRemote(remote))
     // Two is enough to know it is ambiguous, and cheaper than counting.
     .limit(2)
@@ -146,7 +144,6 @@ export const buildContext = async (
     const { data, error } = await admin()
       .from('tasks')
       .select(TASK_SELECT)
-      .eq('projects.owner_user_id', actor.userId)
       .eq('claimed_by', actor.actorId)
       .order('claimed_at', { ascending: true })
       .limit(10)
@@ -178,7 +175,6 @@ export const buildContext = async (
     const { data, error } = await admin()
       .from('tasks')
       .select(TASK_SELECT)
-      .eq('projects.owner_user_id', actor.userId)
       .eq('projects.key', project)
       .in('status', ['doing', 'in-review'])
       .order('updated_at', { ascending: false })
@@ -204,7 +200,6 @@ export const buildContext = async (
     let query = admin()
       .from('sessions')
       .select('ended_at, request, next_steps, agent_id, cwd, project_id')
-      .eq('owner_user_id', actor.userId)
       .order('ended_at', { ascending: false, nullsFirst: false })
       .limit(1)
 
@@ -250,7 +245,6 @@ export const buildContext = async (
   const { data: staleData, error: staleError } = await admin()
     .from('tasks')
     .select(TASK_SELECT)
-    .eq('projects.owner_user_id', actor.userId)
     .not('claimed_by', 'is', null)
     .lt('heartbeat_at', cutoff)
     .order('heartbeat_at', { ascending: true })

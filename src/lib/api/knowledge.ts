@@ -11,8 +11,8 @@ import { findTask } from './tasks'
  * was learned in. It belongs to no task, and usually to no single project,
  * which is why nothing in Cairn could hold it until now.
  *
- * Every query here is scoped to the owner explicitly. The service-role client
- * bypasses RLS, so that scoping is the boundary, not a belt-and-braces extra.
+ * Knowledge is shared workspace data. Legacy owner ids remain attribution
+ * metadata for existing rows; they are not an authorization boundary.
  */
 
 const COLUMNS =
@@ -39,15 +39,14 @@ export type KnowledgeRow = {
   scope?: 'project' | 'entity' | 'global'
 }
 
-/** Entity keys -> ids, owner-scoped. Unknown keys are reported, never invented. */
-const resolveEntities = async (userId: string, keys: string[]) => {
+/** Entity keys -> ids. Unknown keys are reported, never invented. */
+const resolveEntities = async (_userId: string, keys: string[]) => {
   if (keys.length === 0) return { ids: [] as string[], missing: [] as string[] }
 
   const wanted = [...new Set(keys.map((k) => k.toLowerCase()))]
   const { data, error } = await admin()
     .from('entities')
     .select('id, key')
-    .eq('owner_user_id', userId)
     .in('key', wanted)
   if (error) throw new Error(error.message)
 
@@ -58,15 +57,14 @@ const resolveEntities = async (userId: string, keys: string[]) => {
   }
 }
 
-/** Project keys -> ids, owner-scoped. Unknown keys are reported, never ignored. */
-const resolveProjects = async (userId: string, keys: string[]) => {
+/** Project keys -> ids. Unknown keys are reported, never ignored. */
+const resolveProjects = async (_userId: string, keys: string[]) => {
   if (keys.length === 0) return { ids: [] as string[], missing: [] as string[] }
 
   const wanted = [...new Set(keys.map((k) => k.toUpperCase()))]
   const { data, error } = await admin()
     .from('projects')
     .select('id, key')
-    .eq('owner_user_id', userId)
     .in('key', wanted)
 
   if (error) throw new Error(error.message)
@@ -134,11 +132,10 @@ const withProjects = async (rows: KnowledgeRow[]): Promise<KnowledgeRow[]> => {
 }
 
 /** Entity keys a project belongs to — the middle scope between it and global. */
-export const entitiesForProject = async (userId: string, key: string): Promise<string[]> => {
+export const entitiesForProject = async (_userId: string, key: string): Promise<string[]> => {
   const { data, error } = await admin()
     .from('project_entities')
-    .select('entity:entities!inner(key, owner_user_id), project:projects!inner(key, owner_user_id)')
-    .eq('projects.owner_user_id', userId)
+    .select('entity:entities!inner(key), project:projects!inner(key)')
     .eq('projects.key', key.toUpperCase())
   if (error) throw new Error(error.message)
 
@@ -168,8 +165,7 @@ export const listKnowledge = async (
   if (filters.entity) {
     const { data, error } = await admin()
       .from('knowledge_entities')
-      .select('knowledge_id, entity:entities!inner(key, owner_user_id)')
-      .eq('entities.owner_user_id', userId)
+      .select('knowledge_id, entity:entities!inner(key)')
       .eq('entities.key', filters.entity.toLowerCase())
     if (error) throw new Error(error.message)
 
@@ -181,7 +177,6 @@ export const listKnowledge = async (
     let q = admin()
       .from('knowledge')
       .select(COLUMNS)
-      .eq('owner_user_id', userId)
       .order('updated_at', { ascending: false })
 
     if (filters.label) q = q.contains('labels', [filters.label])
@@ -251,8 +246,7 @@ const knowledgeForEntitiesOf = async (userId: string, projectKey: string): Promi
 
   const { data, error } = await admin()
     .from('knowledge_entities')
-    .select('knowledge_id, entity:entities!inner(key, owner_user_id)')
-    .eq('entities.owner_user_id', userId)
+    .select('knowledge_id, entity:entities!inner(key)')
     .in('entities.key', keys)
   if (error) throw new Error(error.message)
 
@@ -267,11 +261,10 @@ const knowledgeForEntitiesOf = async (userId: string, projectKey: string): Promi
  * `dispofi` left them showing up on the trading projects exactly as before —
  * the change looked applied and did nothing.
  */
-const globalIds = async (userId: string): Promise<string[]> => {
+const globalIds = async (_userId: string): Promise<string[]> => {
   const { data, error } = await admin()
     .from('knowledge')
     .select('id, knowledge_projects(knowledge_id), knowledge_entities(knowledge_id)')
-    .eq('owner_user_id', userId)
   if (error) throw new Error(error.message)
 
   return (data ?? [])
@@ -283,11 +276,10 @@ const globalIds = async (userId: string): Promise<string[]> => {
     .map((r) => r.id as string)
 }
 
-export const getKnowledge = async (userId: string, slug: string): Promise<KnowledgeRow | null> => {
+export const getKnowledge = async (_userId: string, slug: string): Promise<KnowledgeRow | null> => {
   const { data, error } = await admin()
     .from('knowledge')
     .select(COLUMNS)
-    .eq('owner_user_id', userId)
     .eq('slug', slug)
     .maybeSingle()
 
@@ -403,9 +395,8 @@ export const updateKnowledge = async (actor: Actor, slug: string, patch: Knowled
       const values = Object.values(fields)
       const assignments = columns.map((column, index) => `"${column}" = $${index + 1}`).join(', ')
       const result = await client.query(
-        `update knowledge set ${assignments} where id = $${values.length + 1}
-          and owner_user_id = $${values.length + 2}`,
-        [...values, existing.id, actor.userId],
+        `update knowledge set ${assignments} where id = $${values.length + 1}`,
+        [...values, existing.id],
       )
       if (result.rowCount !== 1) throw new Error(`Knowledge "${slug}" changed or disappeared.`)
     }
@@ -437,12 +428,10 @@ export const updateKnowledge = async (actor: Actor, slug: string, patch: Knowled
  *
  * `superseded_by` is stored as the row id, not the slug — a slug can be
  * re-derived from a renamed title, an id cannot, so the UI needs this to turn
- * "superseded by <uuid>" into a link a person can follow. Owner-scoped like
- * every other read here, even though the ids passed in were already read off
- * the caller's own rows.
+ * "superseded by <uuid>" into a link a person can follow.
  */
 export const supersededByInfo = async (
-  userId: string,
+  _userId: string,
   ids: string[],
 ): Promise<Map<string, { slug: string; title: string }>> => {
   const out = new Map<string, { slug: string; title: string }>()
@@ -452,7 +441,6 @@ export const supersededByInfo = async (
   const { data, error } = await admin()
     .from('knowledge')
     .select('id, slug, title')
-    .eq('owner_user_id', userId)
     .in('id', wanted)
   if (error) throw new Error(error.message)
 
@@ -470,7 +458,6 @@ export const deleteKnowledge = async (userId: string, slug: string): Promise<boo
     .from('knowledge')
     .delete()
     .eq('id', existing.id)
-    .eq('owner_user_id', userId)
   if (error) throw new Error(error.message)
   return true
 }

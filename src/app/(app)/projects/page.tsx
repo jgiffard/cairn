@@ -24,8 +24,7 @@ const ProjectsPage = async () => {
   // project whose tasks were all deleted still reports the high-water mark.
   const { data: counts } = await admin()
     .from('tasks')
-    .select('project_id, status, project:projects!project_id!inner(owner_user_id)')
-    .eq('projects.owner_user_id', user.id)
+    .select('project_id, status')
     .limit(5000)
 
   const open = new Map<string, number>()

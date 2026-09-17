@@ -46,9 +46,8 @@ export const reconcileClaims = async (
     .from('tasks')
     .select(
       'id, number, status, claimed_at, heartbeat_at, checkpoint_at, updated_at, ' +
-        'checkpoint_summary, ownership_version, project:projects!project_id!inner(key, owner_user_id)',
+        'checkpoint_summary, ownership_version, project:projects!project_id!inner(key)',
     )
-    .eq('projects.owner_user_id', actor.userId)
     .eq('claimed_by', actor.actorId)
 
   if (error) throw new Error(error.message)

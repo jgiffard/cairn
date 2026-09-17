@@ -14,11 +14,10 @@ export type EntityRow = {
   projects: string[]
 }
 
-export const listEntities = async (userId: string): Promise<EntityRow[]> => {
+export const listEntities = async (_userId: string): Promise<EntityRow[]> => {
   const { data, error } = await admin()
     .from('entities')
     .select('key, title, description, project_entities(project:projects(key))')
-    .eq('owner_user_id', userId)
     .order('key')
   if (error) throw new Error(error.message)
 

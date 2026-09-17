@@ -128,8 +128,8 @@ export const openapiSpec = () => ({
         type: 'http',
         scheme: 'bearer',
         description:
-          'One API key per agent (`sk_live_…`). The key\'s agent name is recorded as the ' +
-          'actor on every write it makes, which is what makes the shared log attributable.',
+          'One API key per agent (`sk_live_…`). The key\'s agent name and owning user are ' +
+          'recorded on every write, which keeps the shared log attributable.',
       },
     },
   },
@@ -743,9 +743,12 @@ export const openapiSpec = () => ({
       },
     },
     '/keys': {
-      get: { summary: 'List API keys (never the hash)', responses: { '200': okResponse('Keys.') } },
+      get: {
+        summary: 'List your agent keys (human administrator browser session only)',
+        responses: { '200': okResponse('Keys.'), '403': errorResponse },
+      },
       post: {
-        summary: 'Create an API key',
+        summary: 'Create your agent key (human administrator browser session only)',
         description: 'The plaintext key is returned exactly once and never stored.',
         requestBody: body({
           type: 'object',
@@ -755,12 +758,94 @@ export const openapiSpec = () => ({
           },
           required: ['agentName', 'name'],
         }),
-        responses: { '201': okResponse('Created; includes the plaintext key.') },
+        responses: { '201': okResponse('Created; includes the plaintext key.'), '403': errorResponse },
       },
     },
     '/keys/{id}': {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-      delete: { summary: 'Revoke a key', responses: { '200': okResponse('Revoked.') } },
+      delete: {
+        summary: 'Revoke your agent key (human administrator browser session only)',
+        responses: { '200': okResponse('Revoked.'), '403': errorResponse },
+      },
+    },
+    '/users': {
+      get: {
+        summary: 'List users (administrator browser session only)',
+        responses: { '200': okResponse('Users.'), '403': errorResponse },
+      },
+      post: {
+        summary: 'Create a user with an initial password',
+        requestBody: body({
+          type: 'object',
+          properties: {
+            email: { type: 'string', format: 'email' },
+            displayName: { type: 'string', minLength: 1, maxLength: 100 },
+            password: { type: 'string', minLength: 12 },
+            role: { type: 'string', enum: ['admin', 'member'], default: 'member' },
+          },
+          required: ['email', 'displayName', 'password'],
+        }),
+        responses: { '201': okResponse('User created.'), '403': errorResponse, '409': errorResponse },
+      },
+    },
+    '/users/{id}': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+      patch: {
+        summary: 'Edit a user',
+        requestBody: body({
+          type: 'object',
+          properties: {
+            email: { type: 'string', format: 'email' },
+            displayName: { type: 'string', minLength: 1, maxLength: 100 },
+            role: { type: 'string', enum: ['admin', 'member'] },
+          },
+          minProperties: 1,
+        }),
+        responses: { '200': okResponse('User updated.'), '403': errorResponse, '409': errorResponse },
+      },
+      delete: {
+        summary: 'Disable a user and revoke sessions and active keys',
+        responses: { '200': okResponse('User disabled.'), '403': errorResponse, '409': errorResponse },
+      },
+    },
+    '/users/{id}/restore': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+      post: { summary: 'Restore a disabled user', responses: { '200': okResponse('User restored.'), '403': errorResponse } },
+    },
+    '/users/{id}/password': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+      post: {
+        summary: 'Reset a user password and revoke browser sessions',
+        requestBody: body({
+          type: 'object',
+          properties: { password: { type: 'string', minLength: 12 } },
+          required: ['password'],
+        }),
+        responses: { '200': okResponse('Password reset.'), '403': errorResponse },
+      },
+    },
+    '/users/{id}/keys': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+      get: { summary: 'List a user’s agent keys (never the hash)', responses: { '200': okResponse('Keys.'), '403': errorResponse } },
+      post: {
+        summary: 'Create an agent key for an active user',
+        requestBody: body({
+          type: 'object',
+          properties: {
+            agentName: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,40}$' },
+            name: { type: 'string', minLength: 1, maxLength: 100 },
+          },
+          required: ['agentName', 'name'],
+        }),
+        responses: { '201': okResponse('Created; includes the plaintext key.'), '403': errorResponse, '409': errorResponse },
+      },
+    },
+    '/users/{id}/keys/{keyId}': {
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        { name: 'keyId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      delete: { summary: 'Revoke one of a user’s agent keys', responses: { '200': okResponse('Key revoked.'), '403': errorResponse } },
     },
   },
   'x-resolution-kinds': [...RESOLUTION_KINDS],

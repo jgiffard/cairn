@@ -44,7 +44,14 @@ export const POST = route<{ ref: string }, z.infer<typeof createActivityEvidence
     const { event, ...data } = body
     const { data: row, error } = await admin()
       .from('task_activity_events')
-      .insert({ task_id: task.id, actor_type: actor.actorType, actor_id: actor.actorId, event, data })
+      .insert({
+        owner_user_id: actor.userId,
+        task_id: task.id,
+        actor_type: actor.actorType,
+        actor_id: actor.actorId,
+        event,
+        data,
+      })
       .select('id, event, data, actor_type, actor_id, created_at')
       .single()
 

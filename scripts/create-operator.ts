@@ -25,13 +25,15 @@ const main = async () => {
     const encrypted = await hash(password, 12)
     if (existing.rows[0]) {
       await client.query(
-        `update app_users set email = $1, encrypted_password = $2,
-         banned_until = null, deleted_at = null, updated_at = now() where id = $3`,
+        `update app_users set email = $1, encrypted_password = $2, role = 'admin',
+         session_epoch = session_epoch + 1, banned_until = null, deleted_at = null, updated_at = now()
+         where id = $3`,
         [email, encrypted, id],
       )
     } else {
       await client.query(
-        'insert into app_users (id, email, encrypted_password) values ($1, $2, $3)',
+        `insert into app_users (id, email, encrypted_password, role)
+         values ($1, $2, $3, 'admin')`,
         [id, email, encrypted],
       )
     }

@@ -12,9 +12,11 @@ import { AppSidebar } from '@/components/app-sidebar'
  */
 export const MobileNav = ({
   email,
+  role,
   projects,
 }: {
   email: string
+  role: 'admin' | 'member'
   projects: { key: string; title: string }[]
 }) => {
   const [open, setOpen] = useState(false)
@@ -60,6 +62,7 @@ export const MobileNav = ({
           >
             <AppSidebar
               email={email}
+              role={role}
               projects={projects}
               onNavigate={() => setOpen(false)}
               trailing={

@@ -75,7 +75,7 @@ export type FileContext = {
  * on a rooting difference is indistinguishable from "nothing is known", which
  * is the more expensive wrong answer.
  */
-export const contextForFile = async (userId: string, rawPath: string): Promise<FileContext> => {
+export const contextForFile = async (_userId: string, rawPath: string): Promise<FileContext> => {
   const path = normalisePath(rawPath)
   const basename = path.split('/').pop() ?? path
 
@@ -89,7 +89,6 @@ export const contextForFile = async (userId: string, rawPath: string): Promise<F
     const query = admin()
       .from('file_touches')
       .select(select)
-      .eq('owner_user_id', userId)
       .order('created_at', { ascending: false })
       .limit(MAX_ROWS_PER_PATH)
 

@@ -25,7 +25,7 @@ export const GET = route({
 
 /**
  * Rename, merge or delete — one operation, because a rename onto an existing
- * label *is* a merge. The work happens in a single owner-scoped statement in
+ * label *is* a merge. The work happens in a single workspace-wide statement in
  * the database; doing it here would mean reading every task, rewriting its
  * array and writing it back one row at a time.
  */

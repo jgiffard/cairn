@@ -141,7 +141,7 @@ const keyOfProject = (project: ExactTask['project']) =>
  * the whole point of retaining former keys is that old refs keep resolving.
  */
 const tasksByNumber = async (
-  userId: string,
+  _userId: string,
   q: string,
   project?: string,
 ): Promise<ExactTask[]> => {
@@ -151,7 +151,6 @@ const tasksByNumber = async (
   let query = admin()
     .from('tasks')
     .select(EXACT_COLUMNS)
-    .eq('projects.owner_user_id', userId)
     .eq('number', Number(match[1]))
   if (project) query = query.eq('projects.key', project.toUpperCase())
 
@@ -172,7 +171,6 @@ const taskByRef = async (userId: string, q: string): Promise<ExactTask | null> =
   const { data } = await admin()
     .from('tasks')
     .select(columns)
-    .eq('projects.owner_user_id', userId)
     .eq('projects.key', key)
     .eq('number', number)
     .maybeSingle()
@@ -185,7 +183,6 @@ const taskByRef = async (userId: string, q: string): Promise<ExactTask | null> =
   const { data: byFormer } = await admin()
     .from('tasks')
     .select(columns)
-    .eq('projects.owner_user_id', userId)
     .eq('project_id', projectId)
     .eq('number', number)
     .maybeSingle()

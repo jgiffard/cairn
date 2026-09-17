@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const resolve = async (userId: string, idOrKey: string) => {
-  const q = admin().from('projects').select('id, key').eq('owner_user_id', userId)
+const resolve = async (idOrKey: string) => {
+  const q = admin().from('projects').select('id, key')
   const { data } = UUID.test(idOrKey)
     ? await q.eq('id', idOrKey).maybeSingle()
     : await q.eq('key', idOrKey.toUpperCase()).maybeSingle()
@@ -26,13 +26,12 @@ const linkRepo = z.object({
 
 export const GET = route<{ id: string }>({
   handler: async ({ actor, params }) => {
-    const project = await resolve(actor.userId, params.id)
+    const project = await resolve(params.id)
     if (!project) return fail('not_found', `No project ${params.id}.`)
 
     const { data, error } = await admin()
       .from('project_repos')
       .select('remote, root_commit, created_at')
-      .eq('owner_user_id', actor.userId)
       .eq('project_id', project.id)
       .order('created_at')
 
@@ -51,7 +50,7 @@ export const GET = route<{ id: string }>({
 export const POST = route<{ id: string }, z.infer<typeof linkRepo>>({
   schema: linkRepo,
   handler: async ({ actor, params, body }) => {
-    const project = await resolve(actor.userId, params.id)
+    const project = await resolve(params.id)
     if (!project) return fail('not_found', `No project ${params.id}.`)
 
     const { data, error } = await admin()
@@ -74,8 +73,8 @@ export const POST = route<{ id: string }, z.infer<typeof linkRepo>>({
 })
 
 export const DELETE = route<{ id: string }>({
-  handler: async ({ actor, params, url }) => {
-    const project = await resolve(actor.userId, params.id)
+  handler: async ({ params, url }) => {
+    const project = await resolve(params.id)
     if (!project) return fail('not_found', `No project ${params.id}.`)
 
     const remote = url.searchParams.get('remote')
@@ -84,7 +83,6 @@ export const DELETE = route<{ id: string }>({
     const { error } = await admin()
       .from('project_repos')
       .delete()
-      .eq('owner_user_id', actor.userId)
       .eq('project_id', project.id)
       .eq('remote', normaliseRemote(remote))
 
