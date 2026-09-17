@@ -36,6 +36,7 @@ export const POST = route<{ ref: string }, z.infer<typeof blockBody>>({
     if (error) return fail('internal_error', error.message)
 
     await admin().from('task_activity_events').insert({
+      owner_user_id: actor.userId,
       task_id: task.id,
       actor_type: actor.actorType,
       actor_id: actor.actorId,

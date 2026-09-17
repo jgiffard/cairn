@@ -7,6 +7,21 @@ Cairn is pre-1.0: the schema, API and CLI are in daily use and stable in practic
 minor bump may still change them. Anything that would break an existing install is called
 out under **Breaking** with what to do about it.
 
+## [Unreleased]
+
+### Added
+
+- **Shared workspace membership:** administrators can add, disable and restore users,
+  assign administrator or member roles, reset passwords, and manage each user's agent
+  keys. Active users and valid agent keys work across one common project and memory space.
+
+### Changed
+
+- Owner columns are retained as attribution metadata, not authorization boundaries.
+  Project keys, entity keys and knowledge slugs are unique across the workspace.
+- Durable actor labels include the owning user's display identity, and migration `049`
+  qualifies legacy task, activity, knowledge, session and search attribution accordingly.
+
 ## [0.5.1] — 2026-09-16
 
 ### Fixed

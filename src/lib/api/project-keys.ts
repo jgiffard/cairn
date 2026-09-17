@@ -10,13 +10,12 @@ import { admin } from '@/lib/db/client'
 
 /** The project a retired key belongs to, or null if the key was never used. */
 export const projectIdForFormerKey = async (
-  userId: string,
+  _userId: string,
   key: string,
 ): Promise<string | null> => {
   const { data, error } = await admin()
     .from('project_former_keys')
     .select('project_id')
-    .eq('owner_user_id', userId)
     .eq('key', key.toUpperCase())
     .maybeSingle()
 
@@ -26,12 +25,11 @@ export const projectIdForFormerKey = async (
 
 /** Every retired key, with the live key it now resolves to. */
 export const listFormerKeys = async (
-  userId: string,
+  _userId: string,
 ): Promise<{ key: string; project_id: string; current: string }[]> => {
   const { data, error } = await admin()
     .from('project_former_keys')
     .select('key, project_id, project:projects(key)')
-    .eq('owner_user_id', userId)
     .order('retired_at')
 
   if (error) throw new Error(error.message)
@@ -47,11 +45,10 @@ export const listFormerKeys = async (
 }
 
 /** The keys a given project has been known by, oldest first. */
-export const formerKeysFor = async (userId: string, projectId: string): Promise<string[]> => {
+export const formerKeysFor = async (_userId: string, projectId: string): Promise<string[]> => {
   const { data, error } = await admin()
     .from('project_former_keys')
     .select('key')
-    .eq('owner_user_id', userId)
     .eq('project_id', projectId)
     .order('retired_at')
 

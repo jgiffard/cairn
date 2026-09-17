@@ -17,9 +17,9 @@ Three hooks make it happen without anyone being reminded — a briefing when a s
 starts, what is known about a file when one is opened, and the session written down when
 it ends.
 
-> **Single-tenant on purpose.** Every server query resolves to one owner, so Cairn is built
-> for one person and their agents, not a team. In daily use; schema, API, CLI, UI and the
-> agent contract are all in place.
+> **One shared workspace.** Every active user and agent can work across the same projects,
+> tasks and memory. Administrators manage membership, roles and agent keys; owner columns
+> remain attribution metadata rather than visibility boundaries.
 >
 > **Pre-1.0.** Stable in practice and running in production, but a minor version may still
 > change the schema or the API. Anything that breaks an existing install is called out in
@@ -77,7 +77,7 @@ $ cairn claim ACME-57
 id	9f3c1a04-2b77-4a0e-8d51-6e0c2f1b9a44
 number	57
 status	doing
-claimed_by	claude-code
+claimed_by	claude-code · Alice
 claimed_at	2026-08-14T14:52:40.102Z
 heartbeat_at	2026-08-14T14:52:40.102Z
 attempt	1
@@ -88,7 +88,7 @@ rather than guessing:
 
 ```console
 $ cairn claim ACME-57
-Held by codex, last heartbeat 3m ago. Pick different work; a lease becomes stealable
+Held by codex · Bob, last heartbeat 3m ago. Pick different work; a lease becomes stealable
 after 15m of silence.
 ```
 
@@ -104,7 +104,7 @@ id	c02b8f31-5c4d-4f2a-9a63-1f0d7e3a55b1
 kind	finding
 note	Supavisor caps at its own pool_size regardless of what the client asks for.
 actor_type	agent
-actor_id	claude-code
+actor_id	claude-code · Alice
 created_at	2026-08-14T15:41:52.006Z
 ```
 
@@ -119,7 +119,7 @@ slug	supavisor-caps-the-pool-at-its-own-setting
 title	Supavisor caps the pool at its own setting
 body	The client's pool_size is advisory. Raise it in the pooler's own config; the client-side value never wins.
 actor_type	agent
-actor_id	claude-code
+actor_id	claude-code · Alice
 created_at	2026-08-14T16:01:44.870Z
 updated_at	2026-08-14T16:01:44.870Z
 projects	ACME
@@ -152,7 +152,7 @@ kind	ref	status	type	answered	tokens	title
 task	ACME-57	done	bug	yes	~30	Migrations time out when workers run in parallel
 knowledge	supavisor-caps-the-pool-at-its-own-setting	current	knowledge		~32	Supavisor caps the pool at its own setting
 note	ACME-57	done	bug	yes	~21	Supavisor caps at its own pool_size regardless of what the client asks…
-session	2026-08-14	claude-code	session	yes	~74	migrations time out when workers run in parallel
+session	2026-08-14	claude-code · Alice	session	yes	~74	migrations time out when workers run in parallel
 3 precise, 1 loose
 ```
 
@@ -172,7 +172,7 @@ resolutionKind	fixed
 updatedAt	2026-08-14T16:04:18.551Z
 findings.0.kind	finding
 findings.0.note	Supavisor caps at its own pool_size regardless of what the client asks for.
-findings.0.by	claude-code
+findings.0.by	claude-code · Alice
 findings.0.at	2026-08-14T15:41:52.006Z
 omitted.descriptionBytes	0
 omitted.attemptsAndNotes	1
@@ -374,6 +374,8 @@ schemas the routes validate against, so it cannot drift. Browsable at `/api-docs
 /reconcile                      release claims that went quiet
 /events                         change stream (SSE)
 /keys  /keys/{id}               issue and revoke agent keys
+/users  /users/{id}             administrator-only membership and role management
+/users/{id}/keys                administrator-only agent identity management
 ```
 
 A test walks `src/app/api/v1` and asserts every route on disk appears in the spec, so the
@@ -423,10 +425,9 @@ The example assumes a Traefik instance already running on an external Docker net
 a Let's Encrypt resolver; adapt the labels for nginx or Caddy. The container runs
 read-only, as a non-root user, with all capabilities dropped.
 
-### The first user
+### The first administrator
 
-There is no sign-up page — a single-tenant tracker does not need one, and an open
-registration form on a public host is a liability. Create the account after migrating:
+There is no public sign-up page. Bootstrap the first administrator after migrating:
 
 ```bash
 CAIRN_OPERATOR_EMAIL=you@example.com \
@@ -434,7 +435,9 @@ CAIRN_OPERATOR_PASSWORD='a-long-password' \
 npm run operator:create
 ```
 
-Then issue an agent key from **Settings** once you are in.
+Then add members and issue per-user agent keys from **Users**. All active identities share
+the workspace; administrator privileges are required only for membership, roles, password
+resets and key management.
 
 ### Secrets
 
@@ -592,7 +595,8 @@ already installed — `/usr/local/bin` existing is not consent to install into i
 - **PostgreSQL 17+** over the native protocol; local filesystem storage for attachments
 - **Auth**: opaque, revocable application sessions for the UI; hashed
   bearer API keys for agents, one key per agent
-- **Authorization**: every server-side query filters by owner explicitly; PostgreSQL is
+- **Authorization**: active users and valid agent keys share workspace data; human
+  administrators alone manage users, roles, passwords and agent keys. PostgreSQL is
   reachable only from the private application network.
 
 **The data model**, in four groups: `projects` / `tasks` / `task_notes` / `task_comments`

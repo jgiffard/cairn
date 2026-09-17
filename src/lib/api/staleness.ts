@@ -76,7 +76,7 @@ export type AgeableEntry = {
  * anything it says about itself.
  */
 const filesFromSource = async (
-  userId: string,
+  _userId: string,
   entries: AgeableEntry[],
 ): Promise<Map<string, string[]>> => {
   const taskIds = entries.map((e) => e.source_task_id).filter(Boolean) as string[]
@@ -92,7 +92,6 @@ const filesFromSource = async (
     const { data } = await admin()
       .from('file_touches')
       .select(`path, ${column}`)
-      .eq('owner_user_id', userId)
       .in(column, ids)
       .limit(2000)
     for (const row of (data ?? []) as Record<string, string>[]) {
@@ -154,7 +153,6 @@ export const stalenessFor = async (
   const { data, error } = await admin()
     .from('file_touches')
     .select('path, session_id, created_at')
-    .eq('owner_user_id', userId)
     .in('path', [...byPath.keys()])
     .gte('created_at', new Date(since ?? 0).toISOString())
     .limit(5000)

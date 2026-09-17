@@ -24,11 +24,10 @@ const entityCreate = z.object({
  * business AND sits on a stack, and a fact can be true for either reason.
  */
 export const GET = route({
-  handler: async ({ actor }) => {
+  handler: async () => {
     const { data, error } = await admin()
       .from('entities')
       .select('id, key, title, description, project_entities(project:projects(key))')
-      .eq('owner_user_id', actor.userId)
       .order('key')
 
     if (error) return fail('internal_error', error.message)
@@ -73,7 +72,6 @@ export const POST = route({
       const { data: projects, error: lookupError } = await admin()
         .from('projects')
         .select('id, key')
-        .eq('owner_user_id', actor.userId)
         .in('key', keys)
       if (lookupError) return fail('internal_error', lookupError.message)
 
@@ -114,11 +112,10 @@ const entityPatch = z.object({
  *  assigning one project should not silently unassign thirty others. */
 export const PATCH = route({
   schema: entityPatch,
-  handler: async ({ actor, body }) => {
+  handler: async ({ body }) => {
     const { data: entity } = await admin()
       .from('entities')
       .select('id')
-      .eq('owner_user_id', actor.userId)
       .eq('key', body.key.toLowerCase())
       .maybeSingle()
     if (!entity) return fail('not_found', `No entity "${body.key}".`)
@@ -128,7 +125,6 @@ export const PATCH = route({
       const { data } = await admin()
         .from('projects')
         .select('id, key')
-        .eq('owner_user_id', actor.userId)
         .in('key', keys.map((k) => k.toUpperCase()))
       return (data ?? []).map((p) => p.id as string)
     }
@@ -177,14 +173,13 @@ export const PATCH = route({
  * can tell the difference.
  */
 export const DELETE = route({
-  handler: async ({ actor, url }) => {
+  handler: async ({ url }) => {
     const key = url.searchParams.get('key')
     if (!key) return fail('validation_failed', 'Provide ?key=<entity>.')
 
     const { data: entity } = await admin()
       .from('entities')
       .select('id')
-      .eq('owner_user_id', actor.userId)
       .eq('key', key.toLowerCase())
       .maybeSingle()
     if (!entity) return fail('not_found', `No entity "${key}".`)
@@ -204,7 +199,6 @@ export const DELETE = route({
       .from('entities')
       .delete()
       .eq('id', entity.id)
-      .eq('owner_user_id', actor.userId)
     if (error) return fail('internal_error', error.message)
 
     return ok({

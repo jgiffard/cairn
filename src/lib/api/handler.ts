@@ -10,6 +10,19 @@ type Config<P, B> = {
   handler: (ctx: Ctx<P, B>) => Promise<Response>
 }
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/**
+ * Browser sessions use cookies, so unsafe requests must prove they came from
+ * this exact origin. Bearer callers are not vulnerable to ambient-cookie CSRF.
+ */
+export const isTrustedMutationOrigin = (req: Request): boolean => {
+  if (SAFE_METHODS.has(req.method)) return true
+  if (/^Bearer\s+\S+/i.test(req.headers.get('authorization') ?? '')) return true
+  const origin = req.headers.get('origin')
+  return origin !== null && origin === new URL(req.url).origin
+}
+
 /**
  * Wraps a route handler with authentication, rate limiting, body parsing and
  * validation, so individual routes stay small.
@@ -24,6 +37,9 @@ export const route = <P = Record<string, string>, B = unknown>(config: Config<P,
       const actor = await authenticate(req)
       if (!actor) {
         return fail('unauthorized', 'Provide a bearer API key or sign in.')
+      }
+      if (!isTrustedMutationOrigin(req)) {
+        return fail('forbidden', 'Browser mutations must come from the Cairn origin.')
       }
 
       const limit = checkRateLimit(actor.rateKey)

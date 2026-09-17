@@ -33,10 +33,10 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
     <ToastHost>
       <ProjectKeysProvider keys={refKeys}>
         <TaskCreationProvider projects={projectList}>
-          <MobileNavProvider email={email} projects={projectList}>
+          <MobileNavProvider email={email} role={user.role} projects={projectList}>
             <div className="bg-bg flex h-dvh">
               <aside className="border-border bg-bg-elevated hidden w-[13.75rem] shrink-0 flex-col border-r md:flex">
-                <AppSidebar email={email} projects={projectList} />
+                <AppSidebar email={email} role={user.role} projects={projectList} />
               </aside>
 
               {/* Beside the content, not above the sidebar: the shell is a flex

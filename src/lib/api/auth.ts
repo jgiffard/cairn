@@ -1,12 +1,13 @@
-import { admin } from '@/lib/db/client'
+import { pool } from '@/lib/db/client'
 import { sessionUser } from '@/lib/auth/session'
+import { actorLabel, type UserRole } from './actor'
 import { hashApiKey, hashesMatch, looksLikeApiKey } from './keys'
 
 /**
  * Who is making a request.
  *
- * `userId` is the owner every query must be scoped to. `actorType`/`actorId`
- * are what get stamped on writes, so the shared memory records which of
+ * `userId` identifies the human behind the request. Workspace data is shared;
+ * `actorType`/`actorId` are what get stamped on writes, so the shared memory records which of
  * Claude Code, Codex or OpenClaw did a thing — that attribution is most of
  * what makes the work log worth reading.
  */
@@ -14,6 +15,8 @@ export type Actor = {
   userId: string
   actorType: 'human' | 'agent'
   actorId: string
+  userDisplayName: string
+  role: UserRole
   /** Identity used for rate limiting: the key id, or the user for UI sessions. */
   rateKey: string
 }
@@ -29,23 +32,37 @@ const bearerToken = (req: Request): string | null => {
 
 /**
  * Agents authenticate with a bearer API key; the human UI authenticates with
- * its application session cookie. Deliberately not HMAC request signing: with a
- * single owner and no untrusted callers, signing buys nothing and costs every
- * caller a canonicalisation and nonce implementation.
+ * its application session cookie. Deliberately not HMAC request signing: TLS,
+ * opaque revocable credentials and server-side authorization provide the
+ * boundary without making every caller implement canonicalisation and nonces.
  */
 export const authenticate = async (req: Request): Promise<Actor | null> => {
   const token = bearerToken(req)
 
   if (token && looksLikeApiKey(token)) {
-    const { data, error } = await admin()
-      .from('api_keys')
-      .select('id, user_id, agent_name, key_hash, revoked_at')
-      .eq('key_hash', hashApiKey(token))
-      .is('revoked_at', null)
-      .maybeSingle()
-
-    if (error || !data) return null
-    if (!hashesMatch(data.key_hash, hashApiKey(token))) return null
+    const tokenHash = hashApiKey(token)
+    const { rows } = await pool().query<{
+      id: string
+      user_id: string
+      agent_name: string
+      key_hash: string
+      role: UserRole
+      user_display_name: string
+    }>(
+      `select k.id, k.user_id, k.agent_name, k.key_hash, u.role,
+              coalesce(nullif(trim(p.display_name), ''), u.email) as user_display_name
+         from api_keys k
+         join app_users u on u.id = k.user_id
+         left join user_profiles p on p.id = u.id
+        where k.key_hash = $1 and k.revoked_at is null
+          and k.auth_epoch = u.auth_epoch
+          and u.deleted_at is null
+          and coalesce(u.banned_until, '-infinity'::timestamptz) <= now()
+        limit 1`,
+      [tokenHash],
+    )
+    const data = rows[0]
+    if (!data || !hashesMatch(data.key_hash, tokenHash)) return null
 
     // Best-effort; a failed touch must never fail the request.
     //
@@ -55,10 +72,8 @@ export const authenticate = async (req: Request): Promise<Actor | null> => {
     // fire-and-forget, and silently never runs. It meant last_used_at stayed
     // null for every key despite constant use, which was only noticed once
     // the settings UI put that column on screen.
-    admin()
-      .from('api_keys')
-      .update({ last_used_at: new Date().toISOString() })
-      .eq('id', data.id)
+    pool()
+      .query('update api_keys set last_used_at = now() where id = $1', [data.id])
       .then(
         () => undefined,
         () => undefined, // never let a failed touch fail the request
@@ -67,7 +82,9 @@ export const authenticate = async (req: Request): Promise<Actor | null> => {
     return {
       userId: data.user_id,
       actorType: 'agent',
-      actorId: data.agent_name,
+      actorId: actorLabel('agent', data.agent_name, data.user_display_name),
+      userDisplayName: data.user_display_name,
+      role: data.role,
       rateKey: `key:${data.id}`,
     }
   }
@@ -78,10 +95,11 @@ export const authenticate = async (req: Request): Promise<Actor | null> => {
   return {
     userId: user.id,
     actorType: 'human',
-    // The email, not the uuid. `actorId` is stamped on every write and shown
-    // in the activity trail as "who changed this" — a uuid there answers
-    // nothing, and an agent's actorId is already its readable name.
-    actorId: user.email ?? user.id,
+    // Use the canonical display identity. `actorId` is stamped on every write
+    // and shown in the activity trail, where a UUID answers nothing.
+    actorId: actorLabel('human', user.email ?? user.id, user.displayName),
+    userDisplayName: user.displayName,
+    role: user.role,
     rateKey: `user:${user.id}`,
   }
 }

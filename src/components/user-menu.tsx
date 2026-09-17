@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronsUpDown, Keyboard, LogOut, Settings as SettingsIcon } from 'lucide-react'
+import { ChevronsUpDown, Keyboard, LogOut, Settings as SettingsIcon, Users } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 import { Avatar } from '@/components/icons'
@@ -17,7 +17,15 @@ import { Spinner } from '@/components/spinner'
  * One row that opens a menu instead: the identity is the affordance, and
  * everything that acts on the account lives behind it.
  */
-export const UserMenu = ({ email, onNavigate }: { email: string; onNavigate?: () => void }) => {
+export const UserMenu = ({
+  email,
+  role,
+  onNavigate,
+}: {
+  email: string
+  role: 'admin' | 'member'
+  onNavigate?: () => void
+}) => {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [leaving, startLeaving] = useTransition()
@@ -97,8 +105,23 @@ export const UserMenu = ({ email, onNavigate }: { email: string; onNavigate?: ()
             className={item}
           >
             <SettingsIcon size={13} aria-hidden />
-            Settings and API keys
+            Settings
           </Link>
+
+          {role === 'admin' && (
+            <Link
+              href="/users"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                onNavigate?.()
+              }}
+              className={item}
+            >
+              <Users size={13} aria-hidden />
+              Users and access
+            </Link>
+          )}
 
           <button
             type="button"

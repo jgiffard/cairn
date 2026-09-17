@@ -50,9 +50,8 @@ export const GET = route({
       .from('tasks')
       .select(
         'id, number, title, status, priority, type, claimed_by, heartbeat_at, updated_at, ' +
-          'checkpoint_summary, blocked_at, project:projects!project_id!inner(key, owner_user_id)',
+          'checkpoint_summary, blocked_at, project:projects!project_id!inner(key)',
       )
-      .eq('projects.owner_user_id', actor.userId)
       .not('status', 'in', '("done","cancelled")')
       .neq('projects.status', 'archived')
 

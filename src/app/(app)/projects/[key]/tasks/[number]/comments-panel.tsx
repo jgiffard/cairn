@@ -56,7 +56,7 @@ export const CommentsPanel = ({
             <li key={c.id} className="border-border border-l-2 pl-3">
               <div className="mb-0.5 flex items-center gap-2 text-[0.6875rem]">
                 <span className={c.actor_type === 'agent' ? 'text-accent' : 'text-fg-subtle'}>
-                  {c.actor_type === 'agent' ? c.actor_id : 'you'}
+                  {c.actor_id}
                 </span>
                 <span className="text-fg-subtle tabular">
                   <RelativeTime iso={c.created_at} />

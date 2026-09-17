@@ -189,7 +189,6 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       const { data: target } = await admin()
         .from('projects')
         .select('id, key')
-        .eq('owner_user_id', actor.userId)
         .or(`key.eq.${body.project.toUpperCase()},id.eq.${UUID_OR_NULL(body.project)}`)
         .maybeSingle()
 
@@ -219,7 +218,6 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       const { data: targets, error: lookupError } = await admin()
         .from('projects')
         .select('id, key')
-        .eq('owner_user_id', actor.userId)
         .in('key', keys.length > 0 ? keys : ['\u0000'])
       if (lookupError) return fail('internal_error', lookupError.message)
 
@@ -276,7 +274,7 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       })
     }
 
-    await recordActivity(diffTaskEvents(actor, task.id, task, patch))
+    await recordActivity(diffTaskEvents(actor, task.id, task, patch), actor.userId)
 
     // The withdrawn answer, kept where history can still show it.
     if (reopening && task.resolution) {

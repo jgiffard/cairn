@@ -211,7 +211,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
                     <span
                       className={note.actor_type === 'agent' ? 'text-accent' : 'text-fg-subtle'}
                     >
-                      {note.actor_type === 'agent' ? note.actor_id : 'you'}
+                      {note.actor_id}
                     </span>
                     <RelativeTime
                       iso={note.created_at}

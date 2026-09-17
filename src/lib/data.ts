@@ -45,11 +45,7 @@ export type Project = {
   task_counter: number
 }
 
-/**
- * Every query here is scoped to the signed-in user explicitly, because the
- * service-role client bypasses RLS. RLS is the browser-side boundary and a
- * defence-in-depth layer; it is not what protects these reads.
- */
+/** Workspace data is shared by every active user. */
 export const currentUser = async () => {
   return sessionUser()
 }
@@ -60,13 +56,12 @@ export const currentUser = async () => {
  * works if the default view actually drops it.
  */
 export const listProjects = async (
-  userId: string,
+  _userId: string,
   { includeArchived = false }: { includeArchived?: boolean } = {},
 ): Promise<Project[]> => {
   const query = admin()
     .from('projects')
     .select('id, key, title, description, status, task_counter')
-    .eq('owner_user_id', userId)
   /**
    * Alphabetical by title, which is what the sidebar shows.
    *
@@ -81,11 +76,10 @@ export const listProjects = async (
   return ((data ?? []) as Project[]).sort(byTitle)
 }
 
-export const getProject = async (userId: string, key: string): Promise<Project | null> => {
+export const getProject = async (_userId: string, key: string): Promise<Project | null> => {
   const { data } = await admin()
     .from('projects')
     .select('id, key, title, description, status, task_counter')
-    .eq('owner_user_id', userId)
     .eq('key', key.toUpperCase())
     .maybeSingle()
   return (data as Project) ?? null
@@ -253,14 +247,13 @@ export const listAlsoProjects = async (taskId: string): Promise<string[]> => {
 }
 
 export const getTask = async (
-  userId: string,
+  _userId: string,
   key: string,
   number: number,
 ): Promise<(Task & { project: Project }) | null> => {
   const { data } = await admin()
     .from('tasks')
-    .select('*, project:projects!project_id!inner(id, key, title, description, status, task_counter, owner_user_id)')
-    .eq('projects.owner_user_id', userId)
+    .select('*, project:projects!project_id!inner(id, key, title, description, status, task_counter)')
     .eq('projects.key', key.toUpperCase())
     .eq('number', number)
     .maybeSingle()
@@ -421,7 +414,7 @@ export const listAttachments = async (taskId: string): Promise<Attachment[]> => 
  * column that only matters when the list spans projects.
  */
 export const listAllTasks = async (
-  userId: string,
+  _userId: string,
   {
     includeClosed = false,
     limit = 500,
@@ -435,8 +428,7 @@ export const listAllTasks = async (
 
   let q = admin()
     .from('tasks')
-    .select(`${LIST_COLUMNS}, project:projects!project_id!inner(key, owner_user_id)`)
-    .eq('projects.owner_user_id', userId)
+    .select(`${LIST_COLUMNS}, project:projects!project_id!inner(key)`)
 
   if (!includeClosed) q = q.not('status', 'in', `(${closed.join(',')})`)
 
@@ -444,14 +436,12 @@ export const listAllTasks = async (
     q.order('updated_at', { ascending: false }).limit(limit),
     admin()
       .from('tasks')
-      .select('id, project:projects!project_id!inner(owner_user_id)', { count: 'exact', head: true })
-      .eq('projects.owner_user_id', userId)
+      .select('id', { count: 'exact', head: true })
       .in('status', closed),
     byWhenFinished(
       admin()
         .from('tasks')
-        .select(`${LIST_COLUMNS}, project:projects!project_id!inner(key, owner_user_id)`)
-        .eq('projects.owner_user_id', userId)
+        .select(`${LIST_COLUMNS}, project:projects!project_id!inner(key)`)
         .in('status', closed),
     ),
   ])

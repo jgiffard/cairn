@@ -14,11 +14,13 @@ const SettingsPage = async () => {
   if (!user) redirect('/login')
 
   // key_hash is never selected, here or anywhere.
-  const { data } = await admin()
-    .from('api_keys')
-    .select('id, agent_name, name, key_prefix, last_used_at, revoked_at, created_at')
-    .eq('user_id', user.id)
-    .order('created_at')
+  const { data } = user.role === 'admin'
+    ? await admin()
+      .from('api_keys')
+      .select('id, agent_name, name, key_prefix, last_used_at, revoked_at, created_at')
+      .eq('user_id', user.id)
+      .order('created_at')
+    : { data: [] }
 
   const { data: labels } = await admin().rpc('list_labels', { p_owner: user.id })
 
@@ -28,12 +30,10 @@ const SettingsPage = async () => {
       .select(
         'key, title, project_entities(project:projects(key)), knowledge_entities(knowledge_id)',
       )
-      .eq('owner_user_id', user.id)
       .order('key'),
     admin()
       .from('projects')
       .select('key, title, project_entities(entity_id)')
-      .eq('owner_user_id', user.id)
       .eq('status', 'active')
       .order('key'),
   ])
@@ -87,7 +87,7 @@ const SettingsPage = async () => {
 
       <div className="flex flex-col gap-10">
         <PasswordSection />
-        <KeysSection keys={(data ?? []) as KeyRow[]} />
+        {user.role === 'admin' && <KeysSection keys={(data ?? []) as KeyRow[]} />}
         <LabelsSection labels={(labels ?? []) as LabelRow[]} />
         <EntitiesSection
           entities={entities}

@@ -17,7 +17,7 @@ const createProject = z.object({
 })
 
 export const GET = route({
-  handler: async ({ actor, url }) => {
+  handler: async ({ url }) => {
     // Archived projects are hidden unless asked for: an agent listing projects
     // to decide where to file work should not be offered a retired one.
     const includeArchived = url.searchParams.get('archived') === '1'
@@ -25,7 +25,6 @@ export const GET = route({
     const query = admin()
       .from('projects')
       .select('id, key, title, description, status, task_counter, created_at, updated_at')
-      .eq('owner_user_id', actor.userId)
 
     const { data, error } = await (includeArchived ? query : query.eq('status', 'active'))
       .order('title')

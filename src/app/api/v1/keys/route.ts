@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { route } from '@/lib/api/handler'
-import { ok, fail } from '@/lib/api/response'
-import { admin } from '@/lib/db/client'
-import { generateApiKey } from '@/lib/api/keys'
+import { ok } from '@/lib/api/response'
+import { requireUserAdministrator, userAdminFailure } from '@/lib/api/user-admin-route'
+import { createUserKey, listUserKeys } from '@/lib/api/users'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,15 +15,13 @@ const createKey = z.object({
 
 export const GET = route({
   handler: async ({ actor }) => {
-    // key_hash is deliberately never selected.
-    const { data, error } = await admin()
-      .from('api_keys')
-      .select('id, agent_name, name, key_prefix, last_used_at, revoked_at, created_at')
-      .eq('user_id', actor.userId)
-      .order('created_at')
-
-    if (error) return fail('internal_error', error.message)
-    return ok(data)
+    const denied = requireUserAdministrator(actor)
+    if (denied) return denied
+    try {
+      return ok(await listUserKeys(actor.userId))
+    } catch (error) {
+      return userAdminFailure(error)
+    }
   },
 })
 
@@ -35,30 +33,12 @@ export const GET = route({
 export const POST = route<Record<string, string>, z.infer<typeof createKey>>({
   schema: createKey,
   handler: async ({ actor, body }) => {
-    const { key, keyHash, keyPrefix } = generateApiKey()
-
-    const { data, error } = await admin()
-      .from('api_keys')
-      .insert({
-        user_id: actor.userId,
-        agent_name: body.agentName,
-        platform_source: body.agentName,
-        name: body.name,
-        key_prefix: keyPrefix,
-        key_hash: keyHash,
-      })
-      .select('id, agent_name, name, key_prefix, created_at')
-      .single()
-
-    if (error) return fail('internal_error', error.message)
-
-    return ok(
-      {
-        ...data,
-        key,
-        warning: 'This is the only time the key is shown. Store it now.',
-      },
-      { status: 201 },
-    )
+    const denied = requireUserAdministrator(actor)
+    if (denied) return denied
+    try {
+      return ok(await createUserKey(actor.userId, body), { status: 201 })
+    } catch (error) {
+      return userAdminFailure(error)
+    }
   },
 })

@@ -17,10 +17,10 @@ const listQuery = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 })
 
-/** Resolves a project by uuid or by its short key, scoped to the owner. */
-const resolveProject = async (userId: string, idOrKey: string) => {
+/** Resolves a project by uuid or by its short key in the shared workspace. */
+const resolveProject = async (idOrKey: string) => {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrKey)
-  const q = admin().from('projects').select('id, key').eq('owner_user_id', userId)
+  const q = admin().from('projects').select('id, key')
   const { data } = isUuid
     ? await q.eq('id', idOrKey).maybeSingle()
     : await q.eq('key', idOrKey.toUpperCase()).maybeSingle()
@@ -29,7 +29,7 @@ const resolveProject = async (userId: string, idOrKey: string) => {
 
 export const GET = route<{ id: string }>({
   handler: async ({ actor, params, url }) => {
-    const project = await resolveProject(actor.userId, params.id)
+    const project = await resolveProject(params.id)
     if (!project) return fail('not_found', `No project ${params.id}.`)
 
     const parsed = listQuery.safeParse(Object.fromEntries(url.searchParams))
@@ -39,7 +39,6 @@ export const GET = route<{ id: string }>({
     let query = admin()
       .from('tasks')
       .select(TASK_LIST_FIELDS, { count: 'exact' })
-      .eq('projects.owner_user_id', actor.userId)
 
     // A task filed elsewhere can still belong here. Its home project keeps the
     // ref; these links only widen where it shows up, so the list is the union.
@@ -73,7 +72,7 @@ export const GET = route<{ id: string }>({
 export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
   schema: createTaskSchema,
   handler: async ({ actor, params, body }) => {
-    const project = await resolveProject(actor.userId, params.id)
+    const project = await resolveProject(params.id)
     if (!project) return fail('not_found', `No project ${params.id}.`)
 
     // A new task has no id yet, so it cannot be its own ancestor — the cycle

@@ -6,16 +6,15 @@ import { removeAttachments, signUrls } from '@/lib/attachments'
 
 export const dynamic = 'force-dynamic'
 
-/** Attachments are reachable only through a task the caller owns. */
-const findOwned = async (userId: string, id: string) => {
+/** Attachments are shared workspace data and remain reachable through their task. */
+const findWorkspaceAttachment = async (id: string) => {
   const { data } = await admin()
     .from('task_attachments')
     .select(
       'id, original_name, mime_type, size_bytes, sha256, storage_path, created_at, ' +
-        'task:tasks!inner(id, project:projects!project_id!inner(owner_user_id))',
+        'task:tasks!inner(id, project:projects!project_id!inner(id))',
     )
     .eq('id', id)
-    .eq('tasks.projects.owner_user_id', userId)
     .maybeSingle()
   return data as unknown as
     | {
@@ -31,8 +30,8 @@ const findOwned = async (userId: string, id: string) => {
 }
 
 export const GET = route<{ id: string }>({
-  handler: async ({ actor, params }) => {
-    const row = await findOwned(actor.userId, params.id)
+  handler: async ({ params }) => {
+    const row = await findWorkspaceAttachment(params.id)
     if (!row) return fail('not_found', 'No such attachment.')
     return ok({ ...row, ...(await signUrls(row.storage_path, row.original_name, row.mime_type)) })
   },
@@ -40,7 +39,7 @@ export const GET = route<{ id: string }>({
 
 export const DELETE = route<{ id: string }>({
   handler: async ({ actor, params }) => {
-    const row = await findOwned(actor.userId, params.id)
+    const row = await findWorkspaceAttachment(params.id)
     if (!row) return fail('not_found', 'No such attachment.')
 
     // Object first: a failed row delete leaves a recoverable inconsistency,

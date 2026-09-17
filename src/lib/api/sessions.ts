@@ -1,5 +1,6 @@
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
+import { actorLabel } from './actor'
 import type { SessionUpsert } from '@/schemas/session'
 import { recordFiles } from './files'
 
@@ -42,12 +43,11 @@ export type SessionRow = {
   updated_at: string
 }
 
-const projectIdForKey = async (userId: string, key?: string): Promise<string | null> => {
+const projectIdForKey = async (_userId: string, key?: string): Promise<string | null> => {
   if (!key) return null
   const { data, error } = await admin()
     .from('projects')
     .select('id')
-    .eq('owner_user_id', userId)
     .eq('key', key.toUpperCase())
     .maybeSingle()
   if (error) throw new Error(error.message)
@@ -67,9 +67,8 @@ const checkpointHeldTasks = async (actor: Actor, session: SessionRow): Promise<s
 
   const { data, error } = await admin()
     .from('tasks')
-    .select('id, number, project:projects!project_id!inner(key, owner_user_id)')
+    .select('id, number, project:projects!project_id!inner(key)')
     .eq('claimed_by', actor.actorId)
-    .eq('projects.owner_user_id', actor.userId)
   if (error) throw new Error(error.message)
 
   const held = (data ?? []) as unknown as {
@@ -102,21 +101,20 @@ const checkpointHeldTasks = async (actor: Actor, session: SessionRow): Promise<s
 }
 
 /**
- * Keeps only refs whose project actually exists for this owner.
+ * Keeps only refs whose project actually exists in the workspace.
  *
  * A transcript is scraped with a regex, and `[A-Z][A-Z0-9]+-\d+` matches
  * `SHA-256`, `HTTP-01`, `UTF-8` and the `Z0-9` out of a character class as
  * happily as it matches `CAIRN-64`. Filtering at the source would need a
- * blocklist that is wrong the moment someone names a project ISO; the owner's
- * own project keys are the only authority that stays right.
+ * blocklist that is wrong the moment someone names a project ISO; the
+ * workspace project keys are the only authority that stays right.
  */
-const keepRealRefs = async (userId: string, refs: string[]): Promise<string[]> => {
+const keepRealRefs = async (_userId: string, refs: string[]): Promise<string[]> => {
   if (refs.length === 0) return []
 
   const { data, error } = await admin()
     .from('projects')
     .select('key')
-    .eq('owner_user_id', userId)
   if (error) throw new Error(error.message)
 
   const keys = new Set((data ?? []).map((p) => (p.key as string).toUpperCase()))
@@ -132,7 +130,12 @@ export const upsertSession = async (actor: Actor, input: SessionUpsert) => {
     owner_user_id: actor.userId,
     external_id: input.externalId,
     platform_source: input.platformSource,
-    agent_id: input.agentId ?? actor.actorId ?? null,
+    // Hooks may report the runtime name, but the authenticated key owns the
+    // identity. Qualify caller-supplied names just like every other durable
+    // attribution so two users running `codex` stay distinguishable.
+    agent_id: input.agentId
+      ? actorLabel('agent', input.agentId, actor.userDisplayName)
+      : actor.actorId,
     cwd: input.cwd ?? null,
     project_id: projectId,
     started_at: input.startedAt ?? null,
@@ -167,7 +170,7 @@ export const upsertSession = async (actor: Actor, input: SessionUpsert) => {
 }
 
 export const listSessions = async (
-  userId: string,
+  _userId: string,
   filters: {
     project?: string
     cwd?: string
@@ -180,7 +183,6 @@ export const listSessions = async (
   let query = admin()
     .from('sessions')
     .select(COLUMNS)
-    .eq('owner_user_id', userId)
     .order('ended_at', { ascending: false, nullsFirst: false })
     .limit(filters.limit)
 
@@ -190,7 +192,7 @@ export const listSessions = async (
   // <= would repeat it (or, worse, drop every other row sharing its instant).
   if (filters.before) query = query.lt('ended_at', filters.before)
   if (filters.project) {
-    const projectId = await projectIdForKey(userId, filters.project)
+    const projectId = await projectIdForKey(_userId, filters.project)
     if (!projectId) return []
     query = query.eq('project_id', projectId)
   }
@@ -201,11 +203,10 @@ export const listSessions = async (
 }
 
 /** Distinct agent ids seen, for the sessions timeline's filter. */
-export const listSessionAgents = async (userId: string): Promise<string[]> => {
+export const listSessionAgents = async (_userId: string): Promise<string[]> => {
   const { data, error } = await admin()
     .from('sessions')
     .select('agent_id')
-    .eq('owner_user_id', userId)
     .not('agent_id', 'is', null)
   if (error) throw new Error(error.message)
 
@@ -214,7 +215,7 @@ export const listSessionAgents = async (userId: string): Promise<string[]> => {
 
 /** Project keys for the ids on a page of sessions, so the timeline can show one. */
 export const projectKeysById = async (
-  userId: string,
+  _userId: string,
   ids: string[],
 ): Promise<Map<string, string>> => {
   const out = new Map<string, string>()
@@ -224,7 +225,6 @@ export const projectKeysById = async (
   const { data, error } = await admin()
     .from('projects')
     .select('id, key')
-    .eq('owner_user_id', userId)
     .in('id', wanted)
   if (error) throw new Error(error.message)
 

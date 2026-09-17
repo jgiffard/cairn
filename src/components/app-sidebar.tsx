@@ -11,11 +11,13 @@ import { UserMenu } from '@/components/user-menu'
  */
 export const AppSidebar = ({
   email,
+  role,
   projects,
   onNavigate,
   trailing,
 }: {
   email: string
+  role: 'admin' | 'member'
   projects: { key: string; title: string }[]
   /** Closes the drawer after a tap. Absent on the desktop rail. */
   onNavigate?: () => void
@@ -45,6 +47,6 @@ export const AppSidebar = ({
 
     <ProjectNav projects={projects} onNavigate={onNavigate} />
 
-    <UserMenu email={email} onNavigate={onNavigate} />
+    <UserMenu email={email} role={role} onNavigate={onNavigate} />
   </>
 )

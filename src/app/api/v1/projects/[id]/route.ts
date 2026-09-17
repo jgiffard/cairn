@@ -11,11 +11,10 @@ export const dynamic = 'force-dynamic'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const resolve = async (userId: string, idOrKey: string) => {
+const resolve = async (_userId: string, idOrKey: string) => {
   const q = admin()
     .from('projects')
     .select('id, key, title, description, status, task_counter')
-    .eq('owner_user_id', userId)
   const { data } = UUID.test(idOrKey)
     ? await q.eq('id', idOrKey).maybeSingle()
     : await q.eq('key', idOrKey.toUpperCase()).maybeSingle()

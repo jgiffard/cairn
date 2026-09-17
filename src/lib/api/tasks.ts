@@ -9,14 +9,14 @@ export const TASK_FIELDS =
   'checkpoint_summary, checkpoint_payload, checkpoint_at, checkpoint_version, blocked_reason, blocked_at, ' +
   'resolution, resolution_kind, resolved_at, resolved_by, duplicate_of, parent_id, ' +
   'memory_session_id, observation_ids, created_at, updated_at, ' +
-  'project:projects!project_id!inner(id, key, title, owner_user_id)'
+  'project:projects!project_id!inner(id, key, title)'
 
 /** Terse columns for list/search output. See the CLI's output discipline. */
 export const TASK_LIST_FIELDS =
   'id, number, title, type, status, priority, labels, claimed_by, claimed_at, heartbeat_at, attempt, ownership_version, checkpoint_version, ' +
   // project_id as well as the embed: an activity row records the project by id,
   // and it is the only scope that survives the task being deleted.
-  'resolution, updated_at, project_id, project:projects!project_id!inner(key, owner_user_id)'
+  'resolution, updated_at, project_id, project:projects!project_id!inner(key)'
 
 export type TaskRef = { key: string; number: number } | { id: string }
 
@@ -33,25 +33,19 @@ export const parseRef = (raw: string): TaskRef | null => {
 }
 
 /**
- * Resolves a ref to a task, scoped to the actor's own projects.
- *
- * Every read goes through here precisely because the service-role client
- * bypasses RLS: the owner filter has to be applied explicitly, every time.
+ * Resolves a ref to a task in the shared workspace.
  */
 export const findTask = async (actor: Actor, raw: string, fields = TASK_FIELDS) => {
   const ref = parseRef(raw)
   if (!ref) return null
 
-  // The owner filter reaches through the embedded relation, so PostgREST needs
-  // that relation in the select or the query matches nothing — and returns no
-  // error, which reads exactly like "no such task". Three callers passing a
-  // narrow field list hit this. Appending it here rather than trusting every
-  // future caller to remember.
+  // Key-based refs need the embedded project relation even when callers request
+  // a narrow projection.
   const select = fields.includes('projects!project_id!inner')
     ? fields
-    : `${fields}, projects!project_id!inner(owner_user_id)`
+    : `${fields}, projects!project_id!inner(key)`
 
-  const query = admin().from('tasks').select(select).eq('projects.owner_user_id', actor.userId)
+  const query = admin().from('tasks').select(select)
 
   const { data, error } =
     'id' in ref
@@ -78,10 +72,6 @@ export const findTask = async (actor: Actor, raw: string, fields = TASK_FIELDS) 
   const { data: byFormer, error: formerError } = await admin()
     .from('tasks')
     .select(select)
-    // The retired key was already resolved within this owner's projects, so
-    // this filter is redundant — and stated anyway, because every read in this
-    // file applies it explicitly and an exception is how one gets forgotten.
-    .eq('projects.owner_user_id', actor.userId)
     .eq('project_id', projectId)
     .eq('number', ref.number)
     .maybeSingle()

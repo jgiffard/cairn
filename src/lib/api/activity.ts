@@ -26,9 +26,9 @@ export type ActivityEvent = {
  * Fire-and-forget, and deliberately so: an audit trail must never be the
  * reason a legitimate write fails. Errors are logged, not raised.
  */
-export const recordActivity = async (events: ActivityEvent[], owner?: string) => {
+export const recordActivity = async (events: ActivityEvent[], owner: string) => {
   if (events.length === 0) return
-  const rows = owner ? events.map((e) => ({ owner_user_id: owner, ...e })) : events
+  const rows = events.map((e) => ({ owner_user_id: owner, ...e }))
   const { error } = await admin().from('task_activity_events').insert(rows)
   if (error) console.error('[activity] could not record', error.message, events.length)
 }
