@@ -161,15 +161,15 @@ export const UsersManager = ({ users }: { users: AdminUser[] }) => {
         <div className="flex flex-col gap-3">
           {users.map((user) => (
             <article key={user.id} className="border-border bg-surface rounded-lg border p-4">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <strong className="text-[0.8125rem]">{user.displayName}</strong>
+                <span className="border-border rounded border px-1.5 py-0.5 text-[0.625rem] uppercase tracking-wide">{user.role}</span>
+                <span className={user.active ? 'text-status-in-review text-[0.6875rem]' : 'text-danger text-[0.6875rem]'}>
+                  {user.active ? 'Active' : 'Disabled'}
+                </span>
+                <span className="text-fg-subtle ml-auto text-[0.6875rem]">{user.activeKeyCount} active keys</span>
+              </div>
               <form onSubmit={(event) => { event.preventDefault(); void update(user, event.currentTarget) }}>
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <strong className="text-[0.8125rem]">{user.displayName}</strong>
-                  <span className="border-border rounded border px-1.5 py-0.5 text-[0.625rem] uppercase tracking-wide">{user.role}</span>
-                  <span className={user.active ? 'text-status-in-review text-[0.6875rem]' : 'text-danger text-[0.6875rem]'}>
-                    {user.active ? 'Active' : 'Disabled'}
-                  </span>
-                  <span className="text-fg-subtle ml-auto text-[0.6875rem]">{user.activeKeyCount} active keys</span>
-                </div>
                 <div className="grid gap-3 sm:grid-cols-[1fr_1fr_9rem]">
                   <Field label="Display name"><Input name="displayName" defaultValue={user.displayName} disabled={!user.active} /></Field>
                   <Field label="Email"><Input name="email" type="email" defaultValue={user.email} disabled={!user.active} /></Field>
@@ -180,19 +180,21 @@ export const UsersManager = ({ users }: { users: AdminUser[] }) => {
                     </Select>
                   </Field>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {user.active ? (
-                    <>
-                      <Button size="sm" type="submit" disabled={busy === `user:${user.id}`}>Save changes</Button>
-                      <Button size="sm" variant="danger" onClick={() => deactivate(user)} disabled={busy === `user:${user.id}`}>Disable user</Button>
-                    </>
-                  ) : (
-                    <Button size="sm" onClick={() => void restore(user)} disabled={busy === `user:${user.id}`}>
-                      <RotateCcw size={12} aria-hidden /> Restore user
-                    </Button>
-                  )}
-                </div>
+                {user.active && (
+                  <div className="mt-3">
+                    <Button size="sm" type="submit" disabled={busy === `user:${user.id}`}>Save changes</Button>
+                  </div>
+                )}
               </form>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {user.active ? (
+                  <Button type="button" size="sm" variant="danger" onClick={() => deactivate(user)} disabled={busy === `user:${user.id}`}>Disable user</Button>
+                ) : (
+                  <Button type="button" size="sm" onClick={() => void restore(user)} disabled={busy === `user:${user.id}`}>
+                    <RotateCcw size={12} aria-hidden /> Restore user
+                  </Button>
+                )}
+              </div>
 
               {user.active && (
                 <div className="border-border mt-4 border-t pt-4">
@@ -221,7 +223,7 @@ export const UsersManager = ({ users }: { users: AdminUser[] }) => {
                               <li key={key.id} className="border-border flex flex-wrap items-center gap-2 rounded border px-2.5 py-2 text-[0.6875rem]">
                                 <span className={key.revoked_at ? 'line-through text-fg-subtle' : ''}>{key.agent_name}</span>
                                 <code className="text-fg-subtle">{key.key_prefix}…</code>
-                                {!key.revoked_at && <Button size="sm" variant="danger" className="ml-auto h-6" onClick={() => revokeKey(user.id, key)}>Revoke</Button>}
+                                {!key.revoked_at && <Button type="button" size="sm" variant="danger" className="ml-auto h-6" onClick={() => revokeKey(user.id, key)}>Revoke</Button>}
                               </li>
                             ))}
                           </ul>
