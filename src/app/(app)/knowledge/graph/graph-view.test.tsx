@@ -36,10 +36,15 @@ const graph = (over: Partial<KnowledgeGraph> = {}): KnowledgeGraph => ({
 })
 
 describe('the map draws', () => {
-  it('renders one circle per entry, plus one per reference to nothing', () => {
+  it('draws every entry, and every reference to nothing', () => {
+    // Counted by position rather than by element, because each node is drawn
+    // twice — once as its glow and once as itself.
     const html = renderToStaticMarkup(<GraphView graph={graph()} />)
 
-    expect(html.match(/<circle/g)).toHaveLength(4)
+    for (const { x, y } of [...graph().nodes, ...graph().missing]) {
+      expect(html).toContain(`cx="${x}"`)
+      expect(html).toContain(`cy="${y}"`)
+    }
   })
 
   it('draws a node joined to nothing, rather than leaving it out', () => {
@@ -79,8 +84,12 @@ describe('the map draws', () => {
     // written in and wrong in the other, with nothing to catch it.
     const html = renderToStaticMarkup(<GraphView graph={graph()} />)
 
+    // The project palette is deliberately literal — `projectColor` is the same
+    // hash every project icon in the app uses, and a project's colour is meant
+    // to be its own in both themes. Everything structural is a token.
     expect(html).toContain('var(--bg)')
-    expect(html).toContain('var(--border-strong)')
+    expect(html).toContain('var(--fg-subtle)')
+    expect(html).toContain('var(--danger)')
   })
 
   it('says what it is, for a reader who cannot see it', () => {
