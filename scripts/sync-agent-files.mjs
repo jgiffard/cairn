@@ -85,6 +85,26 @@ const ARTEFACTS = [
     ],
   },
   {
+    /**
+     * The MCP facade, which drifts for the same reason everything else here
+     * does and was missed because it arrives by an installer rather than a
+     * copy.
+     *
+     * It shipped at 19 tools, gained a twentieth the same day, and the
+     * installed copy stayed at 19 — a runtime reading a facade a version
+     * behind the CLI it is a facade OF, which is the exact failure this file
+     * exists to prevent.
+     *
+     * Only `server.mjs`: the node_modules beside it is the installer's job and
+     * changes only when the dependency does. `needs` is the file itself, so
+     * this repairs an install and never creates one.
+     */
+    name: 'mcp',
+    file: 'mcp/server.mjs',
+    mode: 0o644,
+    targets: [at('/opt/cairn-mcp/server.mjs', '/opt/cairn-mcp/server.mjs')],
+  },
+  {
     // And the installer beside it, for the same reason and by the same
     // argument. It was left out when the entry above was written, so it became
     // the one deployed copy that drifted -- while every other copy on that host

@@ -746,7 +746,9 @@ The skill, the CLI and both hooks are read from a directory per runtime, so the 
 exists five or six times on a busy host. They drift silently. The two maintenance scripts
 are repaired too, including the one that installs the schedule: a repairer that cannot
 repair its own installer leaves exactly one file stale on a host where everything else
-matches, which is the state that makes drift look impossible.
+matches, which is the state that makes drift look impossible. So is the MCP facade, where
+one already exists — it arrives by an installer rather than a copy, which is precisely why
+it was missed, and it spent a day a version behind the CLI it is a facade of.
 
 ```bash
 node scripts/sync-agent-files.mjs --check   # report drift, write nothing
