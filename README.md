@@ -526,7 +526,32 @@ Codex hook entries must also be trusted in `~/.codex/config.toml` before they ru
 installer prints what to add.
 
 **MCP** (optional — native tool-calling for Claude Code and Codex; OpenClaw reaches it
-through `mcporter`). The server lives in [`mcp/`](./mcp) and declares a `cairn-mcp` bin.
+through `mcporter`). The server lives in [`mcp/`](./mcp), holds no logic of its own, and
+exposes 19 of the CLI's verbs as typed tools — `context`, `next`, `history` and the session
+verbs stay CLI-only.
+
+Unlike the CLI it is not dependency-free: it imports the MCP SDK and needs a `node_modules`
+beside it, so it is installed rather than copied.
+
+```bash
+node scripts/install-mcp.mjs              # print what it would do, change nothing
+sudo -E node scripts/install-mcp.mjs --install
+sudo node scripts/install-mcp.mjs --remove
+```
+
+It installs into `CAIRN_MCP_DIR` (default `/opt/cairn-mcp`), writes the `cairn-mcp` wrapper
+to `CAIRN_MCP_BIN` (default `/usr/local/bin/cairn-mcp`), and then **checks that an account
+other than the installer's can traverse and read what it wrote**. That check is the reason
+the script exists: point a wrapper at a checkout under a `0700` home and every runtime that
+is not root gets `MODULE_NOT_FOUND`, which from inside an agent is indistinguishable from a
+server that was never registered.
+
+Then register it. Claude Code:
+
+```bash
+claude mcp add cairn -- cairn-mcp
+```
+
 Codex, in `~/.codex/config.toml`:
 
 ```toml
