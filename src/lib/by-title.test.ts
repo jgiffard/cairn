@@ -5,25 +5,25 @@ import { byTitle } from './utils'
  * Alphabetical the way a person reads it, not the way this collation sorts.
  *
  * Ordering in SQL looked right until the list was read: Postgres sorted
- * case-sensitively, so every lowercase title — `comparator`, `dispofi-api`,
- * `n8n` — sat below every capitalised one, and `SI Contact` came before `Sales
- * Wizard V2` because `I` precedes `a` in ASCII.
+ * case-sensitively, so every lowercase title — `invoice-api`, `n8n` — sat below
+ * every capitalised one, and `SL Gateway` came before `Sales Portal` because
+ * `L` precedes `a` in ASCII.
  */
 const sorted = (titles: string[]) =>
   titles.map((title) => ({ title })).sort(byTitle).map((p) => p.title)
 
 describe('project ordering', () => {
   it('ignores case, which is the whole bug', () => {
-    expect(sorted(['n8n', 'Cairn', 'dispofi-api', 'Asha Trading'])).toEqual([
-      'Asha Trading',
+    expect(sorted(['n8n', 'Cairn', 'invoice-api', 'Acme Portal'])).toEqual([
+      'Acme Portal',
       'Cairn',
-      'dispofi-api',
+      'invoice-api',
       'n8n',
     ])
   })
 
-  it('puts Sales Wizard before SI Contact, as a reader would', () => {
-    expect(sorted(['SI Contact', 'Sales Wizard V2'])).toEqual(['Sales Wizard V2', 'SI Contact'])
+  it('puts Sales Portal before SL Gateway, as a reader would', () => {
+    expect(sorted(['SL Gateway', 'Sales Portal'])).toEqual(['Sales Portal', 'SL Gateway'])
   })
 
   it('orders embedded numbers by value', () => {

@@ -169,9 +169,9 @@ const Row = ({
 
         {/* The Cairn ref, never the imported one.
             This showed `external_ref` in preference, so a task migrated from
-            Linear displayed BBTRADE-1234 — an identifier that looks like a ref,
+            Linear displayed LEGACY-1234 — an identifier that looks like a ref,
             does not resolve anywhere in this system, and truncated to
-            "BBTRADE-1…" in a column sized for OD-70. The search route made the
+            "LEGACY-1…" in a column sized for CAI-70. The search route made the
             opposite choice deliberately and says why; the list disagreed with
             it. The old identifier is kept on the element's title, so it is
             still there for anyone who has to match a task against Linear. */}

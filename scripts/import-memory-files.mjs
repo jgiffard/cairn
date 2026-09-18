@@ -14,40 +14,91 @@
  *
  * Usage:
  *   node scripts/import-memory-files.mjs --dry-run
- *   node scripts/import-memory-files.mjs
+ *   node scripts/import-memory-files.mjs --map projects.json
+ *   node scripts/import-memory-files.mjs --global          # all of it, unscoped
+ *
+ *   --root <dir>   where the per-project memory directories live
+ *   --map <file>   JSON of { "<directory name>": "PROJECT_KEY" | null }, where
+ *                  null means import that directory's memory globally
+ *   --global       treat every unmapped directory as global rather than
+ *                  refusing it
  */
 import { execFileSync } from 'node:child_process'
-import { readdirSync, readFileSync, existsSync } from 'node:fs'
+import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 const DRY = process.argv.includes('--dry-run')
-const ROOT = join(homedir(), '.claude', 'projects')
+const GLOBAL = process.argv.includes('--global')
+const arg = (name) => {
+  const i = process.argv.indexOf(name)
+  return i === -1 ? null : process.argv[i + 1]
+}
+const ROOT = arg('--root') ?? join(homedir(), '.claude', 'projects')
 
 /**
- * Directory name -> Cairn project key.
+ * Directory name -> Cairn project key, from `--map`.
  *
- * `-Users-cal` is the home directory: memory written there is about the machine
- * and the toolchain, not about one codebase, so it lands global -- which is
- * exactly the supra-project case knowledge exists for.
+ * A directory mapped to null is imported globally: memory written in a home
+ * directory is usually about the machine and the toolchain rather than one
+ * codebase, which is exactly the supra-project case knowledge exists for.
+ *
+ * There is no built-in mapping, and there cannot be one: these directory names
+ * are one machine's own layout. Without a map every directory is unmapped, and
+ * an unmapped directory is refused rather than quietly filed global -- knowledge
+ * in the wrong scope is read by every project that should not see it.
  */
-const PROJECTS = {
-  '-Users-cal-maestro-dev-hermes-manager': 'HM',
-  '-Users-cal-maestro-dev-tribe-dispatcher': 'TD',
-  '-Users-cal-maestro-dev-asha-trading': 'AT',
-  '-Users-cal-maestro-dev-dispofi-client': 'DC',
-  '-Users-cal-maestro-dev-dispofi-distributor': 'DD',
-  '-Users-cal-maestro-dev-linear': 'CAIRN',
-  '-Users-cal-maestro-dev-cairn': 'CAIRN',
-  '-Users-cal-maestro-dev-disposur-rdv': 'DISPOS',
-  '-Users-cal-maestro-dev-hermes': 'HERMES',
-  '-Users-cal-maestro-dev-dispofi-rag': 'DA',
-  '-Users-cal-maestro-dev-dispofi-ai': 'DA',
-  '-Users-cal-maestro-dev-dispofi-api': 'DISPOF',
-  '-Users-cal-maestro-dev-openclaw-dashboard': 'OD',
-  '-Users-cal-maestro-dev-amazon-arbitrage': 'AA',
-  '-Users-cal-maestro-dev-trading-bot-apex-one': 'TBV',
-  '-Users-cal': null,
+const PROJECTS = (() => {
+  const path = arg('--map')
+  if (!path) return {}
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    console.error(`--map ${path}: ${error.message}`)
+    process.exit(1)
+  }
+})()
+
+/**
+ * Every directory that holds memory, whether it was mapped or not.
+ *
+ * Iterating the map alone is why this said nothing useful on a machine it was
+ * not written for: each entry was absent, every one was skipped, and the run
+ * reported zero imports with no hint that it had found no directories at all.
+ */
+if (!existsSync(ROOT)) {
+  console.error(`no such directory: ${ROOT}\nPass --root <dir> if memory lives elsewhere.`)
+  process.exit(1)
+}
+
+const unmapped = []
+const candidates = readdirSync(ROOT)
+  .filter((name) => {
+    const dir = join(ROOT, name)
+    return statSync(dir).isDirectory() && existsSync(join(dir, 'memory'))
+  })
+  .map((name) => {
+    const mapped = Object.prototype.hasOwnProperty.call(PROJECTS, name)
+    if (!mapped && !GLOBAL) unmapped.push(name)
+    return [name, mapped ? PROJECTS[name] : null]
+  })
+  .filter(([name]) => GLOBAL || Object.prototype.hasOwnProperty.call(PROJECTS, name))
+
+if (candidates.length === 0) {
+  console.error(
+    unmapped.length > 0
+      ? `${unmapped.length} director${unmapped.length === 1 ? 'y holds' : 'ies hold'} memory and none is mapped:\n` +
+          unmapped.map((n) => `  ${n}`).join('\n') +
+          `\n\nWrite a --map file of { "<directory>": "KEY" | null }, or --global to import it all unscoped.`
+      : `no memory directories under ${ROOT}`,
+  )
+  process.exit(1)
+}
+
+if (unmapped.length > 0) {
+  console.log(`skipping ${unmapped.length} unmapped director${unmapped.length === 1 ? 'y' : 'ies'}:`)
+  for (const name of unmapped) console.log(`  ${name}`)
+  console.log('')
 }
 
 const parse = (raw) => {
@@ -86,9 +137,8 @@ let skipped = 0
 const collisions = []
 const requalified = []
 
-for (const [dir, project] of Object.entries(PROJECTS)) {
+for (const [dir, project] of candidates) {
   const memoryDir = join(ROOT, dir, 'memory')
-  if (!existsSync(memoryDir)) continue
 
   const titles = titlesFrom(memoryDir)
   const files = readdirSync(memoryDir).filter((f) => f.endsWith('.md') && f !== 'MEMORY.md')

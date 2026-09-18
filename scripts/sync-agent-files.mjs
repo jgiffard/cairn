@@ -14,8 +14,10 @@
  *   node scripts/sync-agent-files.mjs           # make every reachable copy match
  *
  * Targets that do not apply to this machine are skipped, not invented: a file
- * in a directory no runtime reads is worse than no file at all. Run it as root
- * on the server to reach the root-owned copies.
+ * in a directory no runtime reads is worse than no file at all. The built-in
+ * targets are this user's own; anything else — another user's home, a runtime
+ * with a tree of its own — is named by `--also`, because which copies exist is
+ * a fact about a machine rather than about Cairn.
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -52,10 +54,6 @@ const ARTEFACTS = [
     targets: [
       at(join(home, '.claude/skills/cairn/SKILL.md'), join(home, '.claude')),
       at(join(home, '.codex/skills/cairn/SKILL.md'), join(home, '.codex')),
-      at('/root/.claude/skills/cairn/SKILL.md', '/root/.claude'),
-      at('/root/.codex/skills/cairn/SKILL.md', '/root/.codex'),
-      // OpenClaw reads its skills from the clawd tree, not a dotfile dir.
-      at('/root/clawd/skills/cairn/SKILL.md', '/root/clawd/skills'),
     ],
   },
   {
@@ -92,7 +90,6 @@ const ARTEFACTS = [
     mode: 0o755,
     targets: [
       at(join(home, '.cairn/hooks/cairn-context.mjs')),
-      at('/root/.cairn/hooks/cairn-context.mjs'),
     ],
   },
   {
@@ -101,7 +98,6 @@ const ARTEFACTS = [
     mode: 0o755,
     targets: [
       at(join(home, '.cairn/hooks/cairn-session-end.mjs')),
-      at('/root/.cairn/hooks/cairn-session-end.mjs'),
     ],
   },
 ]
@@ -110,6 +106,12 @@ const ARTEFACTS = [
  * Copies outside this user's home, for a scheduled run that has to reach them.
  * `--also <artefact>=<path>`, repeatable. A machine's own layout belongs in the
  * job that runs this, not in a public repository.
+ *
+ * This is how every non-standard location is reached, and there are two common
+ * ones: another user's home, when the job runs as root and the runtimes do not;
+ * and a runtime that keeps its skills in a tree of its own rather than a
+ * dotfile directory, which is the usual shape for a gateway-style runtime.
+ * `CAIRN_SYNC_ALSO` on `install-cron.mjs` renders these into the scheduled job.
  */
 for (let i = 0; i < process.argv.length; i += 1) {
   if (process.argv[i] !== '--also') continue
@@ -137,9 +139,9 @@ for (const artefact of ARTEFACTS) {
   const canonical = hash(source)
   console.log(`\n${artefact.name}  ${canonical}  ${artefact.file}`)
 
-  // Run as root and `~` IS /root, so the home targets and the explicit ones
-  // are the same file — reported twice, the second time as already fine,
-  // which reads like a copy that was never touched.
+  // A `--also` path can name a file a built-in target already covers — the
+  // same file reported twice, the second time as already fine, which reads
+  // like a copy that was never touched.
   const unique = artefact.targets.filter(
     (t, i) => artefact.targets.findIndex((o) => o.path === t.path) === i,
   )

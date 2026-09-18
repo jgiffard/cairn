@@ -123,7 +123,7 @@ const taskResult = (row: SearchRow) => ({
   kind: 'task' as const,
   // ALWAYS the Cairn ref: it is what `cairn show` resolves. Returning the
   // imported identifier here hands the caller something that looks like a ref
-  // and 404s, because no project has key "BBTRADE".
+  // and 404s, because no project has key "LEGACY".
   ref: `${row.project_key}-${row.number}`,
   // The original identifier, for recognising old work. Not addressable.
   externalRef: row.external_ref,

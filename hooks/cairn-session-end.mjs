@@ -327,7 +327,7 @@ const RECENT_MS = 6 * 60 * 60 * 1000
  * The refs this session actually wrote to, from the CLI's own breadcrumbs.
  *
  * Recovering refs by regex over a transcript is a guess, and it was wrong in a
- * way that mattered: a dry run returned CAI-42 and BBTRADE-1164, refs out of
+ * way that mattered: a dry run returned CAI-42 and LEGACY-1164, refs out of
  * documentation examples, rather than the tasks worked on. Session -> task
  * links feed search, and a session linked to everything answers yes to
  * everything.

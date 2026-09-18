@@ -771,7 +771,7 @@ const updateRememberedOwnership = (path, data) => {
  * The session-end hook used to recover task refs with a regex over the
  * transcript, preferring refs on a line that also contained a `cairn` command.
  * A good heuristic, and still a guess: a dry run returned CAI-42 and
- * BBTRADE-1164 — refs out of documentation examples — instead of the tasks the
+ * LEGACY-1164 — refs out of documentation examples — instead of the tasks the
  * session actually worked. Those links feed search, and a session linked to
  * everything answers yes to everything, which is the same as knowing nothing.
  *

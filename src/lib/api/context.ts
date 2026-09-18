@@ -241,8 +241,8 @@ export const buildContext = async (
     // `global` for every entity-scoped fact — telling the next agent that a
     // fact true of one business is true everywhere, which is the failure
     // entities were introduced to end. Keeping the keys rather than printing
-    // the bare tier, because "dispofi" is what a reader can act on and
-    // "entity" is not.
+    // the bare tier, because the entity's own name is what a reader can act
+    // on and "entity" is not.
     scope:
       r.scope === 'entity'
         ? (r.entities ?? []).join(',') || 'entity'

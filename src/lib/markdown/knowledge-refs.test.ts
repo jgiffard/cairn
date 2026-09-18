@@ -34,24 +34,24 @@ const links = (tree: Node): Node[] => {
 
 describe('remarkKnowledgeRefs', () => {
   it('turns a reference into a link to that entry', () => {
-    const [link] = links(run('See [[clawdius-server]] for the layout.'))
+    const [link] = links(run('See [[proxy-buffer-defaults]] for the layout.'))
 
-    expect(link?.url).toBe('/knowledge/clawdius-server')
+    expect(link?.url).toBe('/knowledge/proxy-buffer-defaults')
   })
 
   it('resolves the underscore spelling to the hyphenated slug', () => {
     // The entire reason the imported graph was inert: bodies say
-    // `queueit_botdeflector_unsolvable`, every real slug is hyphenated.
-    const [link] = links(run('Related: [[queueit_botdeflector_unsolvable]]'))
+    // `cache_warmup_race`, every real slug is hyphenated.
+    const [link] = links(run('Related: [[cache_warmup_race]]'))
 
-    expect(link?.url).toBe('/knowledge/queueit-botdeflector-unsolvable')
+    expect(link?.url).toBe('/knowledge/cache-warmup-race')
   })
 
   it('keeps the spelling the author used in the visible text', () => {
     // The link goes where it should; the prose still reads as written.
-    const [link] = links(run('Related: [[queueit_botdeflector_unsolvable]]'))
+    const [link] = links(run('Related: [[cache_warmup_race]]'))
 
-    expect(link?.children?.[0]?.value).toBe('queueit_botdeflector_unsolvable')
+    expect(link?.children?.[0]?.value).toBe('cache_warmup_race')
   })
 
   it('leaves a reference that is already inside a link alone', () => {
@@ -61,7 +61,7 @@ describe('remarkKnowledgeRefs', () => {
         {
           type: 'link',
           url: 'https://example.com',
-          children: [{ type: 'text', value: '[[clawdius-server]]' }],
+          children: [{ type: 'text', value: '[[proxy-buffer-defaults]]' }],
         },
       ],
     }
@@ -81,7 +81,7 @@ describe('remarkKnowledgeRefs', () => {
   })
 
   it('marks a reference to an entry that does not exist, when it can know', () => {
-    const [link] = links(run('See [[never-written]].', ['clawdius-server']))
+    const [link] = links(run('See [[never-written]].', ['proxy-buffer-defaults']))
     const props = (link?.data as { hProperties: Record<string, string> }).hProperties
 
     expect(props['data-knowledge-missing']).toBe('true')

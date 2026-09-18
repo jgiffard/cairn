@@ -112,11 +112,11 @@ cairn relearn <slug> --body -       # it changed
 cairn unlearn <slug> --superseded-by <new-slug>
 ```
 
-Three scopes, narrowest first: `--project HM` is true of that project, `--entity dispofi`
+Three scopes, narrowest first: `--project HM` is true of that project, `--entity acme`
 is true of that grouping (`cairn entities` lists them — a business, a stack, a subsystem),
 and neither is true everywhere. A project belongs to several entities at once, so pick the
 one the fact is actually about. When a fact exists at two scopes the narrower is shown
-first, which is how "true for Dispofi, except here" gets said.
+first, which is how "true for this business, except here" gets said.
 
 Correct knowledge rather than adding to it — two contradictory claims, equally findable,
 with no way to tell which is current, is the failure mode every memory store reaches

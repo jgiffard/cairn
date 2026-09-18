@@ -66,7 +66,7 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
   const formerKeys = await formerKeysFor(user.id, task.project.id)
 
   // The Cairn ref, never the imported one. Preferring external_ref showed a
-  // migrated task as BBTRADE-1234 — an identifier that resolves nowhere in this
+  // migrated task as LEGACY-1234 — an identifier that resolves nowhere in this
   // system, on the page whose whole job is to tell you what you are looking at.
   const ref = `${task.project.key}-${task.number}`
 
