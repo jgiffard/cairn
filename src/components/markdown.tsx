@@ -10,6 +10,7 @@ import type { PluggableList } from 'unified'
 import { cn } from '@/lib/utils'
 import { CodeBlock } from '@/components/code-block'
 import { useProjectKeys } from '@/components/project-keys'
+import { useKnowledgeSlugs } from '@/components/knowledge-slugs'
 import { remarkTaskRefs } from '@/lib/markdown/task-refs'
 import { remarkKnowledgeRefs } from '@/lib/markdown/knowledge-refs'
 
@@ -137,11 +138,19 @@ const components: Components = {
 
 export const MarkdownView = ({ children }: { children: string }) => {
   const keys = useProjectKeys()
+  // Only where the COMPLETE set of slugs is in hand. Given a partial list the
+  // plugin would mark every entry missing from it as never written, so the
+  // provider's default is null and this stays off rather than lying.
+  const slugs = useKnowledgeSlugs()
   // react-markdown re-parses whenever the plugin array changes identity, so
   // this must not be rebuilt on every render.
   const remarkPlugins = useMemo<PluggableList>(
-    () => [remarkGfm, [remarkTaskRefs, { keys }], [remarkKnowledgeRefs, {}]],
-    [keys],
+    () => [
+      remarkGfm,
+      [remarkTaskRefs, { keys }],
+      [remarkKnowledgeRefs, slugs ? { known: slugs } : {}],
+    ],
+    [keys, slugs],
   )
 
   return (
