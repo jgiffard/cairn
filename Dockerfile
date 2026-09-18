@@ -34,7 +34,13 @@ FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+# -G nodejs matters: busybox adduser defaults the primary group to `nogroup`,
+# so without it the group created on the line before has no members, the
+# --chown=nextjs:nodejs below sets a group the process is not in, and every
+# group permission bit in the image is inert. Owner permissions carried it, so
+# nothing failed — it just made "make it group-writable" a plausible fix that
+# could never work.
+RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001 -G nodejs
 
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
