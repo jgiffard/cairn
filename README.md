@@ -638,6 +638,47 @@ each directory belongs to. Anything unmapped is refused rather than filed global
 knowledge in the wrong scope is read by every project that should not see it; `--global`
 says you meant it.
 
+### Integrating a runtime that is not listed above
+
+The three above are the ones this is used with. Nothing here is specific to them, and a
+fourth runtime is mostly a question of which of these it gives you.
+
+**A skill folder and a CLI on PATH is the whole minimum.** Every interface here shells out
+to the same binary, so a runtime that can run a shell command and read a markdown file is
+already integrated. The hooks, the MCP facade and the rest are how it gets better, not how
+it starts.
+
+**One key per runtime, always.** `actor_id` comes from the key, never from what the caller
+claims to be, so a key shared between two runtimes files their work under one name and
+neither can be held to its own behaviour. This is the only item on this list that is not
+optional.
+
+**Test for the wrapping runtime before the wrapped one.** A runtime built on top of
+another sets everything the inner one sets. Detection that checks the inner first
+attributes all of the outer's work to it — the same misattribution as a shared key, just
+harder to see. Ordering is the fix, and it is worth a test, because nothing about the
+symptom points at it.
+
+**No session-end event is normal.** Plenty of runtimes have no way to tell you a session
+finished. Sweep what they leave behind on a timer instead — `--scan`, above — and make the
+write idempotent so a sweep that overlaps itself costs nothing. A ledger of what has
+already been recorded is enough.
+
+**No hook surface does not mean no integration path.** A runtime driven by a system prompt
+can be told to use the CLI in that prompt; one with a bootstrap step can have the briefing
+pushed into it. Both reach the same place as a session-start hook by a different road, and
+neither leaves a trace in any hooks file — so an audit that looks only for hooks will
+report an integration that works as absent.
+
+**Whatever writes the session prose may not be able to run as the account doing the
+sweep.** Transcripts under a `0700` home have to be read by root; a summariser CLI is
+usually logged in as somebody else. Point `CAIRN_SUMMARY_CLI` at a wrapper that drops
+privilege rather than moving the transcripts.
+
+**A copy in a directory nothing reads is worse than no copy.** Agent-facing files live in
+a directory per runtime and drift silently. Repair copies where a runtime already lives;
+never install one because a plausible directory exists.
+
 ## Scheduled maintenance — optional
 
 Cairn works with none of these. They are the difference between a tracker that notices its
