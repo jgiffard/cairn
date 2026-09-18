@@ -269,6 +269,14 @@ problem.
   Knowledge is corrected rather than added to: `superseded_by` keeps the old claim
   findable and marked, because two contradictory facts with no way to tell which is
   current is how a memory store stops being worth reading.
+- **Every fact has a slug**, derived from its title — lowercased, hyphenated, cut at a
+  whole word. It is the name the fact keeps: what `cairn know <slug>` reads back, what the
+  URL carries, and what goes inside `[[...]]` to reference it from another entry. `--slug`
+  overrides it, which is worth doing when the claim is too long to make a good handle —
+  entries whose slug runs past sixty characters are referenced by other entries about an
+  eighth as often as short ones.
+- **Entries reference each other** as `[[some-slug]]`, resolving in the browser and the
+  CLI alike, with underscores read as hyphens so older spellings still work.
 - **A file index** answers the question nobody asks: opening a file surfaces the tasks and
   knowledge that concern it, with no query to write.
 

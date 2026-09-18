@@ -260,6 +260,35 @@ cairn learn "Supavisor pools are per-tenant, not per-connection-string" \
   --label supabase,postgres --body -
 ```
 
+### The title is the claim; the slug is the handle
+
+The title should read as the thing you now know, so a list of titles is a list of
+answers rather than a list of topics. The slug is derived from it — lowercased,
+hyphenated, cut at a whole word — and it is the name the fact then has forever: what
+you type to read it back, and what goes inside `[[...]]` to point at it.
+
+Those two pull in opposite directions, and the measured result is that they matter:
+entries whose slug runs past sixty characters are referenced by other entries about
+an eighth as often as short ones. A claim long enough to be precise makes a handle
+too long to reach for.
+
+So when the claim is a long one, name it yourself:
+
+```bash
+cairn learn "Supavisor pools are per-tenant, not per-connection-string" \
+  --slug supavisor-pools-per-tenant --body -
+```
+
+### Pointing at another entry
+
+Write `[[its-slug]]` in a body. It becomes a link, and `cairn know <slug>` reads it
+back — the same reference works in the browser and the terminal, and underscores are
+read as hyphens so an older spelling still resolves. Use it the way you would use
+`ACME-42` for a task: a reference that stays followable long after the conversation.
+
+`cairn know "<phrase>"` finds the slug when you do not know it. Guessing one and
+writing it down unchecked is how a body ends up pointing at nothing.
+
 ### Where does it apply?
 
 Three scopes, narrowest first:

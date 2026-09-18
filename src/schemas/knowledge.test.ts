@@ -58,3 +58,27 @@ describe('SLUG_PATTERN — what `cairn know` treats as a slug rather than a quer
     expect(SLUG_PATTERN.test('CAIRN-42')).toBe(false)
   })
 })
+
+describe('slug length', () => {
+  const long = (words: number) => Array.from({ length: words }, (_, i) => `word${i}`).join(' ')
+
+  it('never exceeds the cap', () => {
+    expect(slugify(long(60)).length).toBeLessThanOrEqual(120)
+  })
+
+  it('cuts at a whole word rather than through one', () => {
+    // Twelve entries in the store end mid-word — `...cannot-sha`,
+    // `...dernier-passag` — which cannot be typed and read as corrupt.
+    const slug = slugify(long(60))
+
+    expect(slug.endsWith('-')).toBe(false)
+    // Every segment is a word the title actually contained.
+    for (const part of slug.split('-')) expect(part).toMatch(/^word\d+$/)
+  })
+
+  it('still produces something for a long title with no word breaks', () => {
+    const slug = slugify('a'.repeat(300))
+
+    expect(slug.length).toBe(120)
+  })
+})
