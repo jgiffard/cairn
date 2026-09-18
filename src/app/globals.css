@@ -322,6 +322,14 @@
       graph-drift var(--drift, 7s) ease-in-out var(--delay, 0s) infinite;
   }
 
+  /* An entry joined to nothing sits in the grid at the foot of the map and
+     reads as a count, so there is nothing for breathing to say about it. It
+     also takes a third of the animated groups off a raster loop that otherwise
+     runs for as long as the page is open. */
+  .graph-still {
+    animation: graph-rise 420ms var(--ease) var(--rise, 0s) both;
+  }
+
   /* Light running along a link, drawn as a dash chasing its own offset. Only
      ever applied to the links of the node under the pointer. */
   @keyframes graph-beam {
@@ -339,7 +347,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     .pop { animation: none; }
-    .graph-node { animation: none; }
+    .graph-node,
+    .graph-still { animation: none; }
     .graph-beam { animation: none; opacity: 0.35; stroke-dasharray: none; }
     * { transition-duration: 1ms !important; }
   }

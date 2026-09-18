@@ -170,6 +170,26 @@ describe('the map draws', () => {
     expect(html).not.toContain('prefetch="true"')
   })
 
+  it('draws the glow for every node, lit or not', () => {
+    // Mounting the halo only when lit meant focusing one node unmounted ~370
+    // circles and remounted them on leave — a great deal of work to make a
+    // picture quieter. It is always drawn and dimmed to nothing instead.
+    const html = renderToStaticMarkup(<GraphView graph={graph()} />)
+
+    expect((html.match(/url\(#halo\)/g) ?? []).length).toBe(graph().nodes.length)
+  })
+
+  it('does not animate the entries joined to nothing', () => {
+    // They sit in a grid at the foot of the map and read as a count, so there
+    // is nothing for breathing to say about them — and it takes a third of the
+    // animated groups off a loop that runs for as long as the page is open.
+    const html = renderToStaticMarkup(<GraphView graph={graph()} />)
+
+    expect((html.match(/graph-still/g) ?? []).length).toBe(
+      graph().nodes.filter((n) => n.degree === 0).length,
+    )
+  })
+
   it('does not stack one title on another', () => {
     // A dozen overlapping titles is worse than none: the smear hides the
     // nodes underneath as well as itself.
