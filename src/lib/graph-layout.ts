@@ -206,49 +206,132 @@ export const layoutGraph = (
   edges: readonly Edge[],
   options: {
     width?: number
+    aspect?: number
     gap?: number
     spacing?: number
     isolatedColumns?: number
     isolatedGap?: number
   } = {},
 ): Layout => {
-  const width = options.width ?? 2200
   const gap = options.gap ?? 58
   /** Room per node inside an island, which sets every island's scale. */
   const spacing = options.spacing ?? 62
+  /** The shape of the frame this will be drawn in, so it fills it. */
+  const aspect = options.aspect ?? 16 / 9
   const isolatedGap = options.isolatedGap ?? 34
 
   const groups = components(ids, edges)
   const connected = groups.filter((group) => group.length > 1)
   const isolated = groups.filter((group) => group.length === 1).flat()
 
-  const placed: Placed[] = []
-  let rowTop = 0
-  let rowLeft = 0
-  let rowHeight = 0
-
-  for (const group of connected) {
+  // Each island is settled once. Packing them is then rearranging boxes, which
+  // costs nothing — so the shelf width can be chosen by trying several and
+  // keeping whichever comes out closest to the shape of the frame.
+  const blocks = connected.map((group) => {
     const members = new Set(group)
     const within = edges.filter((e) => members.has(e.source) && members.has(e.target))
     // An island is drawn at a size that follows its weight, so the giant
     // component reads as the centre of the corpus rather than as one blob
     // among nineteen equals.
     const box = Math.max(180, Math.sqrt(group.length) * 105)
-    const block = normalise(simulate(group, within, box), spacing)
+    return normalise(simulate(group, within, box), spacing)
+  })
 
-    if (rowLeft > 0 && rowLeft + block.width > width) {
-      rowTop += rowHeight + gap
-      rowLeft = 0
-      rowHeight = 0
+  /**
+   * Skyline packing: each island drops into the lowest place it fits.
+   *
+   * Rows were simpler and left a hole the size of the largest island. A row is
+   * as tall as its tallest member, so putting the 102-node component beside
+   * three small ones wasted everything under those three — a quarter of the
+   * map, empty, in the middle of the picture.
+   */
+  const pack = (shelfWidth: number): { placed: Placed[]; width: number; height: number } => {
+    const step = 8
+    const columns = Math.max(1, Math.ceil(shelfWidth / step))
+    const skyline = new Float64Array(columns)
+    const out: Placed[] = []
+    let widest = 0
+    let tallest = 0
+
+    for (const block of blocks) {
+      const span = Math.max(1, Math.ceil((block.width + gap) / step))
+      let bestColumn = 0
+      let bestTop = Infinity
+
+      for (let start = 0; start + span <= Math.max(columns, span); start += 1) {
+        let top = 0
+        for (let c = start; c < Math.min(columns, start + span); c += 1) {
+          top = Math.max(top, skyline[c] as number)
+        }
+        // Lowest wins; equally low, leftmost, so the result is stable and
+        // reads left to right like everything else here.
+        if (top < bestTop - 0.001) {
+          bestTop = top
+          bestColumn = start
+        }
+      }
+
+      const left = bestColumn * step
+      const top = bestTop === Infinity ? 0 : bestTop
+      for (const p of block.placed) out.push({ id: p.id, x: p.x + left, y: p.y + top })
+
+      for (let c = bestColumn; c < Math.min(columns, bestColumn + span); c += 1) {
+        skyline[c] = top + block.height + gap
+      }
+      widest = Math.max(widest, left + block.width)
+      tallest = Math.max(tallest, top + block.height)
     }
 
-    for (const p of block.placed) placed.push({ id: p.id, x: p.x + rowLeft, y: p.y + rowTop })
-    rowLeft += block.width + gap
-    rowHeight = Math.max(rowHeight, block.height)
+    return { placed: out, width: widest, height: tallest }
   }
 
+  /**
+   * Pick the shelf width whose result is shaped most like the frame.
+   *
+   * Computing it from the total area got this wrong by a factor of two: shelf
+   * packing wastes whatever the tallest block in each row does not use, and how
+   * much that is depends on the sizes, not on their sum. Measuring beats
+   * estimating when the measurement is free.
+   */
+  const widest = Math.max(1, ...blocks.map((b) => b.width))
+  const candidates =
+    options.width !== undefined
+      ? [options.width]
+      : Array.from({ length: 12 }, (_, i) => widest * (1 + i * 0.45))
+
+  /**
+   * The band of unconnected nodes is part of the picture, so it is part of the
+   * measurement.
+   *
+   * Judging the islands alone chose a width that was right for them and then
+   * added three rows of orphans underneath, landing at 1.17 when it was aiming
+   * for 1.78. What gets measured has to be what gets drawn.
+   */
+  const withBand = (packed: { width: number; height: number }): number => {
+    if (isolated.length === 0) return packed.height
+    const across = Math.max(8, Math.floor(Math.max(packed.width, 1) / isolatedGap))
+    return packed.height + gap * 1.8 + Math.ceil(isolated.length / across) * isolatedGap
+  }
+
+  let best = pack(candidates[0] as number)
+  let bestMiss = Infinity
+  for (const candidate of candidates) {
+    const attempt = pack(candidate)
+    // Compared as logs, so twice too wide and half as wide are judged equally
+    // wrong rather than the wide one always winning.
+    const miss = Math.abs(
+      Math.log((attempt.width || 1) / (withBand(attempt) || 1)) - Math.log(aspect),
+    )
+    if (miss < bestMiss) {
+      bestMiss = miss
+      best = attempt
+    }
+  }
+
+  const placed = best.placed
+  const width = Math.max(best.width, 1)
   const isolatedFrom = placed.length
-  const isolatedTop = connected.length > 0 ? rowTop + rowHeight + gap * 1.8 : 0
+  const isolatedTop = connected.length > 0 ? best.height + gap * 1.8 : 0
 
   // Span whatever the islands above ended up spanning, rather than a fixed
   // number of columns: a band across the foot of the map reads as a share of
