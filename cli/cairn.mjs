@@ -1208,6 +1208,35 @@ const commands = {
     const title = need(positional[0], 'usage: cairn add "<title>" --project <KEY>')
     const project = need(flags.project, 'a --project is required')
 
+    /**
+     * A bug or a spike with no body is not yet a report — it is a title.
+     *
+     * Measured before this existed: 23% of tasks filed in a month had an empty
+     * description, and it split by author rather than by subject — 51% for one
+     * agent, 75% for another, 0% for tasks filed by a human through the UI. The
+     * same agents write a resolution on every single close, because `done`
+     * refuses without one. Guidance alone had not moved it; a refusal had.
+     *
+     * Only where the body carries the value. A chore is often fully described
+     * by its title, and demanding prose there teaches people to type "n/a",
+     * which is worse than an empty field because it looks answered.
+     */
+    // Resolved once, here: `--body -` reads stdin, which cannot be read twice,
+    // and both the check below and the request itself need the value.
+    const described = flags.body ? String(await resolveValue(flags.body)) : undefined
+
+    const NEEDS_BODY = new Set(['bug', 'spike'])
+    if (NEEDS_BODY.has(flags.type) && !flags['force-empty']) {
+      if ((described ?? '').trim().length < 40) {
+        die(
+          `a ${flags.type} needs a body: what happens, what you expected, and how to see it.\n` +
+            '  cairn add "<title>" --project K --type ' + flags.type + ' --body -   # markdown on stdin\n' +
+            '  ...--body "one line is fine when that is genuinely all there is"\n' +
+            'If the title really is the whole story, pass --force-empty.',
+        )
+      }
+    }
+
     // Warn on a near-duplicate rather than silently filing one.
     //
     // websearch_to_tsquery ANDs its terms, so passing the whole title finds
@@ -1234,7 +1263,8 @@ const commands = {
     }
 
     const body = { title }
-    if (flags.body) body.description = await resolveValue(flags.body)
+    if (described !== undefined) body.description = described
+
     for (const k of ['type', 'status', 'priority']) if (flags[k]) body[k] = flags[k]
     if (flags.label) body.labels = String(flags.label).split(',')
     if (flags.parent) body.parentRef = flags.parent

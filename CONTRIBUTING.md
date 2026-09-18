@@ -41,6 +41,23 @@ absent from the search vector.
 ProseMirror, so writing an untouched body can rewrite what an agent authored. See
 [`docs/tiptap-markdown-spike.md`](./docs/tiptap-markdown-spike.md).
 
+**A backfill must not advertise itself as user activity.** `tasks`, `projects` and
+`task_comments` carry a `before update` touch trigger that sets `updated_at = now()` on
+every row it sees. A migration that rewrites a column for bookkeeping therefore stamps
+every row it touches as just-edited. Migration 049 qualified legacy actor ids across the
+table and flattened `updated_at` on 3023 tasks to one timestamp, which destroyed recency
+ordering and blinded every staleness view until it was repaired from a backup. Disable
+the trigger around the statement, and turn it back on in the same transaction:
+
+```sql
+alter table tasks disable trigger tasks_touch;
+update tasks set ... ;
+alter table tasks enable trigger tasks_touch;
+```
+
+Nothing warns you: the migration succeeds, the data is correct, and only the timestamps
+are quietly wrong.
+
 **The `admin()` client bypasses RLS.** It is a PostgREST-compatible adapter over the
 `pg` driver (`src/lib/db/client.ts`) and it connects as the owner, so every query made
 with it must filter by owner explicitly — `.eq('owner_user_id', …)`, or through the
