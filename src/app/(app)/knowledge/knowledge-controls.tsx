@@ -92,7 +92,11 @@ export const KnowledgeControls = ({
 
         <Select
           size="sm"
-          value={entity}
+          // Blank while searching, not merely disabled. `search_all` takes no
+          // entity, so the filter genuinely is not applied — and a URL
+          // carrying both showed the entity greyed out but still named, which
+          // reads as "applied, just locked" rather than "ignored".
+          value={searching ? '' : entity}
           onChange={(e) => push({ entity: e.target.value })}
           disabled={searching}
           title={searching ? 'Clear the search to filter by entity' : undefined}

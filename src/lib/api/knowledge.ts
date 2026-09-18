@@ -2,6 +2,7 @@ import { admin, normalizeDatabaseValue, transaction } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { slugify, type KnowledgeCreate, type KnowledgeUpdate } from '@/schemas/knowledge'
 import { findTask } from './tasks'
+import { projectIdForFormerKey } from './project-keys'
 
 /**
  * Knowledge: the durable half of memory.
@@ -70,6 +71,17 @@ const resolveProjects = async (_userId: string, keys: string[]) => {
   if (error) throw new Error(error.message)
 
   const found = new Map((data ?? []).map((p) => [p.key as string, p.id as string]))
+
+  // A key that is no longer current is still a key somebody wrote down. The
+  // task paths resolve renames through `project_former_keys` (tasks.ts:69,
+  // search.ts:180) and this did not, so `cairn know --project OLDKEY` went on
+  // returning nothing at all — defeating the reason former keys are kept.
+  for (const key of wanted) {
+    if (found.has(key)) continue
+    const viaFormer = await projectIdForFormerKey(_userId, key)
+    if (viaFormer) found.set(key, viaFormer)
+  }
+
   return {
     ids: wanted.map((k) => found.get(k)).filter((id): id is string => Boolean(id)),
     missing: wanted.filter((k) => !found.has(k)),
@@ -195,7 +207,12 @@ export const listKnowledge = async (
   // what was filed against a grouping it belongs to, and what is true
   // everywhere. An infra gotcha applies here; so does a Dispofi convention,
   // if this is a Dispofi project.
-  const { ids } = await resolveProjects(userId, [filters.project])
+  const { ids, missing } = await resolveProjects(userId, [filters.project])
+  // An empty list used to be the answer for a key that does not exist, so a
+  // typo was indistinguishable from a project nobody has learned anything
+  // about — and it took the global facts down with it. The write path has
+  // always said so; the read path swallowed it.
+  if (missing.length > 0) throw new Error(`No such project: ${missing.join(', ')}`)
   if (ids.length === 0) return []
 
   const [scoped, viaEntities, globals] = await Promise.all([
