@@ -107,7 +107,7 @@ searches all four at once.
 ```bash
 cairn know                          # what applies here
 cairn know <slug>                   # read it
-cairn learn "<title>" --body -      # global unless you pass --project
+cairn learn "<title>" --body -      # scoped to this dir's project by default
 cairn relearn <slug> --body -       # it changed
 cairn unlearn <slug> --superseded-by <new-slug>
 ```
@@ -143,8 +143,8 @@ the things nothing can do on your behalf:
 - **Say what did not work** — `--kind attempt`. The next agent tries it again otherwise,
   and the trying is the expensive part.
 - **Record what you learned**, and scope it: `--project` for one codebase, `--entity` for
-  a business or a stack, neither for true everywhere. Unscoped is what you get by
-  forgetting; the CLI says so when it happens.
+  a business or a stack, `--global` for true everywhere. Given none it takes this
+  directory's project, and refuses if there is none.
 - **Release or checkpoint anything you still hold.**
 
 ## 9. Output conventions

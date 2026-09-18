@@ -236,7 +236,19 @@ export const buildContext = async (
   const knowledge = rows.map((r) => ({
     slug: r.slug,
     title: r.title,
-    scope: (r.projects ?? []).length === 0 ? 'global' : (r.projects ?? []).join(','),
+    // Derived from `r.scope`, which `listKnowledge` already worked out
+    // relative to the project asked for. Reading `r.projects` alone said
+    // `global` for every entity-scoped fact — telling the next agent that a
+    // fact true of one business is true everywhere, which is the failure
+    // entities were introduced to end. Keeping the keys rather than printing
+    // the bare tier, because "dispofi" is what a reader can act on and
+    // "entity" is not.
+    scope:
+      r.scope === 'entity'
+        ? (r.entities ?? []).join(',') || 'entity'
+        : (r.projects ?? []).length === 0
+          ? 'global'
+          : (r.projects ?? []).join(','),
     stale: Boolean(aged.get(r.id)?.stale),
   }))
 

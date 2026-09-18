@@ -1053,7 +1053,9 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn learn "<title>" --body - record what we now know
                                    --project K  true of that project
                                    --entity E   true of that grouping (cairn entities)
-                                   neither      true everywhere
+                                   --global     true everywhere — say so on purpose
+                                   none of them: inferred from this directory's
+                                   project, and it refuses if there is none
     cairn entities                 groupings a fact can be true of, and their projects
     cairn entities assign|unassign <key> --project A,B
     cairn entities rename <key> --key <new> --title "T"
@@ -1603,13 +1605,64 @@ const commands = {
   async learn() {
     const title = need(positional[0], 'usage: cairn learn "<title>" --body -')
     const body = await resolveValue(flags.body ?? '')
+    /**
+     * Scope is decided before the write, not regretted after it.
+     *
+     * This used to default to global whenever --project was absent, and warn
+     * afterwards. Measured over the store, the import scoped 8% of its facts
+     * global while everything written here since ran at 27% — three times
+     * worse, which is what a silent default to the widest scope predicts. A
+     * misfiled task is a nuisance in one place; a fact filed global is in
+     * front of every project, permanently.
+     *
+     * So: an explicit scope wins, a mapped directory supplies one when none
+     * is given, and global has to be asked for. `cairn add` has always
+     * refused to file a task without a project; this is the same rule for the
+     * half that travels further.
+     */
+    const chosen = splitList(flags.project)
+    const entities = flags.entity ? splitList(flags.entity) : []
+
+    // Only when nothing was chosen, so the common path costs nothing extra.
+    // The local map answers most of the time; the git remote answers where it
+    // cannot — a second clone, a worktree, a directory nobody ran `cairn map`
+    // in — and only the server can turn a remote into a project, so it is
+    // asked. This is the same resolution `cairn context` performs, and the
+    // same principle as resolving a task's project from the repository rather
+    // than the path (CAIRN-123).
+    let here = null
+    if (!chosen.length && !entities.length && !flags.global) {
+      const cwd = process.cwd()
+      here = projectForDir(cwd)
+      if (!here) {
+        const remote = gitRemote(cwd)
+        if (remote) {
+          const params = new URLSearchParams({ cwd, repo: remote })
+          const seen = await request('GET', `/api/v1/context?${params}`, undefined, { soft: true })
+          here = seen?.project ?? null
+        }
+      }
+    }
+
+    if (!chosen.length && !entities.length && !flags.global && !here) {
+      die(
+        'scope this fact before filing it:\n' +
+          '  --project <KEY>   true of one codebase\n' +
+          '  --entity <key>    true of a business or a stack (cairn entities)\n' +
+          '  --global          true everywhere — say so on purpose\n' +
+          'This directory maps to no project, so there is nothing to infer from.',
+      )
+    }
+
+    const projects = chosen.length ? chosen : here ? [here] : []
+
     const payload = {
       title,
       body,
       labels: splitList(flags.label),
-      projects: splitList(flags.project),
+      projects,
     }
-    if (flags.entity) payload.entities = splitList(flags.entity)
+    if (entities.length) payload.entities = entities
     if (flags.slug) payload.slug = flags.slug
     if (flags.task) payload.sourceTaskRef = flags.task
     if (flags.verified) payload.verified = true
@@ -1617,14 +1670,10 @@ const commands = {
     const result = await request('POST', '/api/v1/knowledge', payload)
     emit(result)
 
-    // Global is a real answer and often the right one, but it is also what you
-    // get by forgetting. Five facts about one business ended up in front of
-    // every project that way, and nothing said a word at the time.
-    const scoped = (payload.projects ?? []).length + (payload.entities ?? []).length
-    if (FORMAT === 'tsv' && scoped === 0) {
-      process.stderr.write(
-        'recorded as global — true everywhere. If it is not, add --project <KEY> or --entity <key> (cairn entities)\n',
-      )
+    // Say what was inferred. Silent correctness is still a surprise the next
+    // time someone expects the old behaviour.
+    if (FORMAT === 'tsv' && here) {
+      process.stderr.write(`scoped to ${here} — this directory's project. --global if it is true everywhere\n`)
     }
   },
 
@@ -1654,6 +1703,16 @@ const commands = {
     }
 
     const params = new URLSearchParams()
+    // Set before the search branch returns, not after it. Living below that
+    // early return, --project was accepted and silently dropped on every
+    // `cairn know "<query>" --project K` — the CAIRN-145 failure exactly,
+    // relocated from the SQL into the CLI, on the verb agents use most. The
+    // server honours the parameter; only this dropped it.
+    if (flags.project) params.set('project', flags.project)
+    if (flags.label) params.set('label', flags.label)
+    if (flags.limit) params.set('limit', flags.limit)
+    if (flags.superseded) params.set('superseded', '1')
+
     if (subject) {
       params.set('q', subject)
       params.set('kinds', 'knowledge')
@@ -1669,10 +1728,6 @@ const commands = {
       })
     }
 
-    if (flags.project) params.set('project', flags.project)
-    if (flags.label) params.set('label', flags.label)
-    if (flags.limit) params.set('limit', flags.limit)
-    if (flags.superseded) params.set('superseded', '1')
     const data = await request('GET', `/api/v1/knowledge?${params}`)
     emit(data, {
       rows: (d) => d.results.map((r) => ({

@@ -265,9 +265,10 @@ cairn learn "Supavisor pools are per-tenant, not per-connection-string" \
 Three scopes, narrowest first:
 
 ```bash
+cairn learn "..."                     # inferred: this directory's project
 cairn learn "..." --project HM        # true of that project
 cairn learn "..." --entity dispofi    # true of that grouping — see `cairn entities`
-cairn learn "..."                     # true everywhere
+cairn learn "..." --global            # true everywhere — chosen, not defaulted to
 ```
 
 An **entity** is any grouping a fact can be true of: a business, a stack, a subsystem. A
@@ -327,9 +328,10 @@ is lost if you forget. These are the things nothing can do on your behalf:
 - [ ] **Say what did not work** — `cairn note <ref> --kind attempt`. The next agent will
       otherwise try it again, and the trying is the expensive part.
 - [ ] **Record what you learned** — `cairn learn`, if it will still be true next month.
-      Scope it: `--project` if it is about one codebase, `--entity` if it is about a
-      business or a stack, neither if it is true everywhere. Unscoped is the default you
-      get by forgetting, and the CLI will say so.
+      Scope it: `--project` for one codebase, `--entity` for a business or a stack,
+      `--global` for true everywhere. Given none of them it takes this directory's
+      project, and refuses when there is none to take — global is a claim about every
+      project you have, so it is chosen rather than arrived at.
 - [ ] **Release or checkpoint anything you are still holding** — `cairn release`, or
       `cairn checkpoint --summary` if the work continues. Going quiet does the release for
       you and sends the task back to todo, but it cannot write the checkpoint for you.
