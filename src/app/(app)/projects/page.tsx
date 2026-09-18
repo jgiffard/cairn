@@ -49,7 +49,7 @@ const ProjectsPage = async () => {
   return (
     <div className="flex h-dvh flex-col">
       <LiveUpdates />
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <h1 className="text-fg text-[0.8125rem] font-medium">Projects</h1>
         <span className="text-fg-subtle text-[0.75rem]">

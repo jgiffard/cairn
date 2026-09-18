@@ -106,14 +106,18 @@ export const LiveStatusIndicator = () => {
       className="border-border bg-surface/90 text-fg-subtle pointer-events-none fixed top-2.5 right-2.5 z-30 flex items-center gap-1.5 rounded-full border px-2 py-1 text-[0.6875rem] backdrop-blur-sm"
     >
       <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${look.dot}`} />
-      <span>{look.label}</span>
+      {/* Narrow screens get the dot alone. The label is the first thing worth
+          dropping: the colour already carries the state, the accessible name
+          still reads in full, and a phone header has no room to spare — this
+          badge was truncating "Show 2988 closed" before it was reserved for. */}
+      <span className="hidden sm:inline">{look.label}</span>
       {/* Only once something has actually changed: "updated just now" on a
           page that has sat still since it loaded would be untrue. */}
       {ctx.changedAt && ctx.state !== 'idle' && (
-        <>
+        <span className="hidden items-center gap-1.5 md:inline-flex">
           <span aria-hidden className="bg-border h-2.5 w-px" />
           <RelativeTime iso={ctx.changedAt} refreshMs={15_000} className="tabular" />
-        </>
+        </span>
       )}
     </div>
   )

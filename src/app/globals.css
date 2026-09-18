@@ -266,6 +266,19 @@
     line-height: 1;
   }
 
+  /* Room for the fixed live-status badge in the top-right of the shell.
+     Every page owns its own header and several run an `ml-auto` item flush to
+     the right edge, so without this the badge sits on top of them — it covered
+     "Show 2988 closed" on the task lists, on desktop and mobile alike.
+
+     One class rather than a padding repeated down thirteen files, so the
+     reserved width and the badge that needs it stay in step. It scales with
+     what the badge actually shows at that width: a bare dot on a phone, the
+     label from `sm`, the timestamp as well from `md`. */
+  .pr-live-status { padding-right: 2.25rem; }
+  @media (min-width: 40rem) { .pr-live-status { padding-right: 7.5rem; } }
+  @media (min-width: 48rem) { .pr-live-status { padding-right: 11.5rem; } }
+
   @keyframes pop {
     from { opacity: 0; transform: translateY(-4px) scale(0.99); }
     to   { opacity: 1; transform: none; }

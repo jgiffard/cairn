@@ -37,7 +37,7 @@ const ProjectPage = async ({
     <div className="flex h-dvh flex-col">
       {/* Breadcrumb bar — fixed height, so the list below always starts in
           the same place regardless of project name length. */}
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         {/* The leading crumbs are the first thing to go on a phone: the project
             name is already the page title, and the sidebar is a tap away. */}

@@ -40,7 +40,7 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
           reading it, and reading a claim that has just been withdrawn is the
           failure this store exists to prevent. */}
       <LiveUpdates />
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <Link
           href="/knowledge"
