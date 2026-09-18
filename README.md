@@ -290,13 +290,16 @@ problem.
 
 ## Agent access
 
-Three interfaces over **one** implementation, so behaviour cannot diverge between them.
+Three interfaces over **one** implementation, so behaviour cannot diverge between them —
+the CLI is that implementation, and the other two shell out to it. Coverage can still
+differ: the MCP server exposes the verbs worth calling as typed tools rather than all of
+them, so `context`, `next`, `history` and the session verbs stay CLI-only.
 
 | Interface | For |
 |---|---|
 | `cairn` CLI | anything that can run a shell command — this is the implementation |
 | `SKILL.md` | Claude Code, Codex and OpenClaw; all three read skill folders |
-| MCP server | native tool-calling — a thin facade over the CLI, holding no logic |
+| MCP server | native tool-calling — a thin facade over the CLI, holding no logic; a subset of its verbs |
 
 [`AGENTS.md`](./AGENTS.md) is the contract every agent should read. It is kept under 8 KB,
 and CI enforces that, because agents read it every session.

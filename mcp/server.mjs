@@ -6,6 +6,14 @@
  * shell-capable agent would run, so there is exactly one implementation of
  * every behaviour. Anything that ends up here and not in the CLI is a bug.
  *
+ * The reverse is not a bug but it is a cost, and it was never policed: this
+ * exposed no knowledge tools at all for as long as knowledge has existed, so
+ * an MCP-only agent could not read or write the memory half of the product
+ * and was not told it existed. Worse, `cairn_check` returns knowledge rows
+ * and described itself as an index of tasks, sending agents to `cairn_show`
+ * with a slug it cannot open. When a verb is deliberately left out, say so
+ * here rather than leaving its absence to be discovered.
+ *
  * Why bother, given the CLI exists: Codex's [mcp_servers.*] gives per-tool
  * timeouts and approval modes, Claude Code enforces the tool schemas so the
  * model cannot invent flags, and OpenClaw can reach it through mcporter.
@@ -50,9 +58,10 @@ const TOOLS = [
     name: 'cairn_check',
     description:
       'ALWAYS CALL THIS FIRST, before starting work on any subject. Returns an index ' +
-      'of prior tasks — open and closed — showing whether each carries a recorded ' +
-      'answer and roughly what it costs to open. Do not re-debug something already ' +
-      'answered. Then use cairn_show on the ones that look relevant.',
+      'of prior TASKS, work-log NOTES, KNOWLEDGE and SESSIONS — showing whether each ' +
+      'carries a recorded answer and roughly what it costs to open. Do not re-debug ' +
+      'something already answered. Open a task row with cairn_show; open a knowledge ' +
+      'row with cairn_know, whose ref is a slug rather than a KEY-123.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -65,13 +74,129 @@ const TOOLS = [
   },
   {
     name: 'cairn_show',
-    description: 'Full detail of one task, including its resolution if it has one.',
+    description:
+      'Full detail of one task, including its resolution if it has one. Takes a task ' +
+      'ref like CAI-42 — for a knowledge slug from cairn_check, use cairn_know.',
     inputSchema: {
       type: 'object',
       properties: { ref: { type: 'string', description: 'e.g. CAI-42' } },
       required: ['ref'],
     },
     run: (a) => ['show', a.ref],
+  },
+  {
+    name: 'cairn_know',
+    description:
+      'Read what is known. With a slug, returns that entry; with a phrase, searches ' +
+      'knowledge; with nothing, lists what applies to this project. Knowledge is what ' +
+      'outlives the task it was learned on, so this answers "what do we already know ' +
+      'about this" where cairn_check answers "has this been worked on".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        subject: {
+          type: 'string',
+          description: 'A slug to read, or a phrase to search. Omit to list what applies here.',
+        },
+        project: { type: 'string', description: 'Optional project key, e.g. CAI.' },
+      },
+    },
+    run: (a) => [
+      'know',
+      ...(a.subject ? [a.subject] : []),
+      ...(a.project ? ['--project', a.project] : []),
+    ],
+  },
+  {
+    name: 'cairn_learn',
+    description:
+      'Record something that will still be true next month — infra, a convention, a ' +
+      'gotcha. Scope it: project for one codebase, entity for a business or a stack, ' +
+      'global for true everywhere. Given none of those it takes the current ' +
+      'directory\'s project and refuses if there is none, because a fact filed global ' +
+      'sits in front of every project permanently.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'The claim itself, as a sentence.' },
+        body: { type: 'string', description: 'Markdown: what it means and how it was found.' },
+        project: { type: 'string', description: 'True of this project only.' },
+        entity: { type: 'string', description: 'True of this grouping — see cairn_entities.' },
+        global: { type: 'boolean', description: 'True everywhere. Say so on purpose.' },
+        label: { type: 'string', description: 'Comma-separated labels.' },
+        task: { type: 'string', description: 'The task it was learned on, e.g. CAI-42.' },
+      },
+      required: ['title', 'body'],
+    },
+    run: (a) => [
+      'learn', a.title, '--body', a.body,
+      ...(a.project ? ['--project', a.project] : []),
+      ...(a.entity ? ['--entity', a.entity] : []),
+      ...(a.global ? ['--global'] : []),
+      ...(a.label ? ['--label', a.label] : []),
+      ...(a.task ? ['--task', a.task] : []),
+    ],
+  },
+  {
+    name: 'cairn_relearn',
+    description:
+      'Correct a fact that has changed, in place. Prefer this to filing a second ' +
+      'entry: the failure mode of every memory store is accumulation without ' +
+      'correction, and two entries disagreeing is worse than one that is wrong.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string' },
+        body: { type: 'string', description: 'The corrected body.' },
+        title: { type: 'string', description: 'A corrected title, if the claim itself changed.' },
+      },
+      required: ['slug'],
+    },
+    run: (a) => [
+      'relearn', a.slug,
+      ...(a.body ? ['--body', a.body] : []),
+      ...(a.title ? ['--title', a.title] : []),
+    ],
+  },
+  {
+    name: 'cairn_unlearn',
+    description:
+      'Mark a fact as superseded — it was wrong, or something replaced it. It stays ' +
+      'findable and marked, and ranks below its replacement, so a correction beats ' +
+      'the claim it corrects wherever both match.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string' },
+        supersededBy: { type: 'string', description: 'Slug of the entry that replaces it.' },
+      },
+      required: ['slug'],
+    },
+    run: (a) => [
+      'unlearn', a.slug,
+      ...(a.supersededBy ? ['--superseded-by', a.supersededBy] : []),
+    ],
+  },
+  {
+    name: 'cairn_verify',
+    description:
+      'Confirm a fact is still true, having actually checked. Clears the stale mark ' +
+      'a fact gets when the files it names have been reworked since it was last ' +
+      'confirmed, without making you restate it.',
+    inputSchema: {
+      type: 'object',
+      properties: { slug: { type: 'string' } },
+      required: ['slug'],
+    },
+    run: (a) => ['verify', a.slug],
+  },
+  {
+    name: 'cairn_entities',
+    description:
+      'The groupings a fact can be true of — a business, a stack, a subsystem — and ' +
+      'the projects in each. Use before cairn_learn --entity, to find the right key.',
+    inputSchema: { type: 'object', properties: {} },
+    run: () => ['entities'],
   },
   {
     name: 'cairn_list',
