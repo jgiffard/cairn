@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { projectColor } from '@/components/icons'
-import type { KnowledgeGraph } from '@/lib/api/knowledge-graph'
+import type { GraphNode, KnowledgeGraph } from '@/lib/api/knowledge-graph'
 
 /**
  * The map, drawn as inline SVG.
@@ -117,14 +117,49 @@ export const GraphView = ({ graph }: Props) => {
     return `M${ax} ${ay} Q${mx - (dy / length) * bow} ${my + (dx / length) * bow} ${bx} ${by}`
   }
 
-  const named = useMemo(
-    () =>
-      graph.nodes
-        .filter((n) => n.degree >= LABEL_AT)
-        .sort((a, b) => b.degree - a.degree)
-        .slice(0, 28),
-    [graph.nodes],
-  )
+  /**
+   * Which titles to draw, chosen so that none lands on another.
+   *
+   * Drawn by importance and skipped on collision. Without this the dense
+   * clusters stacked a dozen titles into one grey smear — worse than no labels
+   * at all, because it hid the nodes underneath as well as itself.
+   *
+   * The text is sized in SCREEN units, not map units, so zooming in does not
+   * magnify the same wall of text: the boxes shrink against the map, more of
+   * them fit, and the corpus labels itself as you go in. Which is the
+   * behaviour anyone who has used a map expects.
+   */
+  const labels = useMemo(() => {
+    const size = 7.6 / zoom
+    const near = focused ? neighbours.get(focused) : null
+    const candidates = focused
+      ? graph.nodes
+          .filter((n) => n.slug === focused || (near?.has(n.slug) ?? false))
+          .sort((a, b) => (a.slug === focused ? -1 : b.slug === focused ? 1 : b.degree - a.degree))
+      : graph.nodes.filter((n) => n.degree >= LABEL_AT).sort((a, b) => b.degree - a.degree)
+
+    const placed: { x: number; y: number; w: number; h: number }[] = []
+    const out: { node: GraphNode; text: string; size: number }[] = []
+
+    for (const n of candidates.slice(0, 160)) {
+      const text = n.title.length > 42 ? `${n.title.slice(0, 41)}…` : n.title
+      // Close enough for a box test, and far cheaper than measuring text.
+      const w = text.length * size * 0.5
+      const h = size * 1.35
+      const x = n.x - w / 2
+      const y = n.y - radiusOf(n.degree) - 4 - h
+
+      const clash = placed.some(
+        (b) => x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + h > b.y,
+      )
+      if (clash) continue
+
+      placed.push({ x, y, w, h })
+      out.push({ node: n, text, size })
+      if (out.length >= 60) break
+    }
+    return out
+  }, [graph.nodes, focused, zoom, neighbours])
 
   const reset = () => {
     setZoom(1)
@@ -193,7 +228,7 @@ export const GraphView = ({ graph }: Props) => {
                   <path
                     d={path}
                     strokeWidth={on && focused ? 1.5 : 1}
-                    opacity={on ? (focused ? 0.9 : 0.34) : 0.05}
+                    opacity={on ? (focused ? 0.9 : 0.34) : 0.09}
                   />
                   {/* Light travelling the links of whatever is being looked at.
                       Only those links: a pulse on all 450 is a repaint every
@@ -220,7 +255,7 @@ export const GraphView = ({ graph }: Props) => {
               const anchor = node.get(gap.from[0] as string)
               const on = lit(gap.slug)
               return (
-                <g key={gap.slug} opacity={on ? 1 : 0.06}>
+                <g key={gap.slug} opacity={on ? 1 : 0.12}>
                   {anchor && (
                     <path
                       d={curve(anchor.x, anchor.y, gap.x, gap.y)}
@@ -288,7 +323,7 @@ export const GraphView = ({ graph }: Props) => {
                     fill={colour}
                     stroke="var(--bg)"
                     strokeWidth={n.degree === 0 ? 0.7 : 1.1}
-                    opacity={on ? (n.degree === 0 ? 0.6 : 1) : 0.07}
+                    opacity={on ? (n.degree === 0 ? 0.6 : 1) : 0.16}
                     onPointerEnter={() => setFocused(n.slug)}
                     onPointerLeave={() => setFocused(null)}
                     className="cursor-pointer transition-opacity"
@@ -303,23 +338,20 @@ export const GraphView = ({ graph }: Props) => {
               quieter than that waits to be hovered, or the picture becomes a
               wall of text with a graph behind it. */}
           <g className="pointer-events-none">
-            {(focused
-              ? graph.nodes.filter((n) => lit(n.slug) && n.degree > 0).slice(0, 40)
-              : named
-            ).map((n) => (
+            {labels.map(({ node: n, text, size }) => (
               <text
                 key={n.slug}
                 x={n.x}
                 y={n.y - radiusOf(n.degree) - 4}
                 textAnchor="middle"
-                fill="var(--fg-muted)"
-                fontSize={7.5}
+                fill={n.slug === focused ? 'var(--fg)' : 'var(--fg-muted)'}
+                fontSize={size}
                 stroke="var(--bg)"
-                strokeWidth={2.4}
+                strokeWidth={size * 0.34}
                 paintOrder="stroke"
-                opacity={focused ? 1 : 0.75}
+                opacity={focused ? 1 : 0.8}
               >
-                {n.title.length > 38 ? `${n.title.slice(0, 37)}…` : n.title}
+                {text}
               </text>
             ))}
           </g>
@@ -343,7 +375,7 @@ export const GraphView = ({ graph }: Props) => {
         </g>
       </svg>
 
-      <div className="border-border bg-surface/90 text-fg-subtle pointer-events-none absolute top-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-md border px-2.5 py-1.5 text-[0.7rem] backdrop-blur">
+      <div className="border-border bg-surface/90 text-fg-subtle pointer-events-none absolute top-2 left-2 max-w-[min(42rem,calc(100%-1rem))] truncate rounded-md border px-2.5 py-1.5 text-[0.7rem] backdrop-blur">
         {hovered ? (
           <span className="text-fg">
             {hovered.title}
@@ -364,12 +396,49 @@ export const GraphView = ({ graph }: Props) => {
         )}
       </div>
 
-      <p className="text-fg-subtle pointer-events-none absolute bottom-2 left-2 max-w-md text-[0.68rem] leading-relaxed">
-        Each dot is an entry, sized by its links and coloured by its project. Islands are laid
-        out separately, so a cluster on its own really is on its own. The band along the foot
-        is everything joined to nothing at all; a dashed red ring is a reference to an entry
-        nobody ever wrote.
-      </p>
+      {/* The legend, because "what are the dotted red circles?" was the first
+          thing asked after ten minutes of looking at this. Every mark on the
+          map means something and none of it was stated where it was being
+          read — the explanation was eight lines of low-contrast prose below
+          the frame, which is not where anyone looks. */}
+      <dl className="border-border bg-surface/90 text-fg-subtle pointer-events-none absolute bottom-2 left-2 space-y-1 rounded-md border px-2.5 py-2 text-[0.68rem] backdrop-blur">
+        <div className="flex items-center gap-2">
+          <svg width="26" height="10" aria-hidden className="shrink-0">
+            <circle cx="5" cy="5" r="2" fill="var(--fg-muted)" />
+            <circle cx="18" cy="5" r="4.5" fill="var(--fg-muted)" />
+          </svg>
+          <dd>bigger — more links to other entries</dd>
+        </div>
+        <div className="flex items-center gap-2">
+          <svg width="26" height="10" aria-hidden className="shrink-0">
+            <circle cx="6" cy="5" r="3.5" fill="var(--accent)" />
+            <circle cx="18" cy="5" r="3.5" fill="var(--fg-subtle)" />
+          </svg>
+          <dd>coloured by project · grey is global</dd>
+        </div>
+        <div className="flex items-center gap-2">
+          <svg width="26" height="10" aria-hidden className="shrink-0">
+            <circle
+              cx="12"
+              cy="5"
+              r="4"
+              fill="none"
+              stroke="var(--danger)"
+              strokeWidth="1.3"
+              strokeDasharray="2.5 2"
+            />
+          </svg>
+          <dd className="text-danger">referenced, but never written</dd>
+        </div>
+        <div className="flex items-center gap-2">
+          <svg width="26" height="10" aria-hidden className="shrink-0">
+            <circle cx="4" cy="5" r="1.6" fill="var(--fg-subtle)" opacity="0.6" />
+            <circle cx="12" cy="5" r="1.6" fill="var(--fg-subtle)" opacity="0.6" />
+            <circle cx="20" cy="5" r="1.6" fill="var(--fg-subtle)" opacity="0.6" />
+          </svg>
+          <dd>the band at the foot — joined to nothing</dd>
+        </div>
+      </dl>
 
       {zoom !== 1 || pan.x !== 0 || pan.y !== 0 ? (
         <button
