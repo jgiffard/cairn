@@ -99,15 +99,24 @@ export const MarkdownEditor = ({
   if (!editing) {
     return (
       <div className="group relative">
-        {value.trim() ? (
-          <MarkdownView>{value}</MarkdownView>
+        {/* The PROP, not the state. `value` is seeded once at mount, so
+            rendering it here meant a description rewritten by an agent never
+            appeared until a full reload — the body was the one part of the
+            task page that could not catch up. Editors must not sync a prop
+            into state while open (it would clobber typing), so this reads the
+            prop when closed and seeds state when editing starts, exactly as
+            editable-title.tsx does. */}
+        {initial.trim() ? (
+          <MarkdownView>{initial}</MarkdownView>
         ) : (
           <p className="text-fg-subtle text-sm italic">No description.</p>
         )}
         <button
           type="button"
           onClick={() => {
-            baseline.current = value
+            // Seed from the current prop at the moment editing starts.
+            setValue(initial)
+            baseline.current = initial
             setEditing(true)
           }}
           className="text-fg-subtle hover:text-fg border-border bg-surface absolute -top-1 right-0 rounded border px-2 py-0.5 text-[0.6875rem] opacity-0 transition-opacity group-hover:opacity-100"

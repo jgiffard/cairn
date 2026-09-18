@@ -9,6 +9,7 @@ import { ProjectKeysProvider } from '@/components/project-keys'
 import { MobileNavProvider } from '@/components/mobile-nav-context'
 import { ToastHost } from '@/components/toast'
 import { HealthBanner } from '@/components/health-banner'
+import { LiveStatusIndicator, LiveStatusProvider } from '@/components/live-status'
 
 const AppLayout = async ({ children }: { children: React.ReactNode }) => {
   const user = await currentUser()
@@ -31,6 +32,7 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
 
   return (
     <ToastHost>
+      <LiveStatusProvider>
       <ProjectKeysProvider keys={refKeys}>
         <TaskCreationProvider projects={projectList}>
           <MobileNavProvider email={email} role={user.role} projects={projectList}>
@@ -47,10 +49,14 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
             </div>
               <CommandPalette projects={projectList} />
               <Shortcuts />
+              {/* Fixed to the viewport, outside the scroll containers each
+                  page owns, so it stays put wherever the reader is. */}
+              <LiveStatusIndicator />
             </div>
           </MobileNavProvider>
         </TaskCreationProvider>
       </ProjectKeysProvider>
+      </LiveStatusProvider>
     </ToastHost>
   )
 }

@@ -59,6 +59,18 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
   // needless work for "add one row to a list" and very noticeable when the
   // host is under load.
   const [notes, setNotes] = useState(initial)
+  // A useState initialiser is read once, at mount. Without this the panel kept
+  // its mount-time snapshot for the life of the page: an agent writing a
+  // finding moved tasks.updated_at (migration 008), the pulse changed, the
+  // stream fired and `router.refresh()` re-rendered the server component with
+  // the new notes — which this component then ignored. Reconciled during
+  // render, the pattern React documents for "adjust state when a prop
+  // changes", and the one cross-project-board.tsx already uses.
+  const [prevInitial, setPrevInitial] = useState(initial)
+  if (initial !== prevInitial) {
+    setPrevInitial(initial)
+    setNotes(initial)
+  }
   const [text, setText] = useState('')
   const [kind, setKind] = useState<NoteKind>('note')
   const [pending, setPending] = useState(false)

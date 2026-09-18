@@ -23,6 +23,13 @@ export const CommentsPanel = ({
   const request = useMutate()
   // Appended locally; see the note in notes-panel.tsx.
   const [comments, setComments] = useState(initial)
+  // See notes-panel: state seeded from a prop is not updated by a re-render,
+  // so a comment left by someone else never arrived without a full reload.
+  const [prevInitial, setPrevInitial] = useState(initial)
+  if (initial !== prevInitial) {
+    setPrevInitial(initial)
+    setComments(initial)
+  }
   const [text, setText] = useState('')
   const [pending, setPending] = useState(false)
 

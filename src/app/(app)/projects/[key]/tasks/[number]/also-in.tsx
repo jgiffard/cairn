@@ -31,6 +31,13 @@ export const AlsoIn = ({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [current, setCurrent] = useState(alsoProjects)
+  // Held in state so a toggle can be applied optimistically and put back on
+  // failure; reconciled here so a change made elsewhere still lands.
+  const [prevAlso, setPrevAlso] = useState(alsoProjects)
+  if (alsoProjects !== prevAlso) {
+    setPrevAlso(alsoProjects)
+    setCurrent(alsoProjects)
+  }
 
   const toggle = async (key: string) => {
     const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key]
