@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { projectColor } from '@/components/icons'
 import type { GraphNode, KnowledgeGraph } from '@/lib/api/knowledge-graph'
@@ -43,8 +43,219 @@ const hash = (key: string): number => {
   return h
 }
 
+/** A radius that makes a hub look like one. */
+const radiusOf = (degree: number): number =>
+  degree === 0 ? 2.6 : 3.4 + Math.min(9, Math.sqrt(degree) * 2.6)
+
+/**
+ * A link, bowed rather than ruled.
+ *
+ * Straight lines between hundreds of nodes cross into a hatch pattern and
+ * every one of them reads the same. A consistent bow — always the same side,
+ * always the same fraction of the span — separates the crossings and gives
+ * the web the look of something grown rather than drawn.
+ */
+const curve = (ax: number, ay: number, bx: number, by: number): string => {
+  const mx = (ax + bx) / 2
+  const my = (ay + by) / 2
+  const dx = bx - ax
+  const dy = by - ay
+  const length = Math.hypot(dx, dy) || 1
+  const bow = Math.min(18, length * 0.12)
+  return `M${ax} ${ay} Q${mx - (dy / length) * bow} ${my + (dx / length) * bow} ${bx} ${by}`
+}
+
+/** Everything the drawn layers need, and nothing that changes on a wheel tick. */
+type LayerProps = {
+  graph: KnowledgeGraph
+  at: Map<string, GraphNode>
+  neighbours: Map<string, Set<string>>
+  focused: string | null
+  onFocus: (slug: string | null) => void
+}
+
+const isLit = (focused: string | null, neighbours: LayerProps['neighbours'], slug: string) =>
+  focused === null || focused === slug || (neighbours.get(focused)?.has(slug) ?? false)
+
+/**
+ * The three drawn layers, memoised.
+ *
+ * None of this depends on the zoom or the pan — those are one transform on the
+ * group above. Left inline, a wheel tick re-diffed roughly 2,500 SVG elements,
+ * at trackpad rates of fifty to a hundred a second, and a hover did the same.
+ * Split out, a zoom re-renders one attribute.
+ */
+const EdgeLayer = memo(function EdgeLayer({ graph, at, neighbours, focused }: LayerProps) {
+  return (
+    <g stroke="var(--fg-subtle)" strokeLinecap="round" fill="none">
+      {graph.edges.map(({ source, target }) => {
+        const a = at.get(source)
+        const b = at.get(target)
+        if (!a || !b) return null
+        const on = isLit(focused, neighbours, source) && isLit(focused, neighbours, target)
+        const path = curve(a.x, a.y, b.x, b.y)
+        return (
+          <g key={`${source}-${target}`}>
+            <path
+              d={path}
+              strokeWidth={on && focused ? 1.5 : 1}
+              opacity={on ? (focused ? 0.9 : 0.34) : 0.09}
+            />
+            {/* Light travelling the links of whatever is being looked at.
+                Only those links: a pulse on all 450 is a repaint every frame,
+                and a map that shimmers everywhere says nothing about
+                anywhere. */}
+            {focused && on && (
+              <path
+                className="graph-beam"
+                d={path}
+                stroke={a.project ? projectColor(a.project) : 'var(--accent)'}
+                strokeWidth={1.8}
+              />
+            )}
+          </g>
+        )
+      })}
+    </g>
+  )
+})
+
+/**
+ * A reference to something nobody wrote, drawn where it was made.
+ *
+ * Dashed and hollow, because the whole point is that it is not there —
+ * dropping it is what kept 31 of these invisible.
+ */
+const MissingLayer = memo(function MissingLayer({
+  graph,
+  at,
+  neighbours,
+  focused,
+  onFocus,
+}: LayerProps) {
+  return (
+    <g>
+      {graph.missing.map((gap) => {
+        const anchor = at.get(gap.from[0] as string)
+        const on = isLit(focused, neighbours, gap.slug)
+        return (
+          <g key={gap.slug} opacity={on ? 1 : 0.12}>
+            {anchor && (
+              <path
+                d={curve(anchor.x, anchor.y, gap.x, gap.y)}
+                fill="none"
+                stroke="var(--danger)"
+                strokeWidth={1}
+                strokeDasharray="2 3"
+                opacity={0.55}
+              />
+            )}
+            <circle
+              cx={gap.x}
+              cy={gap.y}
+              r={3.6}
+              fill="none"
+              stroke="var(--danger)"
+              strokeWidth={1.2}
+              strokeDasharray="2.5 2"
+              onPointerEnter={() => onFocus(gap.slug)}
+              onPointerLeave={() => onFocus(null)}
+              className="cursor-help"
+            />
+          </g>
+        )
+      })}
+    </g>
+  )
+})
+
+/**
+ * The nodes, and the light around them.
+ *
+ * The halo is drawn unconditionally and dimmed to nothing, rather than mounted
+ * only when lit: focusing one node used to unmount roughly 370 circles and
+ * remount them on leave, which is a great deal of work to make a picture
+ * quieter.
+ *
+ * Drift is skipped for anything joined to nothing. Those sit in a grid at the
+ * foot of the map and read as a count, so there is nothing for breathing to
+ * say about them — and it takes a third of the animated groups off a raster
+ * loop that never stops while the page is open.
+ */
+const NodeLayer = memo(function NodeLayer({
+  graph,
+  at: _at,
+  neighbours,
+  focused,
+  onFocus,
+  onOpen,
+}: LayerProps & { onOpen: (slug: string, event: React.MouseEvent) => void }) {
+  return (
+    <>
+      {graph.nodes.map((n) => {
+        const on = isLit(focused, neighbours, n.slug)
+        const r = radiusOf(n.degree)
+        const colour = n.project ? projectColor(n.project) : 'var(--fg-muted)'
+        const seed = hash(n.slug)
+        return (
+          <g
+            key={n.slug}
+            className={n.degree === 0 ? 'graph-node graph-still' : 'graph-node'}
+            style={
+              {
+                '--delay': `${-(seed % 9000) / 1000}s`,
+                '--drift': `${6 + (seed % 5)}s`,
+                '--rise': `${((seed % 700) / 1000).toFixed(2)}s`,
+              } as React.CSSProperties
+            }
+          >
+            <circle
+              cx={n.x}
+              cy={n.y}
+              r={r * 3.2}
+              fill="url(#halo)"
+              color={colour}
+              opacity={on ? (n.degree === 0 ? 0.35 : focused ? 1 : 0.8) : 0}
+              className="pointer-events-none"
+            />
+            <Link
+              href={`/knowledge/${n.slug}`}
+              // Every node is in the viewport at once, so the default viewport
+              // prefetch schedules a request per entry on first paint — 377 of
+              // them, each through the app layout.
+              prefetch={false}
+              // The map is not a navigation surface; the page says so. One tab
+              // stop per entry would put several hundred unnamed, unstyled
+              // stops between the breadcrumb and the legend, and a focusable
+              // element inside role="img" is wrong anyway.
+              tabIndex={-1}
+            >
+              <circle
+                cx={n.x}
+                cy={n.y}
+                r={r}
+                fill={colour}
+                stroke="var(--bg)"
+                strokeWidth={n.degree === 0 ? 0.7 : 1.1}
+                opacity={on ? (n.degree === 0 ? 0.6 : 1) : 0.16}
+                onPointerEnter={() => onFocus(n.slug)}
+                onPointerLeave={() => onFocus(null)}
+                onClick={(event) => onOpen(n.slug, event)}
+                className="cursor-pointer transition-opacity"
+              />
+            </Link>
+          </g>
+        )
+      })}
+    </>
+  )
+})
+
 export const GraphView = ({ graph }: Props) => {
   const [focused, setFocused] = useState<string | null>(null)
+  // Read by the click handler, which must stay referentially stable or the
+  // memoised node layer re-renders on every hover — the thing this avoids.
+  const focusedRef = useRef<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const drag = useRef<{ x: number; y: number; panX: number; panY: number; moved: boolean } | null>(
@@ -78,10 +289,28 @@ export const GraphView = ({ graph }: Props) => {
     return map
   }, [graph.edges, graph.missing])
 
-  const lit = (slug: string): boolean =>
-    focused === null || focused === slug || (neighbours.get(focused)?.has(slug) ?? false)
+  const lit = (slug: string): boolean => isLit(focused, neighbours, slug)
 
-  const node = useMemo(() => new Map(graph.nodes.map((n) => [n.slug, n])), [graph.nodes])
+  const at = useMemo(() => new Map(graph.nodes.map((n) => [n.slug, n])), [graph.nodes])
+  const node = at
+
+  /**
+   * Opening a node, kept out of the layer so the layer can be memoised.
+   *
+   * A drag that ended on a node is a drag, not a click. And on a touch screen
+   * the gesture that reveals a node IS the gesture that opens it, so the first
+   * tap reads it and only a second one follows the link.
+   */
+  const openNode = useCallback(
+    (slug: string, event: React.MouseEvent) => {
+      if (dragged.current) event.preventDefault()
+      else if (lastPointer.current === 'touch' && focusedRef.current !== slug) {
+        event.preventDefault()
+        setFocused(slug)
+      }
+    },
+    [],
+  )
   const hovered = focused ? node.get(focused) : null
   const hoveredMissing = focused ? graph.missing.find((m) => m.slug === focused) : null
 
@@ -107,28 +336,6 @@ export const GraphView = ({ graph }: Props) => {
     return { x: minX - pad, y: minY - pad, w: w + pad * 2, h: h + pad * 2 }
   }, [graph.nodes, graph.missing])
 
-  /** A radius that makes a hub look like one. */
-  const radiusOf = (degree: number): number =>
-    degree === 0 ? 2.6 : 3.4 + Math.min(9, Math.sqrt(degree) * 2.6)
-
-  /**
-   * A link, bowed rather than ruled.
-   *
-   * Straight lines between hundreds of nodes cross into a hatch pattern and
-   * every one of them reads the same. A consistent bow — always the same side,
-   * always the same fraction of the span — separates the crossings and gives
-   * the web the look of something grown rather than drawn.
-   */
-  const curve = (ax: number, ay: number, bx: number, by: number): string => {
-    const mx = (ax + bx) / 2
-    const my = (ay + by) / 2
-    const dx = bx - ax
-    const dy = by - ay
-    const length = Math.hypot(dx, dy) || 1
-    const bow = Math.min(18, length * 0.12)
-    return `M${ax} ${ay} Q${mx - (dy / length) * bow} ${my + (dx / length) * bow} ${bx} ${by}`
-  }
-
   /**
    * Which titles to draw, chosen so that none lands on another.
    *
@@ -141,8 +348,17 @@ export const GraphView = ({ graph }: Props) => {
    * them fit, and the corpus labels itself as you go in. Which is the
    * behaviour anyone who has used a map expects.
    */
+  /**
+   * Zoom, in steps, for the labels only.
+   *
+   * The collision pass is cheap but it is not free, and a trackpad delivers a
+   * hundred zoom events a second. Rounding to quarter-steps means it runs when
+   * the set of labels could actually change, rather than on every tick.
+   */
+  const labelZoom = Math.max(0.5, Math.round(zoom * 4) / 4)
+
   const labels = useMemo(() => {
-    const size = 7.6 / zoom
+    const size = 7.6 / labelZoom
     const near = focused ? neighbours.get(focused) : null
     const candidates = focused
       ? graph.nodes
@@ -171,12 +387,16 @@ export const GraphView = ({ graph }: Props) => {
       if (out.length >= 60) break
     }
     return out
-  }, [graph.nodes, focused, zoom, neighbours])
+  }, [graph.nodes, focused, labelZoom, neighbours])
 
   const reset = useCallback(() => {
     setZoom(1)
     setPan({ x: 0, y: 0 })
   }, [])
+
+  useEffect(() => {
+    focusedRef.current = focused
+  }, [focused])
 
   const svg = useRef<SVGSVGElement>(null)
 
@@ -327,144 +547,30 @@ export const GraphView = ({ graph }: Props) => {
         <g
           transform={`translate(${box.x + box.w / 2} ${box.y + box.h / 2}) scale(${zoom}) translate(${-(box.x + box.w / 2) + pan.x} ${-(box.y + box.h / 2) + pan.y})`}
         >
-          <g stroke="var(--fg-subtle)" strokeLinecap="round" fill="none">
-            {graph.edges.map(({ source, target }) => {
-              const a = node.get(source)
-              const b = node.get(target)
-              if (!a || !b) return null
-              const on = lit(source) && lit(target)
-              const path = curve(a.x, a.y, b.x, b.y)
-              return (
-                <g key={`${source}-${target}`}>
-                  <path
-                    d={path}
-                    strokeWidth={on && focused ? 1.5 : 1}
-                    opacity={on ? (focused ? 0.9 : 0.34) : 0.09}
-                  />
-                  {/* Light travelling the links of whatever is being looked at.
-                      Only those links: a pulse on all 450 is a repaint every
-                      frame, and a map that shimmers everywhere says nothing
-                      about anywhere. */}
-                  {focused && on && (
-                    <path
-                      className="graph-beam"
-                      d={path}
-                      stroke={a.project ? projectColor(a.project) : 'var(--accent)'}
-                      strokeWidth={1.8}
-                    />
-                  )}
-                </g>
-              )
-            })}
-          </g>
+          <EdgeLayer
+            graph={graph}
+            at={at}
+            neighbours={neighbours}
+            focused={focused}
+            onFocus={setFocused}
+          />
 
-          {/* A reference to something nobody wrote, drawn where it was made.
-              Dashed and hollow, because the whole point is that it is not
-              there — dropping it is what kept 31 of these invisible. */}
-          <g>
-            {graph.missing.map((gap) => {
-              const anchor = node.get(gap.from[0] as string)
-              const on = lit(gap.slug)
-              return (
-                <g key={gap.slug} opacity={on ? 1 : 0.12}>
-                  {anchor && (
-                    <path
-                      d={curve(anchor.x, anchor.y, gap.x, gap.y)}
-                      fill="none"
-                      stroke="var(--danger)"
-                      strokeWidth={1}
-                      strokeDasharray="2 3"
-                      opacity={0.55}
-                    />
-                  )}
-                  <circle
-                    cx={gap.x}
-                    cy={gap.y}
-                    r={3.6}
-                    fill="none"
-                    stroke="var(--danger)"
-                    strokeWidth={1.2}
-                    strokeDasharray="2.5 2"
-                    onPointerEnter={() => setFocused(gap.slug)}
-                    onPointerLeave={() => setFocused(null)}
-                    className="cursor-help"
-                  />
-                </g>
-              )
-            })}
-          </g>
+          <MissingLayer
+            graph={graph}
+            at={at}
+            neighbours={neighbours}
+            focused={focused}
+            onFocus={setFocused}
+          />
 
-          {/* Each node in its own group so the drift can move the group while
-              the layout keeps the anchor. The phase comes from the slug, so
-              the corpus breathes unevenly — every node on the same beat reads
-              as a pulsing sheet rather than as something alive. */}
-          {graph.nodes.map((n) => {
-            const on = lit(n.slug)
-            const r = radiusOf(n.degree)
-            const colour = n.project ? projectColor(n.project) : 'var(--fg-muted)'
-            const seed = hash(n.slug)
-            return (
-              <g
-                key={n.slug}
-                className="graph-node"
-                style={
-                  {
-                    '--delay': `${-(seed % 9000) / 1000}s`,
-                    '--drift': `${6 + (seed % 5)}s`,
-                    '--rise': `${((seed % 700) / 1000).toFixed(2)}s`,
-                  } as React.CSSProperties
-                }
-              >
-                {on && (
-                  <circle
-                    cx={n.x}
-                    cy={n.y}
-                    r={r * 3.2}
-                    fill="url(#halo)"
-                    color={colour}
-                    opacity={n.degree === 0 ? 0.35 : focused ? 1 : 0.8}
-                    className="pointer-events-none"
-                  />
-                )}
-                <Link
-                  href={`/knowledge/${n.slug}`}
-                  // Every node is in the viewport at once, so the default
-                  // viewport prefetch schedules a request per entry on first
-                  // paint — 377 of them, each through the app layout.
-                  prefetch={false}
-                  // The map is not a navigation surface; the page says so. One
-                  // tab stop per entry would put several hundred unnamed,
-                  // unstyled stops between the breadcrumb and the legend, and
-                  // a focusable element inside role="img" is wrong anyway.
-                  tabIndex={-1}
-                >
-                  <circle
-                    cx={n.x}
-                    cy={n.y}
-                    r={r}
-                    fill={colour}
-                    stroke="var(--bg)"
-                    strokeWidth={n.degree === 0 ? 0.7 : 1.1}
-                    opacity={on ? (n.degree === 0 ? 0.6 : 1) : 0.16}
-                    onPointerEnter={() => setFocused(n.slug)}
-                    onPointerLeave={() => setFocused(null)}
-                    onClick={(event) => {
-                      // A drag that ended on a node is a drag, not a click.
-                      // And on a touch screen the gesture that reveals a node
-                      // IS the gesture that opens it, so the first tap reads
-                      // it and only a second one follows the link.
-                      if (dragged.current) event.preventDefault()
-                      else if (lastPointer.current === 'touch' && focused !== n.slug) {
-                        event.preventDefault()
-                        setFocused(n.slug)
-                      }
-                    }}
-                    className="cursor-pointer transition-opacity"
-                  />
-                </Link>
-              </g>
-            )
-          })}
+          <NodeLayer
+            graph={graph}
+            at={at}
+            neighbours={neighbours}
+            focused={focused}
+            onFocus={setFocused}
+            onOpen={openNode}
+          />
 
           {/* The hubs carry their names without being asked, because a map of
               unlabelled dots tells you the shape and nothing else. Everything
