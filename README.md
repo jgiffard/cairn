@@ -538,6 +538,59 @@ its own and touches nobody else's. Coverage differs by runtime:
 Codex hook entries must also be trusted in `~/.codex/config.toml` before they run; the
 installer prints what to add.
 
+**How a session gets written up.** The session-end hook records what a session touched by
+itself, but the prose on a session row — what was asked, what was learned, what landed,
+what is next — is written by a model. The hook pipes up to 24 KB of transcript to
+`claude -p` and parses the JSON that comes back. So a session row has prose only where
+Claude Code is installed **and logged in as the identity running the hook**, and there is
+one small model call per session close.
+
+```bash
+CAIRN_SUMMARY_CLI=claude                            # or a wrapper, see below
+CAIRN_SUMMARY_MODEL=claude-haiku-4-5-20251001
+CAIRN_SUMMARY_TIMEOUT_MS=60000
+```
+
+The hook keeps the row when the summariser cannot be reached, because losing the record of
+a session over a missing summary would be the worse trade. The cost of that choice is that
+the failure is silent: rows keep appearing, with their files and task refs and no prose,
+and nothing says why. It is worth checking once that a session you know about has prose —
+`cairn session list` — rather than assuming. `cairn vitals` reports it daily.
+
+Two cases where the summariser needs help:
+
+- **The transcripts are root's and the login is not.** A swept runtime whose sessions live
+  under a `0700` home has to be swept as root, and `claude -p` as root is not logged in.
+  Point `CAIRN_SUMMARY_CLI` at a wrapper that drops to the account that is:
+  `sudo -n -u <user> -H env HOME=/home/<user> claude "$@"`.
+- **The summariser is itself a Claude Code session.** It would trigger the hook again, so
+  the hook sets `CAIRN_SUMMARISER=1` in the child and exits immediately when it sees it.
+  Anything wrapping the summariser must pass that through.
+
+**When a runtime has no session-end event**, nothing hands the transcript over, so sweep
+instead of waiting:
+
+```bash
+node ~/.cairn/hooks/cairn-session-end.mjs --scan <sessions dir> --window-hours 2
+node ~/.cairn/hooks/cairn-session-end.mjs --dry-run <transcript>   # parse it, write nothing
+```
+
+`--dry-run` is the thing to reach for when a runtime is recording nothing: it prints what
+would be written from one transcript, which separates "the hook never ran" from "the hook
+ran and understood nothing".
+
+**What the CLI keeps on disk.** All under `~/.cairn/`, none of it precious except `env`:
+
+| | |
+|---|---|
+| `env` | credentials, `0600` |
+| `acted.jsonl` | a breadcrumb per accepted write, which is how a session knows which tasks it touched on a runtime whose session names the CLI cannot see |
+| `outbox.jsonl` | notes, comments and checkpoints made while the server was unreachable, replayed later; `outbox.jsonl.rejected` keeps what the server refused rather than discarding it |
+| `projects.json` | directory → project key, from `cairn map` |
+| `ownership/` | which tasks this machine holds |
+| `recorded-rollouts` | which swept transcripts have already been turned into sessions, so a sweep on a timer is idempotent |
+| `hooks/`, `maintenance/` | where the installers put the copies they manage |
+
 **MCP** (optional — native tool-calling for Claude Code and Codex; OpenClaw reaches it
 through `mcporter`). The server lives in [`mcp/`](./mcp), holds no logic of its own, and
 exposes 19 of the CLI's verbs as typed tools — `context`, `next`, `history` and the session
@@ -627,7 +680,8 @@ machine, and running `vitals` in two places reports the same findings twice.
 
 Host-specific paths come from the environment, because a machine's layout does not belong
 in this repository: `CAIRN_CLI_PATH`, `CAIRN_NODE_PATH`, `CAIRN_LOG_DIR`,
-`CAIRN_SYNC_SCRIPT`, `CAIRN_RAW_BASE`, `CAIRN_HOOKS_DIR`, `CAIRN_OPENCLAW_SESSIONS`, and
+`CAIRN_SYNC_SCRIPT`, `CAIRN_RAW_BASE`, `CAIRN_HOOKS_DIR`, `CAIRN_OPENCLAW_SESSIONS`,
+`CAIRN_SUMMARY_CLI` for a sweep that has to reach a summariser it cannot run as itself, and
 `CAIRN_SYNC_ALSO` for copies outside the running user's home. The defaults describe the
 machine rather than one host: on macOS the CLI is looked for in `~/.local/bin`, logs go to
 `~/Library/Logs`, and node is the one running the installer. `CAIRN_NOTIFY_VITALS` and
