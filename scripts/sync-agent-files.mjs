@@ -85,6 +85,23 @@ const ARTEFACTS = [
     ],
   },
   {
+    // And the installer beside it, for the same reason and by the same
+    // argument. It was left out when the entry above was written, so it became
+    // the one deployed copy that drifted -- while every other copy on that host
+    // stayed identical, which is precisely the state that makes drift look
+    // impossible. A file is only kept honest here if it is listed here.
+    name: 'maintenance:cron',
+    file: 'scripts/install-cron.mjs',
+    mode: 0o755,
+    targets: [
+      at('/opt/cairn-maintenance/install-cron.mjs', '/opt/cairn-maintenance/install-cron.mjs'),
+      at(
+        join(home, '.cairn/maintenance/install-cron.mjs'),
+        join(home, '.cairn/maintenance/install-cron.mjs'),
+      ),
+    ],
+  },
+  {
     name: 'hook:context',
     file: 'hooks/cairn-context.mjs',
     mode: 0o755,
