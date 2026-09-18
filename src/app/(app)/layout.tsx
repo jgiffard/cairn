@@ -1,11 +1,13 @@
 import { redirect } from 'next/navigation'
 import { currentUser, listProjects } from '@/lib/data'
 import { listFormerKeys } from '@/lib/api/project-keys'
+import { knownSlugs } from '@/lib/api/knowledge-graph'
 import { CommandPalette } from '@/components/command-palette'
 import { AppSidebar } from '@/components/app-sidebar'
 import { TaskCreationProvider } from '@/components/task-creation'
 import { Shortcuts } from '@/components/shortcuts'
 import { ProjectKeysProvider } from '@/components/project-keys'
+import { KnowledgeSlugsProvider } from '@/components/knowledge-slugs'
 import { MobileNavProvider } from '@/components/mobile-nav-context'
 import { ToastHost } from '@/components/toast'
 import { HealthBanner } from '@/components/health-banner'
@@ -17,9 +19,13 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
   // the guard ran.
   if (!user) redirect('/login')
 
-  const [projects, formerKeys] = await Promise.all([
+  const [projects, formerKeys, slugs] = await Promise.all([
     listProjects(user.id),
     listFormerKeys(user.id),
+    // Every slug there is, so `[[a-reference]]` to an entry nobody wrote can
+    // be drawn as the loose end it is. One column, and it has to be ALL of
+    // them: a partial list would mark real entries as missing.
+    knownSlugs().catch(() => null),
   ])
   const email = user.email ?? 'you'
   const projectList = projects.map((p) => ({ key: p.key, title: p.title }))
@@ -34,6 +40,7 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
     <ToastHost>
       <LiveStatusProvider>
       <ProjectKeysProvider keys={refKeys}>
+        <KnowledgeSlugsProvider slugs={slugs}>
         <TaskCreationProvider projects={projectList}>
           <MobileNavProvider email={email} role={user.role} projects={projectList}>
             <div className="bg-bg flex h-dvh">
@@ -55,6 +62,7 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
             </div>
           </MobileNavProvider>
         </TaskCreationProvider>
+        </KnowledgeSlugsProvider>
       </ProjectKeysProvider>
       </LiveStatusProvider>
     </ToastHost>

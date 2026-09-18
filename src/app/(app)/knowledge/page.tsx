@@ -137,6 +137,12 @@ const KnowledgePage = async ({
           {items.length} {items.length === 1 ? 'entry' : 'entries'}
           {widened ? ' · loose match' : ''}
         </span>
+        <Link
+          href="/knowledge/graph"
+          className="text-fg-muted hover:text-fg ml-auto text-[0.75rem] transition-colors sm:ml-3"
+        >
+          Map
+        </Link>
       </header>
 
       <KnowledgeControls
