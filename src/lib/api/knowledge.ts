@@ -449,6 +449,32 @@ export const updateKnowledge = async (actor: Actor, slug: string, patch: Knowled
  * re-derived from a renamed title, an id cannot, so the UI needs this to turn
  * "superseded by <uuid>" into a link a person can follow.
  */
+/**
+ * The task a fact was learned on, as a ref somebody can follow.
+ *
+ * `source_task_id` has been stored since knowledge existed and shown nowhere,
+ * so "where did we learn this" was a question the data could answer and the
+ * product could not. Mirrors `supersededByInfo`: one lookup, ids in, display
+ * shapes out.
+ */
+export const sourceTaskRef = async (
+  _userId: string,
+  taskId: string | null,
+): Promise<{ ref: string; title: string } | null> => {
+  if (!taskId) return null
+
+  const { data, error } = await admin()
+    .from('tasks')
+    .select('number, title, project:projects!project_id!inner(key)')
+    .eq('id', taskId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return null
+
+  const row = data as unknown as { number: number; title: string; project: { key: string } }
+  return { ref: `${row.project.key}-${row.number}`, title: row.title }
+}
+
 export const supersededByInfo = async (
   _userId: string,
   ids: string[],
