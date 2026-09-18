@@ -46,6 +46,13 @@ services:
     tmpfs:
       - /tmp
     volumes:
+      # The only path the app writes to. It must be owned by uid 1001 (the
+      # `nextjs` user above) BEFORE the first start:
+      #   sudo mkdir -p /srv/cairn/attachments
+      #   sudo chown -R 1001:1001 /srv/cairn/attachments
+      # A root-owned directory here is readable, so the app boots and reports
+      # healthy; it fails only later, when someone attaches a file and the
+      # per-project mkdir returns EACCES.
       - /srv/cairn/attachments:/data/attachments
     cap_drop:
       - ALL
