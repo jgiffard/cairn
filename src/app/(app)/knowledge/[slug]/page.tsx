@@ -3,7 +3,13 @@ import { LiveUpdates } from '@/components/live-updates'
 import { notFound, redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { currentUser, listProjects } from '@/lib/data'
-import { entitiesForProject, getKnowledge, listKnowledge, supersededByInfo } from '@/lib/api/knowledge'
+import {
+  entitiesForProject,
+  getKnowledge,
+  listKnowledge,
+  sourceTaskRef,
+  supersededByInfo,
+} from '@/lib/api/knowledge'
 import { listEntities } from '@/lib/api/entities'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { KnowledgeDetail } from './knowledge-detail'
@@ -20,7 +26,7 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
 
   const firstProject = (row.projects ?? [])[0]
 
-  const [projects, entities, others, supersededMap, suggested] = await Promise.all([
+  const [projects, entities, others, supersededMap, suggested, learnedOn] = await Promise.all([
     listProjects(user.id),
     listEntities(user.id),
     // Only for the label suggestions now. The supersede picker used to be fed
@@ -32,6 +38,8 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
     // What this could plausibly be scoped to, given the projects it already
     // carries — offered as a hint, not a restriction.
     firstProject ? entitiesForProject(user.id, firstProject) : Promise.resolve([]),
+    // Where this was learned. Stored since knowledge existed, shown nowhere.
+    sourceTaskRef(user.id, row.source_task_id),
   ])
 
   return (
@@ -65,6 +73,9 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
             updatedAt: row.updated_at,
             superseded: Boolean(row.superseded_by),
             supersededByRef: row.superseded_by ? (supersededMap.get(row.superseded_by) ?? null) : null,
+            createdAt: row.created_at,
+            author: row.actor_id,
+            sourceTask: learnedOn,
           }}
           allProjects={projects.map((p) => ({ key: p.key, title: p.title }))}
           allEntities={entities.map((e) => ({ key: e.key, title: e.title }))}

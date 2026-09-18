@@ -16,8 +16,6 @@ export type KnowledgeListItem = {
   /** The replacement to link to. Known for a browse row; a search hit only
    *  knows the boolean above, since search_all does not carry the id. */
   supersededByRef: { slug: string; title: string } | null
-  /** Only set when a project filter narrowed the query. */
-  scope?: 'project' | 'entity' | 'global'
   /** Set on a search hit; not carried by a browse row. */
   loose?: boolean
 }

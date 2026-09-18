@@ -22,6 +22,11 @@ type Row = {
   updatedAt: string
   superseded: boolean
   supersededByRef: { slug: string; title: string } | null
+  createdAt: string
+  /** Who recorded it — an agent identity, or a person. */
+  author: string | null
+  /** The task it was learned on, if it was learned on one. */
+  sourceTask: { ref: string; title: string } | null
 }
 
 type KeyTitle = { key: string; title: string }
@@ -243,18 +248,34 @@ export const KnowledgeDetail = ({
             <time dateTime={current.updatedAt} title={fullDateTime(current.updatedAt)}>
               Updated {shortDate(current.updatedAt)}
             </time>
-            {current.projects.length > 0 ? (
-              <span className="inline-flex flex-wrap items-center gap-2">
-                {current.projects.map((p) => (
-                  <span key={p} className="inline-flex items-center gap-1">
-                    <ProjectIcon size={11} projectKey={p} />
-                    {p}
-                  </span>
-                ))}
-              </span>
-            ) : current.entities.length > 0 ? (
-              <span>{current.entities.join(', ')}</span>
-            ) : (
+            {/* Both, not one or the other. A fact scoped to a project AND an
+                entity showed only its projects here, so the entity was
+                invisible until somebody clicked Edit. And these are links
+                now: the whole point of a scope is the rest of what shares
+                it, and reaching that was a URL you had to know. Entities
+                have no page of their own, so they go where the project
+                header already sends them. */}
+            {current.projects.map((p) => (
+              <Link
+                key={p}
+                href={`/projects/${p}`}
+                className="hover:text-fg inline-flex items-center gap-1 transition-colors"
+              >
+                <ProjectIcon size={11} projectKey={p} />
+                {p}
+              </Link>
+            ))}
+            {current.entities.map((e) => (
+              <Link
+                key={e}
+                href={`/knowledge?entity=${encodeURIComponent(e)}`}
+                className="hover:text-fg inline-flex items-center gap-1 transition-colors"
+              >
+                <span aria-hidden className="bg-fg-subtle size-1.5 rounded-full" />
+                {e}
+              </Link>
+            ))}
+            {current.projects.length === 0 && current.entities.length === 0 && (
               <span className="italic">global</span>
             )}
             {current.labels.map((l) => (
@@ -263,6 +284,29 @@ export const KnowledgeDetail = ({
           </div>
 
           <MarkdownView>{current.body || '_No body yet._'}</MarkdownView>
+
+          {/* The slug is the name this fact has. It lived only in the URL,
+              while being the exact string an agent types to fetch it and the
+              one that goes inside [[...]] to reference it. */}
+          <div className="text-fg-subtle mt-8 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[0.6875rem]">
+            <code className="bg-surface-raised rounded px-1.5 py-0.5">{slug}</code>
+            {current.sourceTask && (
+              <span>
+                learned on{' '}
+                <Link
+                  href={`/projects/${current.sourceTask.ref.split('-')[0]}/tasks/${current.sourceTask.ref.split('-').slice(1).join('-')}`}
+                  className="text-accent decoration-1 underline-offset-2 hover:underline"
+                  title={current.sourceTask.title}
+                >
+                  {current.sourceTask.ref}
+                </Link>
+              </span>
+            )}
+            {current.author && <span>recorded by {current.author}</span>}
+            <time dateTime={current.createdAt} title={fullDateTime(current.createdAt)}>
+              first written {shortDate(current.createdAt)}
+            </time>
+          </div>
 
           {!current.superseded && (
             <div className="border-border mt-8 flex flex-wrap items-center gap-2 border-t pt-4">

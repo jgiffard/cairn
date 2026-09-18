@@ -44,6 +44,8 @@ const KnowledgePage = async ({
   let failure: string | null = null
   let widened = false
 
+  const entityKeys = new Set(entities.map((e) => e.key))
+
   if (query.length >= 2) {
     try {
       const { rows, widened: w } = await searchAll(
@@ -58,8 +60,18 @@ const KnowledgePage = async ({
           slug: r.ref,
           title: r.title,
           labels: r.subtitle ? r.subtitle.split(',').map((s) => s.trim()) : [],
-          projects: r.project_key ? r.project_key.split(',') : [],
-          entities: [] as string[],
+          // `search_all` packs entity keys into `project_key` when a row has
+          // no projects (migration 020), with nothing to say which it is —
+          // so an entity-scoped fact arrived here and was drawn as a project,
+          // coloured hexagon and all. The entity list is already loaded for
+          // the filter above, and it is the only thing that can tell them
+          // apart.
+          projects: (r.project_key ? r.project_key.split(',') : []).filter(
+            (k) => !entityKeys.has(k),
+          ),
+          entities: (r.project_key ? r.project_key.split(',') : []).filter((k) =>
+            entityKeys.has(k),
+          ),
           verified: r.answered,
           updatedAt: r.updated_at,
           superseded: r.status === 'superseded',
@@ -102,7 +114,6 @@ const KnowledgePage = async ({
       entities: r.entities ?? [],
       verified: Boolean(r.verified_at),
       updatedAt: r.updated_at,
-      scope: r.scope,
       superseded: Boolean(r.superseded_by),
       supersededByRef: r.superseded_by ? (supersededMap.get(r.superseded_by) ?? null) : null,
     }))
