@@ -128,6 +128,17 @@ describe('layoutGraph', () => {
     expect(apart).toBeLessThan(400)
   })
 
+  it('lays a corpus with no links at all out as a block, not a ribbon', () => {
+    // A fresh install: entries exist, nobody has written a reference yet. With
+    // no islands to span, the band had nothing to take its width from and fell
+    // to eight columns — 377 entries in a 238-by-1598 strip, which is the first
+    // thing a new user would have seen.
+    const many = Array.from({ length: 200 }, (_, i) => `entry-${i}`)
+    const { width, height } = layoutGraph(many, [])
+
+    expect(width).toBeGreaterThan(height)
+  })
+
   it('handles an empty corpus without throwing', () => {
     const { placed, width, height } = layoutGraph([], [])
 

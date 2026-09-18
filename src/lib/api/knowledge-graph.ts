@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache'
 import { admin } from '@/lib/db/client'
 import { normalizeSlugRef } from '@/schemas/knowledge'
 import { components, layoutGraph, type Edge } from '@/lib/graph-layout'
@@ -85,6 +86,7 @@ type Row = {
   slug: string
   title: string
   body: string
+  superseded_by?: string | null
   knowledge_projects?: { project?: { key?: string } | null }[]
 }
 
@@ -136,11 +138,22 @@ type Analysed = {
 const analyse = async (): Promise<Analysed> => {
   const { data, error } = await admin()
     .from('knowledge')
-    .select('slug, title, body, knowledge_projects(project:projects(key))')
-    .is('superseded_by', null)
+    .select('slug, title, body, superseded_by, knowledge_projects(project:projects(key))')
   if (error) throw new Error(error.message)
 
-  const rows = (data ?? []) as unknown as Row[]
+  const all = (data ?? []) as unknown as Row[]
+
+  /**
+   * A superseded entry is not drawn, and is not missing either.
+   *
+   * It still exists: `getKnowledge` resolves it, the renderer links it, and a
+   * reader following the reference lands on the page. Excluding it from the
+   * lookup as well as from the drawing made every reference to a corrected
+   * entry count as "referenced, but never written" — the map contradicting the
+   * page it is a map of, and inflating the one headline the page exists for.
+   */
+  const rows = all.filter((row) => !row.superseded_by)
+  const exists = new Set(all.map((row) => normalizeSlugRef(row.slug)))
   const bySlug = new Map(rows.map((row) => [normalizeSlugRef(row.slug), row]))
 
   const edges: Edge[] = []
@@ -161,11 +174,15 @@ const analyse = async (): Promise<Analysed> => {
       // An entry referencing itself is not connected to anything by that.
       if (to === from) continue
 
-      if (!bySlug.has(to)) {
+      if (!exists.has(to)) {
         missing.set(to, [...(missing.get(to) ?? []), from])
         continue
       }
       resolved += 1
+
+      // Real, and deliberately not on the map: an edge to a node that is not
+      // drawn would be a line to nowhere.
+      if (!bySlug.has(to)) continue
 
       // Undirected: two entries that cite each other are one link, not two.
       const key = [from, to].sort().join(' -> ')
@@ -179,6 +196,18 @@ const analyse = async (): Promise<Analysed> => {
 
   return { rows, bySlug, edges, degree, missing, references, resolved, withReferences }
 }
+
+/**
+ * One project key for a row, chosen the same way every time.
+ *
+ * The embedded aggregate comes back without an ORDER BY, so `[0]` is whatever
+ * order the scan happened to produce — not stable across an update or a vacuum.
+ */
+const projectKeyOf = (row: Row): string | null =>
+  (row.knowledge_projects ?? [])
+    .map((link) => link.project?.key)
+    .filter((key): key is string => Boolean(key))
+    .sort()[0] ?? null
 
 /** Counts that do not depend on where anything is drawn. */
 const summarise = (a: Analysed, isolated: number, islands: number[]): KnowledgeGraph['stats'] => ({
@@ -219,11 +248,7 @@ export const knowledgeGaps = async (): Promise<KnowledgeGaps> => {
     .filter((id) => !of.has(id))
     .map((id) => {
       const row = a.bySlug.get(id) as Row
-      return {
-        slug: id,
-        title: row.title,
-        project: row.knowledge_projects?.[0]?.project?.key ?? null,
-      }
+      return { slug: id, title: row.title, project: projectKeyOf(row) }
     })
 
   return {
@@ -236,7 +261,33 @@ export const knowledgeGaps = async (): Promise<KnowledgeGaps> => {
   }
 }
 
-export const knowledgeGraph = async (): Promise<KnowledgeGraph> => {
+/**
+ * Whether the corpus has changed at all, in one cheap query.
+ *
+ * The map is `force-dynamic`, and every open tab re-renders it through
+ * `router.refresh()` each time the live stream reports a change — which while
+ * agents are working is every four seconds. Without this each of those tabs
+ * paid a full fetch of every body plus a force simulation for a picture that
+ * had not moved. This is the one query worth running every time; everything
+ * behind it is keyed on the answer.
+ */
+const corpusVersion = async (): Promise<string> => {
+  const { data, error } = await admin().from('knowledge').select('updated_at')
+  if (error) throw new Error(error.message)
+  const rows = (data ?? []) as { updated_at: string }[]
+  const latest = rows.reduce((newest, row) => (row.updated_at > newest ? row.updated_at : newest), '')
+  return `${rows.length}:${latest}`
+}
+
+const graphFor = unstable_cache(
+  async (_version: string): Promise<KnowledgeGraph> => buildGraph(),
+  ['cairn-knowledge-graph'],
+  { revalidate: 3600 },
+)
+
+export const knowledgeGraph = async (): Promise<KnowledgeGraph> => graphFor(await corpusVersion())
+
+const buildGraph = async (): Promise<KnowledgeGraph> => {
   const a = await analyse()
   const { rows, bySlug, edges, degree, missing } = a
 
@@ -247,15 +298,20 @@ export const knowledgeGraph = async (): Promise<KnowledgeGraph> => {
 
   const nodes: GraphNode[] = placed.map((p) => {
     const row = bySlug.get(p.id) as Row
-    const key = row.knowledge_projects?.[0]?.project?.key ?? null
+    // Sorted, because the embedded aggregate has no ORDER BY: taking [0] of a
+    // scan order that is not stable would change a dot's colour between two
+    // renders of the same corpus, which is the one thing this must not do.
+    const key = projectKeyOf(row)
     return {
       slug: p.id,
       title: row.title,
       project: key,
       degree: degree.get(p.id) ?? 0,
       island: islandOf.get(p.id) ?? -1,
-      x: p.x,
-      y: p.y,
+      // One decimal. Nothing is drawn to a tenth of a unit, and full float
+      // precision was shipping `87.6812408671319` per node twice over.
+      x: Math.round(p.x * 10) / 10,
+      y: Math.round(p.y * 10) / 10,
     }
   })
 
@@ -273,8 +329,8 @@ export const knowledgeGraph = async (): Promise<KnowledgeGraph> => {
       return {
         slug,
         from,
-        x: (anchor?.x ?? 0) + Math.cos(angle) * 46,
-        y: (anchor?.y ?? 0) + Math.sin(angle) * 46,
+        x: Math.round(((anchor?.x ?? 0) + Math.cos(angle) * 46) * 10) / 10,
+        y: Math.round(((anchor?.y ?? 0) + Math.sin(angle) * 46) * 10) / 10,
       }
     })
 
