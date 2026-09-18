@@ -26,6 +26,13 @@ export type LiveState =
   | 'updating'
   /** EventSource dropped and is retrying on its own. */
   | 'reconnecting'
+  /**
+   * The browser gave the stream up as fatal — a deploy, or an expired
+   * session — and `LiveUpdates` is rebuilding it on its own backoff. Kept
+   * separate from `idle` because they mean opposite things: one page has no
+   * stream by design, the other has lost one and is not updating.
+   */
+  | 'offline'
 
 type Report = { state: LiveState; changedAt?: string }
 
@@ -64,7 +71,8 @@ const LOOK: Record<LiveState, { dot: string; label: string; title: string }> = {
   idle: {
     dot: 'bg-fg-subtle/40',
     label: 'Not live',
-    title: 'This page does not subscribe to updates. Reload to see changes.',
+    title:
+      'This page does not subscribe to updates, by design. Reload to see changes. A lost connection shows as Offline, not this.',
   },
   connecting: {
     dot: 'bg-fg-subtle animate-pulse',
@@ -86,6 +94,12 @@ const LOOK: Record<LiveState, { dot: string; label: string; title: string }> = {
     label: 'Reconnecting',
     title:
       'The stream dropped and is retrying. The stream also closes itself every ten minutes by design, so this is normal and brief.',
+  },
+  offline: {
+    dot: 'bg-danger animate-pulse',
+    label: 'Offline',
+    title:
+      'The connection was lost — usually a deploy, or a session that expired. Retrying; this page is not updating until it comes back.',
   },
 }
 
