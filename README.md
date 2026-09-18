@@ -231,7 +231,7 @@ problem.
 | Structure | sub-tasks, blocked-by / blocks dependencies with cycle rejection, labels, priorities, due dates |
 | Bodies | markdown in a WYSIWYG editor — syntax-highlighted code, GFM tables and task lists; bare refs like `ACME-42` become links |
 | Trails | comments for humans, an append-only work log for agents, file attachments, and a full activity history |
-| Views | list and board per project, a cross-project board at `/board` grouped and swim-laned by status, priority, type, project or agent, bulk edit with shift-click ranges, a cross-project home, live updates over SSE |
+| Views | list and board per project, a cross-project board at `/board` grouped and swim-laned by status, priority, type, project or agent, bulk edit with shift-click ranges, a cross-project home, a map of the knowledge corpus at `/knowledge/graph`, live updates over SSE |
 | Multi-project tasks | a task can belong to several projects at once — the home project keeps the ref, the extra links only widen where it appears |
 
 **Memory**
@@ -276,7 +276,14 @@ problem.
   entries whose slug runs past sixty characters are referenced by other entries about an
   eighth as often as short ones.
 - **Entries reference each other** as `[[some-slug]]`, resolving in the browser and the
-  CLI alike, with underscores read as hyphens so older spellings still work.
+  CLI alike, with underscores read as hyphens so older spellings still work. A reference to
+  an entry nobody has written is *marked* rather than quietly linked into nothing — in the
+  rendered body, and on the way out of `cairn know <slug>`.
+- **A map of the corpus** at `/knowledge/graph`, and the same findings without a screen
+  through `cairn know --gaps`. It answers the question a list cannot: what is connected to
+  *nothing*. Here that was a quarter of the entries, nineteen separate islands, and dozens
+  of references pointing at entries nobody ever wrote — none of it visible anywhere before,
+  because a list shows what is there.
 - **A file index** answers the question nobody asks: opening a file surfaces the tasks and
   knowledge that concern it, with no query to write.
 
@@ -347,6 +354,7 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn verify <slug>` | This fact is still true. Clears the stale mark without rewriting it |
 | `cairn task delete <ref> --confirm <ref>` | For junk that should never have existed. Refused if the task has children, notes, comments or dependencies — cancel keeps the record |
 | `cairn know [<slug>\|<query>]` | Read it back, or list what applies here |
+| `cairn know --gaps` · `--orphans` · `--dangling` | Where the memory has holes: entries joined to nothing, and references pointing at entries nobody wrote |
 | `cairn relearn <slug>` · `cairn unlearn <slug> --superseded-by <slug>` | Correct it, or mark it replaced |
 | `cairn entities` · `cairn entities assign <key> --project A,B` | Groupings a fact can be true of |
 | `cairn session list` · `cairn session end --id <id>` | The episodic record |
@@ -593,7 +601,7 @@ ran and understood nothing".
 
 **MCP** (optional — native tool-calling for Claude Code and Codex; OpenClaw reaches it
 through `mcporter`). The server lives in [`mcp/`](./mcp), holds no logic of its own, and
-exposes 19 of the CLI's verbs as typed tools — `context`, `next`, `history` and the session
+exposes 20 of the CLI's verbs as typed tools — `context`, `next`, `history` and the session
 verbs stay CLI-only.
 
 Unlike the CLI it is not dependency-free: it imports the MCP SDK and needs a `node_modules`

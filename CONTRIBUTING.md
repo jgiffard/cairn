@@ -22,8 +22,10 @@ npm test
 npm run build
 ```
 
-CI runs all four, plus a check that `AGENTS.md` stays under 8 KB — agents read that file
-every session, so its size is a real cost.
+CI runs all four, plus a check that `AGENTS.md` stays under 7900 bytes — agents read that
+file every session, so its size is a real cost. It currently sits within a hundred bytes of
+that, so adding a line there means cutting one: guidance with room to grow belongs in
+[`skills/cairn/SKILL.md`](./skills/cairn/SKILL.md) instead.
 
 ## Things worth knowing before you change them
 
@@ -57,6 +59,15 @@ alter table tasks enable trigger tasks_touch;
 
 Nothing warns you: the migration succeeds, the data is correct, and only the timestamps
 are quietly wrong.
+
+**The knowledge map's layout must stay a pure function of the graph.** No `Math.random`,
+no simulation in the browser — `src/lib/graph-layout.ts` seeds every position from a hash
+of the slug and settles it on the server. Every view in this app re-renders through
+`router.refresh()` when the live stream reports a change, which on a working day is every
+few minutes, so a layout computed client-side rearranges the whole map under whoever is
+reading it each time an agent writes a note. Animation is allowed and moves a node *around*
+its anchor; nothing may move the anchor. `src/lib/graph-layout.test.ts` asserts two runs
+agree, and `graph-view.test.tsx` asserts two renders are byte-identical.
 
 **The `admin()` client bypasses RLS.** It is a PostgREST-compatible adapter over the
 `pg` driver (`src/lib/db/client.ts`) and it connects as the owner, so every query made

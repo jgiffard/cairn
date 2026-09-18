@@ -150,6 +150,26 @@ describe('the map draws', () => {
     expect(html).toContain('joined to nothing')
   })
 
+  it('does not make every node a tab stop', () => {
+    // role="img" makes the subtree presentational, but it does not remove
+    // focusability: without this, Tab from the breadcrumb walked several
+    // hundred unnamed, unstyled stops. The page says plainly that the map is
+    // not a navigation surface; the zoom buttons are the keyboard path in.
+    const html = renderToStaticMarkup(<GraphView graph={graph()} />)
+
+    expect(html).toContain('tabindex="-1"')
+    expect(html).toContain('aria-label="Zoom in"')
+  })
+
+  it('does not prefetch a route for every entry on the map', () => {
+    // Every node is in the viewport at once, so the default viewport prefetch
+    // schedules one request per entry on first paint — 377 of them here, each
+    // through the app layout.
+    const html = renderToStaticMarkup(<GraphView graph={graph()} />)
+
+    expect(html).not.toContain('prefetch="true"')
+  })
+
   it('does not stack one title on another', () => {
     // A dozen overlapping titles is worse than none: the smear hides the
     // nodes underneath as well as itself.

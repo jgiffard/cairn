@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { projectColor } from '@/components/icons'
 import type { GraphNode, KnowledgeGraph } from '@/lib/api/knowledge-graph'
@@ -47,7 +47,16 @@ export const GraphView = ({ graph }: Props) => {
   const [focused, setFocused] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
-  const drag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
+  const drag = useRef<{ x: number; y: number; panX: number; panY: number; moved: boolean } | null>(
+    null,
+  )
+  /** Live pointers, so two fingers can pinch. */
+  const touches = useRef(new Map<number, { x: number; y: number }>())
+  const pinch = useRef<{ apart: number; zoom: number } | null>(null)
+  /** Whether the gesture that just ended moved the map, read by the click. */
+  const dragged = useRef(false)
+  /** A click event does not carry it, and touch has to behave differently. */
+  const lastPointer = useRef<string>('mouse')
 
   /** Who each node touches, so hovering one can dim everything it does not. */
   const neighbours = useMemo(() => {
@@ -89,8 +98,11 @@ export const GraphView = ({ graph }: Props) => {
     if (xs.length === 0) return { x: 0, y: 0, w: 100, h: 100 }
     const minX = Math.min(...xs)
     const minY = Math.min(...ys)
-    const w = Math.max(1, Math.max(...xs) - minX)
-    const h = Math.max(1, Math.max(...ys) - minY)
+    // Floored at something drawable. A single entry puts every coordinate at
+    // zero, and a 1-unit box against a node of radius 2.6 with a halo of 8.3
+    // scaled that one dot to fill the window.
+    const w = Math.max(90, Math.max(...xs) - minX)
+    const h = Math.max(90, Math.max(...ys) - minY)
     const pad = Math.max(w, h) * MARGIN
     return { x: minX - pad, y: minY - pad, w: w + pad * 2, h: h + pad * 2 }
   }, [graph.nodes, graph.missing])
@@ -161,44 +173,143 @@ export const GraphView = ({ graph }: Props) => {
     return out
   }, [graph.nodes, focused, zoom, neighbours])
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setZoom(1)
     setPan({ x: 0, y: 0 })
-  }
+  }, [])
+
+  const svg = useRef<SVGSVGElement>(null)
+
+  /**
+   * Zoom, anchored where the pointer is.
+   *
+   * Anchored to the centre of the box it pushed whatever you were looking at
+   * off the screen, so reading one island meant alternating zoom and drag.
+   * Keeping the point under the cursor fixed is what every map does.
+   */
+  const zoomAt = useCallback(
+    (factor: number, clientX?: number, clientY?: number) => {
+      const element = svg.current
+      setZoom((current) => {
+        const next = Math.min(8, Math.max(0.6, current * factor))
+        if (!element || clientX === undefined || clientY === undefined) return next
+
+        const rect = element.getBoundingClientRect()
+        // Where the cursor is in the frame, as a share of it, measured from
+        // the centre — the point the transform rotates around.
+        const fx = (clientX - rect.left) / (rect.width || 1) - 0.5
+        const fy = (clientY - rect.top) / (rect.height || 1) - 0.5
+        const shownW = box.w / current
+        const shownH = box.h / current
+        const grownW = box.w / next
+        const grownH = box.h / next
+        setPan((p) => ({
+          x: p.x + fx * (grownW - shownW),
+          y: p.y + fy * (grownH - shownH),
+        }))
+        return next
+      })
+    },
+    [box.w, box.h],
+  )
+
+  /**
+   * The wheel, attached by hand.
+   *
+   * React registers `wheel` passively, so `preventDefault` inside an `onWheel`
+   * prop does nothing at all — the browser logs that it was ignored. Nothing
+   * scrolled only because this page happens not to, and ctrl+wheel still
+   * zoomed the browser and the map at once.
+   */
+  useEffect(() => {
+    const element = svg.current
+    if (!element) return
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      zoomAt(event.deltaY < 0 ? 1.12 : 0.89, event.clientX, event.clientY)
+    }
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => element.removeEventListener('wheel', onWheel)
+  }, [zoomAt])
 
   return (
     <div className="bg-bg relative h-full w-full overflow-hidden">
       <svg
+        ref={svg}
         viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}
         className="graph block h-full w-full cursor-grab touch-none select-none active:cursor-grabbing"
         role="img"
         aria-label={`${graph.stats.entries} knowledge entries, ${graph.edges.length} links between them, ${graph.stats.isolated} joined to nothing`}
         onPointerDown={(event) => {
-          drag.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y }
+          lastPointer.current = event.pointerType
+          touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+          drag.current = {
+            x: event.clientX,
+            y: event.clientY,
+            panX: pan.x,
+            panY: pan.y,
+            moved: false,
+          }
           event.currentTarget.setPointerCapture(event.pointerId)
         }}
         onPointerMove={(event) => {
+          if (touches.current.has(event.pointerId)) {
+            touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+          }
+
+          /**
+           * Two fingers: pinch.
+           *
+           * `touch-action: none` is what lets this pan at all, and it also
+           * turns off the browser's own pinch — so without this the map had no
+           * zoom whatsoever on a phone, which meant 377 nodes as sub-pixel
+           * dots with no way to get closer.
+           */
+          if (touches.current.size >= 2) {
+            const [a, b] = [...touches.current.values()]
+            if (a && b) {
+              const apart = Math.hypot(a.x - b.x, a.y - b.y)
+              if (!pinch.current) pinch.current = { apart, zoom }
+              else if (pinch.current.apart > 0) {
+                const wanted = pinch.current.zoom * (apart / pinch.current.apart)
+                zoomAt(wanted / zoom, (a.x + b.x) / 2, (a.y + b.y) / 2)
+              }
+            }
+            drag.current = null
+            return
+          }
+
           const from = drag.current
           if (!from) return
+          if (event.pointerType === 'mouse' && event.buttons === 0) {
+            drag.current = null
+            return
+          }
           // Screen pixels are viewBox units scaled by the zoom, so a drag has
           // to be divided back out or the map races the cursor.
           const scale = box.w / (event.currentTarget.clientWidth || 1) / zoom
+          if (Math.abs(event.clientX - from.x) + Math.abs(event.clientY - from.y) > 4) {
+            from.moved = true
+          }
           setPan({
             x: from.panX + (event.clientX - from.x) * scale,
             y: from.panY + (event.clientY - from.y) * scale,
           })
         }}
-        onPointerUp={() => {
+        onPointerUp={(event) => {
+          touches.current.delete(event.pointerId)
+          if (touches.current.size < 2) pinch.current = null
+          dragged.current = drag.current?.moved ?? false
           drag.current = null
         }}
         onDoubleClick={reset}
-        onWheel={(event) => {
-          // Safe to take now: this page does not scroll. It used to, and the
-          // caption under the frame meant scrolling down to read it zoomed the
-          // map out instead — which is how it was found at 0.6 with the reset
-          // button showing.
-          event.preventDefault()
-          setZoom((z) => Math.min(8, Math.max(0.6, z * (event.deltaY < 0 ? 1.12 : 0.89))))
+        onPointerCancel={(event) => {
+          // Without this a cancelled gesture — a long-press menu, a touch the
+          // system took over — leaves the drag open, and since pointermove
+          // fires on plain hover the map then pans with no button held.
+          touches.current.delete(event.pointerId)
+          pinch.current = null
+          drag.current = null
         }}
       >
         <defs>
@@ -315,7 +426,18 @@ export const GraphView = ({ graph }: Props) => {
                     className="pointer-events-none"
                   />
                 )}
-                <Link href={`/knowledge/${n.slug}`}>
+                <Link
+                  href={`/knowledge/${n.slug}`}
+                  // Every node is in the viewport at once, so the default
+                  // viewport prefetch schedules a request per entry on first
+                  // paint — 377 of them, each through the app layout.
+                  prefetch={false}
+                  // The map is not a navigation surface; the page says so. One
+                  // tab stop per entry would put several hundred unnamed,
+                  // unstyled stops between the breadcrumb and the legend, and
+                  // a focusable element inside role="img" is wrong anyway.
+                  tabIndex={-1}
+                >
                   <circle
                     cx={n.x}
                     cy={n.y}
@@ -326,6 +448,17 @@ export const GraphView = ({ graph }: Props) => {
                     opacity={on ? (n.degree === 0 ? 0.6 : 1) : 0.16}
                     onPointerEnter={() => setFocused(n.slug)}
                     onPointerLeave={() => setFocused(null)}
+                    onClick={(event) => {
+                      // A drag that ended on a node is a drag, not a click.
+                      // And on a touch screen the gesture that reveals a node
+                      // IS the gesture that opens it, so the first tap reads
+                      // it and only a second one follows the link.
+                      if (dragged.current) event.preventDefault()
+                      else if (lastPointer.current === 'touch' && focused !== n.slug) {
+                        event.preventDefault()
+                        setFocused(n.slug)
+                      }
+                    }}
                     className="cursor-pointer transition-opacity"
                   />
                 </Link>
@@ -401,7 +534,7 @@ export const GraphView = ({ graph }: Props) => {
           map means something and none of it was stated where it was being
           read — the explanation was eight lines of low-contrast prose below
           the frame, which is not where anyone looks. */}
-      <dl className="border-border bg-surface/90 text-fg-subtle pointer-events-none absolute bottom-2 left-2 space-y-1 rounded-md border px-2.5 py-2 text-[0.68rem] backdrop-blur">
+      <dl className="border-border bg-surface/90 text-fg-subtle pointer-events-none absolute bottom-2 left-2 hidden space-y-1 rounded-md border px-2.5 py-2 text-[0.68rem] backdrop-blur sm:block">
         <div className="flex items-center gap-2">
           <svg width="26" height="10" aria-hidden className="shrink-0">
             <circle cx="5" cy="5" r="2" fill="var(--fg-muted)" />
@@ -440,15 +573,36 @@ export const GraphView = ({ graph }: Props) => {
         </div>
       </dl>
 
-      {zoom !== 1 || pan.x !== 0 || pan.y !== 0 ? (
+      {/* A wheel is not the only way to zoom, and on a touch screen there is
+          no wheel at all. Also the keyboard path into the map, since the nodes
+          themselves are deliberately not tab stops. */}
+      <div className="absolute right-2 bottom-2 flex items-center gap-1">
+        {zoom !== 1 || pan.x !== 0 || pan.y !== 0 ? (
+          <button
+            type="button"
+            onClick={reset}
+            className="border-border bg-surface text-fg-subtle hover:text-fg rounded-md border px-2 py-1 text-[0.7rem]"
+          >
+            Reset view
+          </button>
+        ) : null}
         <button
           type="button"
-          onClick={reset}
-          className="border-border bg-surface text-fg-subtle hover:text-fg absolute right-2 bottom-2 rounded-md border px-2 py-1 text-[0.7rem]"
+          aria-label="Zoom out"
+          onClick={() => zoomAt(0.8)}
+          className="border-border bg-surface text-fg-subtle hover:text-fg h-7 w-7 rounded-md border text-[0.9rem] leading-none"
         >
-          Reset view
+          −
         </button>
-      ) : null}
+        <button
+          type="button"
+          aria-label="Zoom in"
+          onClick={() => zoomAt(1.25)}
+          className="border-border bg-surface text-fg-subtle hover:text-fg h-7 w-7 rounded-md border text-[0.9rem] leading-none"
+        >
+          +
+        </button>
+      </div>
     </div>
   )
 }

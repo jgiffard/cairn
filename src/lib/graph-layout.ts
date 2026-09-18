@@ -333,11 +333,23 @@ export const layoutGraph = (
   const isolatedFrom = placed.length
   const isolatedTop = connected.length > 0 ? best.height + gap * 1.8 : 0
 
-  // Span whatever the islands above ended up spanning, rather than a fixed
-  // number of columns: a band across the foot of the map reads as a share of
-  // the corpus, where a narrow block tucked in one corner reads as a footnote.
-  const spanned = Math.max(...placed.map((p) => p.x), width * 0.5)
-  const columns = options.isolatedColumns ?? Math.max(8, Math.floor(spanned / isolatedGap))
+  /**
+   * Span whatever the islands above ended up spanning, so the band reads as a
+   * share of the corpus rather than as a footnote in one corner.
+   *
+   * With NO islands at all there is nothing to span, and taking the widest
+   * placed node gave 0.5 — eight columns, and 377 entries stacked into a
+   * 238-by-1598 ribbon that `preserveAspectRatio` then shrank to an unreadable
+   * vertical strip. That is not an exotic case: it is a fresh install, where
+   * entries exist and nobody has written a reference yet, and therefore the
+   * first thing anybody sees.
+   */
+  const spanned = Math.max(...placed.map((p) => p.x), 0)
+  const columns =
+    options.isolatedColumns ??
+    (spanned > isolatedGap
+      ? Math.max(8, Math.floor(spanned / isolatedGap))
+      : Math.max(8, Math.ceil(Math.sqrt(Math.max(1, isolated.length) * aspect))))
 
   isolated.forEach((id, i) => {
     placed.push({

@@ -11,16 +11,57 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **A map of the knowledge corpus** at `/knowledge/graph`, and the same findings without a
+  screen through `cairn know --gaps` / `--orphans` / `--dangling`, a `GET
+  /api/v1/knowledge/gaps` route and a `cairn_gaps` MCP tool. It answers what a list of
+  knowledge cannot — what is connected to *nothing*. On the corpus that prompted it: a
+  quarter of the entries joined to nothing, nineteen separate islands, and dozens of
+  references pointing at entries nobody ever wrote. The layout is computed on the server
+  and is a pure function of the graph, because every view re-renders on a live update and a
+  map that rearranges itself under the reader is not a map.
+- **`[[slug]]` references resolve**, in the rendered body and in the terminal, with
+  underscores read as hyphens. 265 of 377 entries carried them and nothing had ever parsed
+  them, so 606 references rendered as literal brackets.
+- **A reference to an entry nobody wrote is marked** rather than quietly linked into
+  nothing — in the browser, and on the way out of `cairn know <slug>`.
+- **Knowledge pages show the slug, who wrote it, and the task it was learned on**, and
+  their scope chips link through to the project or entity.
+- **Six knowledge tools on the MCP facade** — `know`, `learn`, `relearn`, `unlearn`,
+  `verify`, `entities`. An MCP-only agent could not read or write the memory half of the
+  product, and was not told it existed.
+- **`scripts/install-mcp.mjs`**, because the facade needs a `node_modules` beside it and so
+  cannot be copied like the CLI. It prints by default, and refuses to call an install done
+  unless an account other than the installer's can read what it wrote.
+- **A CI guard against one machine's layout reaching this repository**, checking shape —
+  absolute paths into a named account's home — rather than carrying a list of private names,
+  which would itself be a list of private names in a public repository.
 - **Shared workspace membership:** administrators can add, disable and restore users,
   assign administrator or member roles, reset passwords, and manage each user's agent
   keys. Active users and valid agent keys work across one common project and memory space.
 
 ### Changed
 
+- **A slug is cut at a whole word.** Twelve entries ended mid-word — `...cannot-sha`,
+  `...dernier-passag` — which cannot be typed and read as corrupt.
+- **`cairn learn` scopes to this directory's project** instead of defaulting to global.
+  27% of everything written since the import was filed as true everywhere when it was true
+  of one project.
 - Owner columns are retained as attribution metadata, not authorization boundaries.
   Project keys, entity keys and knowledge slugs are unique across the workspace.
 - Durable actor labels include the owning user's display identity, and migration `049`
   qualifies legacy task, activity, knowledge, session and search attribution accordingly.
+
+### Fixed
+
+- **`cairn know --project` was read after the early return**, so it was accepted and
+  silently dropped on every search — the same defect as `check --project`, relocated into
+  the CLI, on the verb agents use most.
+- **An unknown project key answered with emptiness.** A typo and a project nobody has
+  learned anything about were indistinguishable; it now says which key does not exist.
+- **The MCP wrapper pointed into a checkout under a `0700` home**, so every runtime not
+  running as root got `MODULE_NOT_FOUND` from a correctly registered server.
+- **`install-cron.mjs` was the one file the repairer never repaired**, and so the only
+  deployed copy on a busy host that had drifted.
 
 ## [0.5.1] — 2026-09-16
 
@@ -317,7 +358,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/montytorr/cairn/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/montytorr/cairn/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/montytorr/cairn/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/montytorr/cairn/compare/v0.2.0...v0.3.0

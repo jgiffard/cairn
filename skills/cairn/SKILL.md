@@ -289,7 +289,26 @@ read as hyphens so an older spelling still resolves. Use it the way you would us
 `ACME-42` for a task: a reference that stays followable long after the conversation.
 
 `cairn know "<phrase>"` finds the slug when you do not know it. Guessing one and
-writing it down unchecked is how a body ends up pointing at nothing.
+writing it down unchecked is how a body ends up pointing at nothing — and a reference
+that resolves to nothing still *looks* like a trail, so whoever follows it lands in a
+search that quietly misses rather than being told it was never written.
+
+Reading an entry says so: `cairn know <slug>` names any of its references that point at
+something nobody has written.
+
+### What is not connected
+
+```bash
+cairn know --gaps        # the shape of the memory: islands, orphans, dead references
+cairn know --orphans     # entries nothing links to, that link to nothing
+cairn know --dangling    # references pointing at entries nobody ever wrote
+```
+
+A list of knowledge shows what is there. These show what is not, which is the part that
+goes wrong quietly: an entry nobody links to is one nobody finds by following a trail,
+and a reference to something unwritten is a promise the store cannot keep. Both are worth
+a minute when you are already in the area — link the orphan to whatever it belongs beside,
+or write the entry that was referenced.
 
 ### Where does it apply?
 
