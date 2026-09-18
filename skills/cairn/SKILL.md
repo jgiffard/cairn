@@ -203,8 +203,8 @@ cairn release ACME-42
 ## 6. Filing work
 
 ```bash
-cairn add "title" --project ACME --type bug --priority high
-cairn add "title" --project ACME --body -     # long markdown body from stdin
+cairn add "title" --project ACME --type bug --priority high --body -
+cairn add "title" --project ACME --body "one line, when that is genuinely all there is"
 ```
 
 `--type`: `feature | bug | improvement | chore | spike | docs`
@@ -212,6 +212,35 @@ cairn add "title" --project ACME --body -     # long markdown body from stdin
 `--priority`: `urgent | high | medium | low`
 
 `add` warns if similar work already exists — read the warning before continuing.
+
+### The body is the task
+
+A title says which task this is. The body says what it is. Filing a title alone
+leaves the next agent — often you, next week, with none of today's context — a
+label for a thing nobody wrote down.
+
+**A bug or a spike without a body is refused.** Not to be difficult: it is the
+same rule as `done` refusing without a resolution, and that rule is why every
+close carries one. Pass `--force-empty` when the title really is the whole
+story, and expect to almost never need it.
+
+What earns its place in the body:
+
+- **What happens, and what you expected instead.** "403 on `/cart`" is a symptom
+  in search of a report. What called it, what came back, what should have.
+- **How to see it.** The request, the page, the command, the log line. A bug
+  nobody can reproduce is a rumour.
+- **What you already ruled out.** The hours you save are someone else's, and
+  they are the hours they would have spent repeating you.
+- **Why it matters now**, if that is not obvious. Urgency in a priority field is
+  an assertion; urgency in a sentence is an argument.
+
+Write it when you file it. The context is never cheaper than at that moment, and
+a task you meant to flesh out later is one you filed against yourself.
+
+For a `chore` or `docs`, the title is often genuinely the whole task and no body
+is asked for. Do not pad one — "n/a" in a description is worse than an empty
+one, because it looks answered.
 
 ## 7. Knowledge: what we know, not what we did
 

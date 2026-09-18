@@ -62,6 +62,45 @@ const projectIdForKey = async (_userId: string, key?: string): Promise<string | 
  * a claim it walked away from stops being a phantom hold on the board. It
  * never *closes* anything — closing needs a resolution somebody meant.
  */
+const RECORDED = '_Recorded automatically when the session ended._'
+
+/**
+ * Which held tasks this session actually worked, and which it merely held.
+ *
+ * Pure, and exported, because the distinction is the whole point of the fix and
+ * the failure it prevents is silent: a wrong checkpoint reads exactly like a
+ * right one.
+ */
+export const splitHeldByWorked = <T>(
+  held: T[],
+  taskRefs: string[],
+  refOf: (task: T) => string,
+): { touched: T[]; untouched: T[] } => {
+  const worked = new Set(taskRefs)
+  return {
+    touched: held.filter((t) => worked.has(refOf(t))),
+    untouched: held.filter((t) => !worked.has(refOf(t))),
+  }
+}
+
+/** What a task the session actually advanced gets told. */
+export const workedCheckpoint = (summary: string) => `${summary}\n\n${RECORDED}`
+
+/**
+ * What a task that was only held gets told: the true thing, plus where the
+ * session's attention actually went, so the reader can judge whether the claim
+ * is still meant. It deliberately does not repeat the summary — that summary is
+ * about other work, and repeating it here is the bug this replaces.
+ */
+export const untouchedCheckpoint = (taskRefs: string[]) => {
+  const elsewhere = taskRefs.slice(0, 5).join(', ')
+  return (
+    'Still held, not progressed: the session that held this claim worked' +
+    (elsewhere ? ` on ${elsewhere}` : ' elsewhere') +
+    `.\n\n${RECORDED}`
+  )
+}
+
 const checkpointHeldTasks = async (actor: Actor, session: SessionRow): Promise<string[]> => {
   if (!actor.actorId) return []
 
@@ -85,19 +124,42 @@ const checkpointHeldTasks = async (actor: Actor, session: SessionRow): Promise<s
 
   if (!summary) return []
 
-  const stamped = `${summary}\n\n_Recorded automatically when the session ended._`
   const at = session.ended_at ?? new Date().toISOString()
 
-  const { error: updateError } = await admin()
-    .from('tasks')
-    .update({ checkpoint_summary: stamped, checkpoint_at: at })
-    .in(
-      'id',
-      held.map((t) => t.id),
-    )
-  if (updateError) throw new Error(updateError.message)
+  /**
+   * A held task is not necessarily a worked task.
+   *
+   * This used to write the same summary to everything the agent held, so a
+   * task claimed days ago and never opened received a progress report about
+   * different work entirely — BB-359, a task about login failures, was stamped
+   * with a summary of a UI refactor. Checkpoints are read back by `cairn
+   * context` and the session banner, so a wrong one is not inert: it is handed
+   * to the next agent as fact.
+   *
+   * `task_refs` already records what the session actually touched, so the two
+   * cases can be told apart without any new data.
+   */
+  const refOf = (t: { number: number; project: { key: string } }) =>
+    `${t.project.key}-${t.number}`
 
-  return held.map((t) => `${t.project.key}-${t.number}`)
+  const { touched, untouched } = splitHeldByWorked(held, session.task_refs ?? [], refOf)
+
+  const write = async (rows: typeof held, text: string) => {
+    if (rows.length === 0) return
+    const { error: updateError } = await admin()
+      .from('tasks')
+      .update({ checkpoint_summary: text, checkpoint_at: at })
+      .in(
+        'id',
+        rows.map((t) => t.id),
+      )
+    if (updateError) throw new Error(updateError.message)
+  }
+
+  await write(touched, workedCheckpoint(summary))
+  await write(untouched, untouchedCheckpoint(session.task_refs ?? []))
+
+  return held.map(refOf)
 }
 
 /**
