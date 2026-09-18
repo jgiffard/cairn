@@ -489,12 +489,25 @@ CAIRN_API_KEY_CODEX=sk_live_...
 CAIRN_API_KEY_CLAUDE_CODE=sk_live_...
 ```
 
-It works out which runtime it is in from the environment — `CLAUDECODE`, `CODEX_HOME` —
-and `CAIRN_AGENT=<name>` says so explicitly when that is not enough. One trap worth
-knowing: OpenClaw *is* Codex with a `CODEX_HOME` of its own, so a `CODEX_HOME` under an
-OpenClaw path resolves to `openclaw`, not `codex`. Codex itself reads `CODEX_HOME` without
-necessarily setting it, which is what [`scripts/codex-wrapper.sh`](./scripts/codex-wrapper.sh)
-is for.
+It works out which runtime it is in from the environment, in this order, and
+`CAIRN_AGENT=<name>` says so explicitly when that is not enough:
+
+| | |
+|---|---|
+| Claude Code | `CLAUDECODE=1`, or `CLAUDE_CODE_ENTRYPOINT` |
+| OpenClaw | a `CODEX_HOME` with `openclaw` in it, or **any** `OPENCLAW_*` variable |
+| Codex | `CODEX_HOME`, `CODEX_SANDBOX`, `CODEX_MANAGED_BY_NPM`, `CODEX_MANAGED_PACKAGE_ROOT` |
+
+**The order is the point.** OpenClaw *is* Codex with a `CODEX_HOME` of its own, so it sets
+every Codex marker; testing for Codex first would file all of OpenClaw's work as Codex —
+the same misattribution, pointing the other way.
+
+Detection used to rest on `CODEX_HOME` alone, which Codex reads but does not export, so
+[`scripts/codex-wrapper.sh`](./scripts/codex-wrapper.sh) was installed to set it. A live
+session was then found running with the wrapper bypassed and no `CODEX_HOME` at all:
+detection returned nothing, the CLI fell back to the machine's default key, and every
+Codex write was filed as whichever agent owned that key. Hence the `CODEX_MANAGED_*`
+markers, which Codex does export. The wrapper still helps; nothing depends on it.
 
 The CLI is deliberately dependency-free — Node 22's built-in `fetch` is enough — so it can
 be dropped onto a box and run with no install step.

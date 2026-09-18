@@ -15,10 +15,12 @@ Cairn is the shared memory for everything worked on here. It holds four things, 
 | **knowledge** | what we now *know* — infra, conventions, gotchas — outliving any task |
 | **sessions** | what happened in a working session, and where it was left |
 
-Examples below use `ACME-42`; refs are your own project key plus a number, like `HM-700`.
+Examples below use `ACME-42`; refs are your own project key plus a number.
 
 Requires `cairn` on PATH. Credentials come from `CAIRN_BASE_URL` / `CAIRN_API_KEY`, or from
-`~/.cairn/env` if those are unset.
+`~/.cairn/env` if those are unset. Where a machine runs several runtimes there is a key
+each — `CAIRN_API_KEY_CLAUDE_CODE`, `CAIRN_API_KEY_CODEX` — and the CLI picks by runtime,
+because the key is what says who wrote a thing.
 
 ## 0. Mandatory lifecycle — do not skip a gate
 
@@ -295,7 +297,7 @@ Three scopes, narrowest first:
 
 ```bash
 cairn learn "..."                     # inferred: this directory's project
-cairn learn "..." --project HM        # true of that project
+cairn learn "..." --project ACME      # true of that project
 cairn learn "..." --entity acme       # true of that grouping — see `cairn entities`
 cairn learn "..." --global            # true everywhere — chosen, not defaulted to
 ```

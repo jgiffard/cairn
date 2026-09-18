@@ -112,15 +112,13 @@ cairn relearn <slug> --body -       # it changed
 cairn unlearn <slug> --superseded-by <new-slug>
 ```
 
-Three scopes, narrowest first: `--project HM` is true of that project, `--entity acme`
-is true of that grouping (`cairn entities` lists them — a business, a stack, a subsystem),
-and neither is true everywhere. A project belongs to several entities at once, so pick the
-one the fact is actually about. When a fact exists at two scopes the narrower is shown
-first, which is how "true for this business, except here" gets said.
+Three scopes, narrowest first: `--project ACME`, `--entity acme` (a business, a stack, a
+subsystem — `cairn entities` lists them), and neither, which means everywhere. A project
+belongs to several entities at once, so pick the one the fact is about. The narrower is
+shown first, which is how "true for this business, except here" gets said.
 
 Correct knowledge rather than adding to it — two contradictory claims, equally findable,
-with no way to tell which is current, is the failure mode every memory store reaches
-eventually.
+with no way to tell which is current, is the failure mode every memory store reaches.
 
 **Sessions** are written for you when a session ends: what was asked, what was learned,
 what landed, where it was left. Any task you were still holding gets checkpointed at the
@@ -159,15 +157,18 @@ the things nothing can do on your behalf:
 Cairn holds **open loops, durable answers, and what was learned getting to them**: what
 should happen, who holds it, what was tried, how it ended, and what is now known.
 
-It is not a transcript. It records what a session concluded, never what was said turn by
-turn — so "what did we decide and why" is a Cairn question, and "what exactly did I type at
-11:04" is not.
+It is not a transcript: it records what a session concluded, never what was said turn by
+turn. "What did we decide and why" is a Cairn question; "what did I type at 11:04" is not.
 
 ## Setup
 
 ```bash
 export CAIRN_BASE_URL=https://cairn.example.com
-export CAIRN_API_KEY=sk_live_...          # one key per agent, so writes are attributable
+export CAIRN_API_KEY=sk_live_...
 ```
+
+The key *is* the identity, so a machine running several runtimes wants one each —
+`CAIRN_API_KEY_CODEX`, `CAIRN_API_KEY_CLAUDE_CODE` — or all their work files under one
+name.
 
 Full verb reference: `cairn --help`. Machine-readable API: `GET /api/v1/openapi.json`.
