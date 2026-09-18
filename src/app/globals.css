@@ -285,8 +285,62 @@
   }
   .pop { animation: pop 140ms var(--ease) both; }
 
+  /* -------------------------------------------------------------------------
+     The knowledge map.
+
+     Positions are computed on the server and are a pure function of the graph,
+     so that a `router.refresh()` every few minutes cannot rearrange the map
+     under whoever is reading it. Everything here moves a node AROUND its
+     anchor and never moves the anchor — which is why it is CSS rather than
+     state: the browser animates it off the main thread and React never learns
+     that anything moved.
+     ---------------------------------------------------------------------- */
+
+  /* Barely a pixel at full zoom. Enough that the corpus looks like something
+     alive rather than a printed diagram, and little enough that no node ever
+     appears to be somewhere it is not. */
+  @keyframes graph-drift {
+    0%   { transform: translate(0, 0); }
+    25%  { transform: translate(1.1px, -0.8px); }
+    50%  { transform: translate(0.2px, 1.2px); }
+    75%  { transform: translate(-1px, 0.4px); }
+    100% { transform: translate(0, 0); }
+  }
+
+  /* The first paint assembles instead of arriving. Staggered by the node's own
+     hash, so the map resolves out of nothing in about a second. */
+  @keyframes graph-rise {
+    from { opacity: 0; transform: scale(0.4); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  .graph-node {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation:
+      graph-rise 420ms var(--ease) var(--rise, 0s) both,
+      graph-drift var(--drift, 7s) ease-in-out var(--delay, 0s) infinite;
+  }
+
+  /* Light running along a link, drawn as a dash chasing its own offset. Only
+     ever applied to the links of the node under the pointer. */
+  @keyframes graph-beam {
+    from { stroke-dashoffset: 46; }
+    to   { stroke-dashoffset: 0; }
+  }
+
+  .graph-beam {
+    fill: none;
+    stroke-linecap: round;
+    stroke-dasharray: 5 41;
+    opacity: 0.9;
+    animation: graph-beam 1.1s linear infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .pop { animation: none; }
+    .graph-node { animation: none; }
+    .graph-beam { animation: none; opacity: 0.35; stroke-dasharray: none; }
     * { transition-duration: 1ms !important; }
   }
 }

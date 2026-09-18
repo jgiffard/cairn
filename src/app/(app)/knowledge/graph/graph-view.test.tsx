@@ -98,6 +98,35 @@ describe('the map draws', () => {
     expect(html).toMatch(/aria-label="[^"]*joined to nothing"/)
   })
 
+  it('bows its links rather than ruling them', () => {
+    // Straight lines between hundreds of nodes cross into a hatch and every
+    // one reads the same. The bow is what separates the crossings.
+    const html = renderToStaticMarkup(<GraphView graph={graph()} />)
+
+    expect(html).toMatch(/<path d="M[^"]*Q[^"]*"/)
+  })
+
+  it('gives every node the same drift on every render', () => {
+    // The animation is seeded from the slug, never from a clock or a random,
+    // for the same reason the layout is: this remounts whenever the live
+    // stream reports a change, and a map that re-choreographs itself every few
+    // minutes is a map nobody can read.
+    const first = renderToStaticMarkup(<GraphView graph={graph()} />)
+    const second = renderToStaticMarkup(<GraphView graph={graph()} />)
+
+    expect(second).toBe(first)
+    expect(first).toContain('--drift')
+  })
+
+  it('runs light along a link only where something is being looked at', () => {
+    // A pulse on all 450 links is a repaint every frame, and a map that
+    // shimmers everywhere says nothing about anywhere. Nothing is hovered in a
+    // server render, so there should be no beam at all.
+    const html = renderToStaticMarkup(<GraphView graph={graph()} />)
+
+    expect(html).not.toContain('graph-beam')
+  })
+
   it('renders an empty corpus without drawing anything', () => {
     const html = renderToStaticMarkup(
       <GraphView graph={graph({ nodes: [], edges: [], missing: [], isolatedFrom: 0 })} />,
