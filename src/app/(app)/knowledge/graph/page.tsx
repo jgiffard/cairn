@@ -23,6 +23,13 @@ export const dynamic = 'force-dynamic'
  * nineteen separate islands, and dozens of references point at entries nobody
  * ever wrote. None of that appears in a list, because a list shows what is
  * there.
+ *
+ * The page does not scroll, and that is a fix rather than a style. The map
+ * takes the wheel for zooming, which is right for a canvas and wrong for a
+ * document — with a caption below the frame, scrolling down to read it zoomed
+ * the map out instead. Nothing is behind the map now, so nothing is stolen.
+ *
+ * page-scroll-guard: fills the viewport on purpose
  */
 const KnowledgeGraphPage = async () => {
   const user = await currentUser()
@@ -32,8 +39,8 @@ const KnowledgeGraphPage = async () => {
   const { stats } = graph
 
   const figures: [string, string, string][] = [
-    [`${stats.entries}`, 'entries', ''],
-    [`${graph.edges.length}`, 'links', `${stats.withReferences} entries reference another`],
+    [`${stats.entries}`, 'entries', `${stats.withReferences} reference another`],
+    [`${graph.edges.length}`, 'links', `${stats.resolved} references resolve`],
     [
       `${stats.islands}`,
       stats.islands === 1 ? 'island' : 'islands',
@@ -52,7 +59,7 @@ const KnowledgeGraphPage = async () => {
   ]
 
   return (
-    <div className="flex h-dvh flex-col">
+    <div className="flex h-dvh flex-col overflow-hidden">
       {/* agents write knowledge while you are reading it */}
       <LiveUpdates />
       <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
@@ -71,26 +78,18 @@ const KnowledgeGraphPage = async () => {
         <span className="text-fg text-[0.8125rem]">Map</span>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-3 md:px-4">
-        <dl className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-          {figures.map(([value, label, note]) => (
-            <div key={label} className="border-border bg-surface rounded-lg border px-3 py-2">
-              <dt className="text-fg-subtle text-[0.7rem]">{label}</dt>
-              <dd className="text-fg text-[1.25rem] leading-tight font-medium tabular">{value}</dd>
-              {note ? <p className="text-fg-subtle text-[0.68rem]">{note}</p> : null}
-            </div>
-          ))}
-        </dl>
+      <dl className="border-border grid shrink-0 grid-cols-2 border-b sm:grid-cols-3 lg:grid-cols-5">
+        {figures.map(([value, label, note]) => (
+          <div key={label} className="border-border border-r border-b px-3 py-1.5 last:border-r-0">
+            <dt className="text-fg-subtle text-[0.68rem]">{label}</dt>
+            <dd className="text-fg text-[1.15rem] leading-tight font-medium tabular">{value}</dd>
+            {note ? <p className="text-fg-subtle truncate text-[0.65rem]">{note}</p> : null}
+          </div>
+        ))}
+      </dl>
 
+      <div className="min-h-0 flex-1">
         <GraphView graph={graph} />
-
-        <p className="text-fg-subtle mt-3 max-w-prose text-[0.75rem] leading-relaxed">
-          Each dot is an entry, sized by how many others it is joined to and coloured by its
-          project. Islands are laid out separately, so a cluster on its own really is on its
-          own. The loose grid underneath is everything joined to nothing at all. A dashed red
-          ring is a reference to an entry nobody ever wrote — it is drawn beside whoever
-          pointed at it rather than dropped, which is how these stayed invisible.
-        </p>
       </div>
     </div>
   )
