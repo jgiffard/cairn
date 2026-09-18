@@ -130,14 +130,17 @@ const installCodex = () => {
 
 /**
  * OpenClaw has no injectable session-start event; what it has is
- * `agent:bootstrap` with a mutable bootstrapFiles list, which its existing
- * task-enforcer hook already uses. So the instruction here is to extend that
- * hook rather than add another, and it runs on a different machine.
+ * `agent:bootstrap` with a mutable bootstrapFiles list. So the instruction is
+ * to extend whatever bootstrap hook that installation already has rather than
+ * add another, and there is no path here that would be right for two machines.
  */
 const openclawNotes = () => {
-  log('  openclaw: manual — extend /root/clawd/hooks/task-enforcer/handler.ts')
+  log('  openclaw: manual — extend the handler behind `agent:bootstrap`')
+  log('            in your own clawd tree; there is no path to install to')
   log('            push `cairn context --project <KEY>` output as a bootstrap file')
   log('            and schedule `cairn reconcile` via `openclaw automations`')
+  log('            it has no session-end event either, so sweep its transcripts:')
+  log('            `cairn-session-end.mjs --scan <its sessions dir>` on a timer')
   log('            export CAIRN_AGENT=openclaw where it is launched, so a box')
   log('            it shares with Codex still attributes writes correctly')
 }

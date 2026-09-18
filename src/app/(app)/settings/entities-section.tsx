@@ -17,7 +17,7 @@ export type EntityRow = {
 /**
  * Entities are the scope between one project and everything: a business, a
  * stack, a subsystem. A fact filed against one is visible from every project in
- * it, so this is where "which projects count as Dispofi" actually gets decided.
+ * it, so this is where "which projects count as one business" actually gets decided.
  *
  * Assigning a fact to a grouping already had UI on the knowledge page; defining
  * the groupings did not, which was backwards — the frequent, low-stakes action
@@ -109,8 +109,8 @@ export const EntitiesSection = ({
 
       <p className="text-fg-subtle mb-3 text-[0.75rem] leading-relaxed">
         A grouping a fact can be true of — a business, a stack, a subsystem. Knowledge filed
-        against one is visible from every project in it, which is how something true of all
-        of Dispofi stops having to be either filed twenty times or made global.
+        against one is visible from every project in it, which is how something true of a
+        whole business stops having to be filed twenty times or made global.
       </p>
 
       {creating && (

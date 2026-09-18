@@ -3,10 +3,10 @@
 --
 -- Knowledge could be filed against a project, or against nothing at all. The
 -- gap between those showed up as soon as there was a real corpus to look at:
--- of 19 "global" facts, five were not global. `CIO Campaign 152`,
--- `CIO Newsletter Skill` and `S3 Subdomain Takeover guides.dispofi.fr` are true
--- of Dispofi and meaningless to the trading work. They were filed global
--- because there was nowhere narrower that was not also wrong.
+-- of 19 "global" facts, five were not global. A campaign id, a marketing-tool
+-- convention and a subdomain finding were all true of one business and
+-- meaningless to the rest of the work. They were filed global because there was
+-- nowhere narrower that was not also wrong.
 --
 -- An entity is any grouping a fact can be true of. Deliberately many-to-many on
 -- both sides rather than a tree: a project belongs to a business, but it also
@@ -18,7 +18,7 @@
 --
 -- Resolution for a directory becomes project ∪ entities-of-that-project ∪
 -- global, and narrower wins: a project fact outranks an entity fact outranks a
--- global one. That is how "true for Dispofi, except in HM" gets said without
+-- global one. That is how "true for this business, except in that repo" gets said without
 -- `superseded_by`, which claims something different -- that one fact replaced
 -- another, rather than that one is more specific than another.
 -- ===========================================================================
@@ -66,26 +66,13 @@ create table knowledge_entities (
 create index knowledge_entities_entity_idx on knowledge_entities (entity_id);
 
 -- ---------------------------------------------------------------------------
--- Seed the business split, which the data already carries: every project
--- records the Linear team it came from in its description.
+-- No seed.
+--
+-- This migration once created three entities and mapped projects onto them by
+-- matching the Linear team recorded in each project's description. That was one
+-- workspace's own business split, and installing it gave every other workspace
+-- three groupings named after somebody else's companies.
+--
+-- An entity is only ever worth what the person filing knowledge means by it, so
+-- they are created where that is known: `cairn entities`, or Settings.
 -- ---------------------------------------------------------------------------
-insert into entities (owner_user_id, key, title, description)
-select distinct p.owner_user_id, v.key, v.title, v.description
-  from projects p
- cross join (values
-   ('dispofi',       'Dispofi',       'Insurance and mutuelle platform, and everything around it.'),
-   ('bbtrade',       'BBTrade',       'Trading, ticketing and the agent tooling built alongside them.'),
-   ('personal-infra', 'Personal infra', 'The machine, the toolchain, the agents themselves.')
- ) as v(key, title, description)
-on conflict do nothing;
-
-insert into project_entities (project_id, entity_id)
-select p.id, e.id
-  from projects p
-  join entities e
-    on e.owner_user_id = p.owner_user_id
-   and e.key = case
-         when p.description like '%team DIS%'     then 'dispofi'
-         when p.description like '%team BBTRADE%' then 'bbtrade'
-       end
-on conflict do nothing;

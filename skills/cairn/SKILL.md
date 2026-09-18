@@ -296,22 +296,22 @@ Three scopes, narrowest first:
 ```bash
 cairn learn "..."                     # inferred: this directory's project
 cairn learn "..." --project HM        # true of that project
-cairn learn "..." --entity dispofi    # true of that grouping — see `cairn entities`
+cairn learn "..." --entity acme       # true of that grouping — see `cairn entities`
 cairn learn "..." --global            # true everywhere — chosen, not defaulted to
 ```
 
 An **entity** is any grouping a fact can be true of: a business, a stack, a subsystem. A
 project belongs to several at once, so reach for the one the fact is actually about —
-"Customer.io campaign ids" is true of Dispofi, not of one repo in it, and not of the
-trading work.
+"Customer.io campaign ids" is true of the business running those campaigns, not of one
+repo in it, and not of the work that has nothing to do with it.
 
 Scope narrowly only when it is genuinely narrow. A fact filed under one project is
 invisible from the other four where it also applies — which is the mistake that made five
-Dispofi facts get filed as global, because global was the only thing left that was not
-also wrong.
+facts about one business get filed as global, because global was the only thing left that
+was not also wrong.
 
 When a fact exists at two scopes, the narrower one is shown first: a project fact beats an
-entity fact beats a global one. That is how "true for Dispofi, except here" gets said.
+entity fact beats a global one. That is how "true for this business, except here" gets said.
 
 **Correct it rather than adding to it.** The failure mode of every memory store is
 accumulation without correction — two contradictory claims, equally findable, and no way to

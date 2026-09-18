@@ -19,15 +19,15 @@ describe('knowledge slugs', () => {
   })
 
   it('never produces leading or trailing hyphens', () => {
-    expect(slugify('  ...Akamai cookies!  ')).toBe('akamai-cookies')
+    expect(slugify('  ...Session cookies!  ')).toBe('session-cookies')
   })
 
   it('separates with hyphens, never underscores', () => {
     // This is the whole reason 365 imported links resolve to nothing: the
-    // bodies say `capsolver_akamai_bug`, every real slug says
-    // `capsolver-akamai-bug`, and nothing reconciles the two.
-    expect(slugify('capsolver akamai bug')).not.toContain('_')
-    expect(slugify('capsolver_akamai_bug')).toBe('capsolver-akamai-bug')
+    // bodies say `cache_warmup_race`, every real slug says
+    // `cache-warmup-race`, and nothing reconciles the two.
+    expect(slugify('cache warmup race')).not.toContain('_')
+    expect(slugify('cache_warmup_race')).toBe('cache-warmup-race')
   })
 
   it('returns empty for a title with nothing sluggable in it, rather than a bare hyphen', () => {
@@ -39,15 +39,15 @@ describe('knowledge slugs', () => {
 
 describe('SLUG_PATTERN — what `cairn know` treats as a slug rather than a query', () => {
   it('accepts the shape slugify produces', () => {
-    expect(SLUG_PATTERN.test('queueit-botdeflector-unsolvable')).toBe(true)
-    expect(SLUG_PATTERN.test('clawdius-server')).toBe(true)
+    expect(SLUG_PATTERN.test('cache-warmup-race')).toBe(true)
+    expect(SLUG_PATTERN.test('proxy-buffer-defaults')).toBe(true)
   })
 
   it('rejects the underscore spelling, which is why following a link fell through to search', () => {
     // Not a defect in the pattern — a fact about it worth pinning down, since
     // an agent typing the underscore form gets a search that can miss
     // silently rather than a fetch that succeeds.
-    expect(SLUG_PATTERN.test('queueit_botdeflector_unsolvable')).toBe(false)
+    expect(SLUG_PATTERN.test('cache_warmup_race')).toBe(false)
   })
 
   it('rejects anything with spaces, so a real query is never mistaken for a slug', () => {

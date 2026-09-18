@@ -264,7 +264,7 @@ problem.
   and a project belongs to several at once. It exists because the alternatives are both
   wrong: filing the same fact against twenty projects, or making it global and putting it
   in front of the other forty where it is false. A project fact outranks an entity fact
-  outranks a global one, which is how "true for Dispofi, except here" gets said.
+  outranks a global one, which is how "true for this business, except here" gets said.
 
   Knowledge is corrected rather than added to: `superseded_by` keeps the old claim
   findable and marked, because two contradictory facts with no way to tell which is
@@ -504,7 +504,7 @@ be dropped onto a box and run with no install step.
 ```bash
 cp -r skills/cairn ~/.claude/skills/     # Claude Code
 cp -r skills/cairn ~/.codex/skills/      # Codex
-cp -r skills/cairn /root/clawd/skills/   # OpenClaw
+cp -r skills/cairn "$CLAWD_HOME"/skills/ # OpenClaw — its own tree, not a dotfile dir
 ```
 
 **Hooks** — the three mechanisms above:
@@ -541,7 +541,11 @@ Codex rejects a literal `bearer_token`; for an HTTP transport it wants
 
 **Existing memory.** If you already keep curated agent memory as one markdown file per
 fact, `node scripts/import-memory-files.mjs --dry-run` shows what it would bring in as
-knowledge.
+knowledge. It reads `~/.claude/projects/*/memory/` unless `--root` says otherwise, and
+needs `--map <file>` — JSON of `{ "<directory>": "KEY" | null }` — to know which project
+each directory belongs to. Anything unmapped is refused rather than filed globally, since
+knowledge in the wrong scope is read by every project that should not see it; `--global`
+says you meant it.
 
 ## Scheduled maintenance — optional
 
@@ -608,6 +612,12 @@ node scripts/sync-agent-files.mjs           # repair every reachable copy
 `--source <url>` takes the canonical files from the repository rather than a checkout,
 which is what lets it run on a host that has none. A CLI is only ever updated where one is
 already installed — `/usr/local/bin` existing is not consent to install into it.
+
+The built-in targets are the running user's own `~/.claude`, `~/.codex` and `~/.cairn`.
+Every other copy is named with `--also <artefact>=<path>`, repeatable — another user's
+home, when the schedule runs as root and the runtimes do not, or a runtime that keeps its
+skills in a tree of its own. `CAIRN_SYNC_ALSO` renders those into the scheduled job, so
+which copies a machine has stays with that machine.
 
 ## Self-hosted runner — optional
 

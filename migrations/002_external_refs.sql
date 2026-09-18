@@ -10,7 +10,7 @@ alter table projects
   add column if not exists external_url text;
 
 alter table tasks
-  add column if not exists external_ref text,   -- e.g. 'BBTRADE-1135'
+  add column if not exists external_ref text,   -- e.g. 'LEGACY-1135'
   add column if not exists external_url text;
 
 alter table task_comments
@@ -28,7 +28,7 @@ create unique index if not exists task_comments_external_ref_key
   on task_comments (external_ref) where external_ref is not null;
 
 -- The imported identifier is how a human will actually search for old work
--- ("what was BBTRADE-902 about?"), so it belongs in the search vector.
+-- ("what was LEGACY-902 about?"), so it belongs in the search vector.
 -- Dropping and recreating because a generated column cannot be altered.
 alter table tasks drop column if exists search_vector;
 

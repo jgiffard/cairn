@@ -205,8 +205,8 @@ export const listKnowledge = async (
 
   // What applies here is three things: what was filed against this project,
   // what was filed against a grouping it belongs to, and what is true
-  // everywhere. An infra gotcha applies here; so does a Dispofi convention,
-  // if this is a Dispofi project.
+  // everywhere. An infra gotcha applies here; so does a convention that holds
+  // across a business, if this project belongs to it.
   const { ids, missing } = await resolveProjects(userId, [filters.project])
   // An empty list used to be the answer for a key that does not exist, so a
   // typo was indistinguishable from a project nobody has learned anything
@@ -274,9 +274,9 @@ const knowledgeForEntitiesOf = async (userId: string, projectKey: string): Promi
  * Rows scoped to nothing at all — true everywhere.
  *
  * Both link tables have to be checked. Checking only projects made every
- * entity-scoped fact global as well, so scoping the Customer.io notes to
- * `dispofi` left them showing up on the trading projects exactly as before —
- * the change looked applied and did nothing.
+ * entity-scoped fact global as well, so scoping a fact to one entity left it
+ * showing up on every unrelated project exactly as before — the change looked
+ * applied and did nothing.
  */
 const globalIds = async (_userId: string): Promise<string[]> => {
   const { data, error } = await admin()

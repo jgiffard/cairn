@@ -33,9 +33,9 @@ export const isClaimStale = (heartbeatAt: string | null | undefined): boolean =>
  * Alphabetical the way a person reads it.
  *
  * Postgres sorts titles case-sensitively under this collation, so every
- * lowercase name — `comparator`, `dispofi-api`, `n8n` — sank below every
- * capitalised one, and `SI Contact` came before `Sales Wizard V2` because `I`
- * precedes `a` in ASCII. Ordering in SQL and calling it alphabetical was the
+ * lowercase name — `invoice-api`, `n8n` — sank below every capitalised one,
+ * and `SL Gateway` came before `Sales Portal` because `L` precedes `a` in
+ * ASCII. Ordering in SQL and calling it alphabetical was the
  * mistake; `localeCompare` is what the word means.
  *
  * Done in JS rather than as `order by lower(title)` because the adapter takes a
