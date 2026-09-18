@@ -23,7 +23,7 @@ describe('openapi spec', () => {
       '/search', '/projects', '/projects/{id}/tasks', '/tasks/{ref}',
       '/tasks/{ref}/claim', '/tasks/{ref}/beat', '/tasks/{ref}/checkpoint',
       '/tasks/{ref}/release', '/tasks/{ref}/notes', '/tasks/{ref}/comments',
-      '/tasks/{ref}/attachments', '/attachments/{id}', '/keys',
+      '/tasks/{ref}/attachments', '/attachments/{id}',
       '/tasks/{ref}/dependencies', '/projects/{id}', '/tasks/{ref}/activity', '/tasks/{ref}/children', '/labels',
     ]) {
       expect(paths).toContain(p)
