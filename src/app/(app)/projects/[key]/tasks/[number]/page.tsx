@@ -72,7 +72,7 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <Link
           href="/"

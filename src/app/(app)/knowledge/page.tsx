@@ -112,7 +112,7 @@ const KnowledgePage = async ({
     <div className="flex h-dvh flex-col">
       {/* agents write knowledge while you are reading it */}
       <LiveUpdates />
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <Link
           href="/"

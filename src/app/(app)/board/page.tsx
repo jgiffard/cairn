@@ -39,7 +39,7 @@ const BoardPage = async ({
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <span className="text-fg shrink-0 text-[0.8125rem] font-medium">Board</span>
         <span className="text-fg-subtle hidden text-[0.8125rem] sm:block">·</span>

@@ -184,7 +184,7 @@ const VitalsPage = async ({
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4">
+      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <span className="text-fg text-[0.8125rem] font-medium">Vitals</span>
         <span className="bg-surface-raised ml-auto flex items-center gap-0.5 rounded-md p-0.5">
