@@ -143,6 +143,16 @@ export const BoardView = ({
   const router = useRouter()
   const request = useMutate()
   const [tasks, setTasks] = useState(initial)
+  // cross-project-board.tsx has carried this reconcile since it was written;
+  // this board never got it, so a card moved by an agent stayed where it was
+  // until a reload. Adjusted during render rather than in an effect, and this
+  // is also what settles the optimistic drag below against what the server
+  // actually did.
+  const [prevInitial, setPrevInitial] = useState(initial)
+  if (initial !== prevInitial) {
+    setPrevInitial(initial)
+    setTasks(initial)
+  }
   const [dragging, setDragging] = useState<TaskListItem | null>(null)
   const [pendingClose, setPendingClose] = useState<{ task: TaskListItem; status: TaskStatus } | null>(null)
 
