@@ -1,6 +1,6 @@
 import { admin, normalizeDatabaseValue, transaction } from '@/lib/db/client'
 import type { Actor } from './auth'
-import { slugify, type KnowledgeCreate, type KnowledgeUpdate } from '@/schemas/knowledge'
+import { normalizeSlugRef, slugify, type KnowledgeCreate, type KnowledgeUpdate } from '@/schemas/knowledge'
 import { findTask } from './tasks'
 import { projectIdForFormerKey } from './project-keys'
 
@@ -294,10 +294,12 @@ const globalIds = async (_userId: string): Promise<string[]> => {
 }
 
 export const getKnowledge = async (_userId: string, slug: string): Promise<KnowledgeRow | null> => {
+  // Normalised, so a reference written `[[a_b_c]]` finds `a-b-c`. Lookup only:
+  // what is stored is still exactly what the author chose.
   const { data, error } = await admin()
     .from('knowledge')
     .select(COLUMNS)
-    .eq('slug', slug)
+    .eq('slug', normalizeSlugRef(slug))
     .maybeSingle()
 
   if (error) throw new Error(error.message)

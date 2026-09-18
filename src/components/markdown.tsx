@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { CodeBlock } from '@/components/code-block'
 import { useProjectKeys } from '@/components/project-keys'
 import { remarkTaskRefs } from '@/lib/markdown/task-refs'
+import { remarkKnowledgeRefs } from '@/lib/markdown/knowledge-refs'
 
 /**
  * A hand-rolled component map rather than a prose plugin, so every element
@@ -28,6 +29,27 @@ const components: Components = {
   a: ({ href, children, ...rest }) => {
     // A linkified task ref is in-app navigation, not an outbound link: opening
     // it in a new tab would make following a chain of references unbearable.
+    const knowledgeRef = (rest as Record<string, unknown>)['data-knowledge-ref']
+    if (typeof knowledgeRef === 'string' && href) {
+      // Marked when the target does not exist, so a reference to something
+      // nobody wrote reads as a loose end rather than as a working link.
+      const missing = (rest as Record<string, unknown>)['data-knowledge-missing'] === 'true'
+      return (
+        <Link
+          href={href}
+          prefetch={!missing}
+          title={missing ? `No knowledge "${knowledgeRef}" — yet` : undefined}
+          className={
+            missing
+              ? 'text-fg-subtle decoration-dotted underline underline-offset-2'
+              : 'text-accent decoration-1 underline-offset-2 hover:underline'
+          }
+        >
+          {children}
+        </Link>
+      )
+    }
+
     const taskRef = (rest as Record<string, unknown>)['data-task-ref']
     if (typeof taskRef === 'string' && href) {
       return (
@@ -118,7 +140,7 @@ export const MarkdownView = ({ children }: { children: string }) => {
   // react-markdown re-parses whenever the plugin array changes identity, so
   // this must not be rebuilt on every render.
   const remarkPlugins = useMemo<PluggableList>(
-    () => [remarkGfm, [remarkTaskRefs, { keys }]],
+    () => [remarkGfm, [remarkTaskRefs, { keys }], [remarkKnowledgeRefs, {}]],
     [keys],
   )
 

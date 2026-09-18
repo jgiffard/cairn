@@ -33,6 +33,27 @@ export const slugify = (title: string): string =>
     .slice(0, 120)
     .replace(/-+$/, '')
 
+/**
+ * What somebody meant when they wrote a slug down.
+ *
+ * Knowledge bodies cross-reference each other as `[[some-slug]]`, and 365 of
+ * the 625 such references in the store spell the separator with underscores
+ * while every one of the 377 real slugs uses hyphens — the convention came in
+ * wholesale with the claude-mem import and nothing reconciled the two.
+ *
+ * That is not cosmetic. `cairn know <subject>` only attempts a fetch when the
+ * subject looks like a slug, so an underscore spelling fell through to
+ * full-text search and could miss the entry entirely while looking like an
+ * answer. Normalising on lookup makes both spellings resolve without
+ * rewriting anything anybody wrote.
+ *
+ * Deliberately narrow: case and separator only. Anything cleverer — stripping
+ * words, fuzzy matching — would resolve a reference to something its author
+ * did not mean, which is worse than not resolving it.
+ */
+export const normalizeSlugRef = (raw: string): string =>
+  raw.trim().toLowerCase().replace(/_/g, '-')
+
 export const knowledgeCreate = z.object({
   slug: knowledgeSlug.optional(),
   title: z.string().min(1).max(300),

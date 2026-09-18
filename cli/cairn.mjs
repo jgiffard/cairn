@@ -1682,7 +1682,15 @@ const commands = {
 
     // A bare word that is a slug we hold is a fetch; anything else is a search.
     // Agents should not have to know which, and the distinction is cheap to make.
-    if (subject && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(subject)) {
+    //
+    // Underscores are accepted because the store is full of `[[a_b_c]]`
+    // references that mean `a-b-c` — they arrived with the claude-mem import.
+    // While this shape rejected them, following one's own reference fell
+    // through to full-text search, which on a real pair returned five loosely
+    // related entries and not the target, with nothing to say it had missed.
+    // The server normalises the spelling on lookup; this only has to stop
+    // ruling the reference out before asking.
+    if (subject && /^[a-z0-9]+([_-][a-z0-9]+)*$/i.test(subject)) {
       const hit = await request('GET', `/api/v1/knowledge/${subject}`, undefined, { soft: true })
       if (hit) {
         if (FORMAT === 'json') return emit(hit)
