@@ -598,7 +598,10 @@ to own the machine's default key.
 ### Keeping the copies honest
 
 The skill, the CLI and both hooks are read from a directory per runtime, so the same file
-exists five or six times on a busy host. They drift silently.
+exists five or six times on a busy host. They drift silently. The two maintenance scripts
+are repaired too, including the one that installs the schedule: a repairer that cannot
+repair its own installer leaves exactly one file stale on a host where everything else
+matches, which is the state that makes drift look impossible.
 
 ```bash
 node scripts/sync-agent-files.mjs --check   # report drift, write nothing
