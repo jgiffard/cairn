@@ -23,15 +23,29 @@ export const knowledgeSlug = z
  * appending a number would produce `postgres-gotcha-2`, which tells a later
  * reader nothing about how it differs from `postgres-gotcha`.
  */
-export const slugify = (title: string): string =>
-  title
+const MAX_SLUG = 120
+
+export const slugify = (title: string): string => {
+  const full = title
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 120)
-    .replace(/-+$/, '')
+
+  if (full.length <= MAX_SLUG) return full
+
+  // Cut at the last whole word inside the cap, not through one. Slicing at the
+  // character produced twelve identifiers ending mid-word — `...cannot-sha`,
+  // `...dernier-passag`, `...claude-c` — which cannot be typed, cannot be
+  // guessed, and read as corrupt in a URL.
+  const head = full.slice(0, MAX_SLUG)
+  const lastWord = head.lastIndexOf('-')
+  // A title with no break at all in 120 characters still has to yield
+  // something; a hard cut beats an empty slug, which the caller treats as
+  // "could not derive one".
+  return (lastWord > 0 ? head.slice(0, lastWord) : head).replace(/-+$/, '')
+}
 
 /**
  * What somebody meant when they wrote a slug down.
