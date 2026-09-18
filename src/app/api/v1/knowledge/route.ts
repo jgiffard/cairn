@@ -25,13 +25,25 @@ export const GET = route({
     if (!parsed.success) return fail('validation_failed', 'Bad filters.', { issues: parsed.error.issues })
 
     const { project, entity, label, superseded, limit } = parsed.data
-    const rows = await listKnowledge(actor.userId, {
-      project,
-      entity,
-      label,
-      limit,
-      includeSuperseded: superseded,
-    })
+
+    // Naming an unknown project is the caller's mistake, not a server fault.
+    // Left to the shared handler it became "Something went wrong." and was
+    // logged as unhandled — which is how a typo would have read as a bug in
+    // Cairn. POST below has always reported its own message; this matches it.
+    let rows
+    try {
+      rows = await listKnowledge(actor.userId, {
+        project,
+        entity,
+        label,
+        limit,
+        includeSuperseded: superseded,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not read that.'
+      if (!message.startsWith('No such ')) throw error
+      return fail('validation_failed', message)
+    }
 
     return ok({
       count: rows.length,
