@@ -418,12 +418,21 @@ To deploy behind a reverse proxy:
 ```bash
 cp docker-compose.example.yml docker-compose.yml
 # set CAIRN_DOMAIN and CAIRN_PROXY_NETWORK in your environment
+
+# The attachments directory is the one thing the container writes to, and it
+# runs as uid 1001. Create it owned by that uid before the first start, or
+# `cairn attach` fails with EACCES the first time someone uses it — the app
+# starts, serves, and reports healthy regardless.
+sudo mkdir -p /srv/cairn/attachments
+sudo chown -R 1001:1001 /srv/cairn/attachments
+
 docker compose up -d --build
 ```
 
 The example assumes a Traefik instance already running on an external Docker network with
 a Let's Encrypt resolver; adapt the labels for nginx or Caddy. The container runs
-read-only, as a non-root user, with all capabilities dropped.
+read-only, as a non-root user, with all capabilities dropped — which is why the bind mount
+above has to be writable by that user rather than by root.
 
 ### The first administrator
 
