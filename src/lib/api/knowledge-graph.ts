@@ -104,7 +104,36 @@ export const knownSlugs = async (): Promise<string[]> => {
   return (data ?? []).map((row) => normalizeSlugRef(row.slug as string))
 }
 
-export const knowledgeGraph = async (): Promise<KnowledgeGraph> => {
+/**
+ * The graph itself, without anywhere to draw it.
+ *
+ * Split out because the findings are worth more than the picture: what is
+ * joined to nothing, what is referenced but never written, how many separate
+ * islands there are. A browser needs coordinates; an agent needs the facts,
+ * and should not pay for a force simulation to get them.
+ */
+export type KnowledgeGaps = {
+  /** Entries with no reference in or out. */
+  orphans: { slug: string; title: string; project: string | null }[]
+  /** Referenced, never written. */
+  missing: { slug: string; from: string[] }[]
+  /** Sizes of the connected components, largest first. */
+  islands: number[]
+  stats: KnowledgeGraph['stats']
+}
+
+type Analysed = {
+  rows: Row[]
+  bySlug: Map<string, Row>
+  edges: Edge[]
+  degree: Map<string, number>
+  missing: Map<string, string[]>
+  references: number
+  resolved: number
+  withReferences: number
+}
+
+const analyse = async (): Promise<Analysed> => {
   const { data, error } = await admin()
     .from('knowledge')
     .select('slug, title, body, knowledge_projects(project:projects(key))')
@@ -148,17 +177,73 @@ export const knowledgeGraph = async (): Promise<KnowledgeGraph> => {
     }
   }
 
-  const ids = [...bySlug.keys()].sort()
-  const { placed, width, height, isolatedFrom } = layoutGraph(ids, edges)
+  return { rows, bySlug, edges, degree, missing, references, resolved, withReferences }
+}
 
-  const islandOf = new Map<string, number>()
-  const islands: number[] = []
+/** Counts that do not depend on where anything is drawn. */
+const summarise = (a: Analysed, isolated: number, islands: number[]): KnowledgeGraph['stats'] => ({
+  entries: a.rows.length,
+  withReferences: a.withReferences,
+  references: a.references,
+  resolved: a.resolved,
+  dangling: [...a.missing.values()].reduce((total, from) => total + from.length, 0),
+  isolated,
+  islands: islands.length,
+})
+
+const islandsOf = (ids: string[], edges: Edge[]): { sizes: number[]; of: Map<string, number> } => {
+  const of = new Map<string, number>()
+  const sizes: number[] = []
   components(ids, edges)
     .filter((group) => group.length > 1)
     .forEach((group, index) => {
-      islands.push(group.length)
-      for (const id of group) islandOf.set(id, index)
+      sizes.push(group.length)
+      for (const id of group) of.set(id, index)
     })
+  return { sizes, of }
+}
+
+/**
+ * What the map shows, for a reader who has no screen.
+ *
+ * Cairn is agent-facing and these findings were visible only in a browser:
+ * the entries that wrote themselves into a corner, and the references pointing
+ * at things nobody ever wrote. An agent that cannot see them cannot fix them.
+ */
+export const knowledgeGaps = async (): Promise<KnowledgeGaps> => {
+  const a = await analyse()
+  const ids = [...a.bySlug.keys()].sort()
+  const { sizes, of } = islandsOf(ids, a.edges)
+
+  const orphans = ids
+    .filter((id) => !of.has(id))
+    .map((id) => {
+      const row = a.bySlug.get(id) as Row
+      return {
+        slug: id,
+        title: row.title,
+        project: row.knowledge_projects?.[0]?.project?.key ?? null,
+      }
+    })
+
+  return {
+    orphans,
+    missing: [...a.missing.entries()]
+      .map(([slug, from]) => ({ slug, from: [...new Set(from)].sort() }))
+      .sort((x, y) => y.from.length - x.from.length || x.slug.localeCompare(y.slug)),
+    islands: sizes,
+    stats: summarise(a, orphans.length, sizes),
+  }
+}
+
+export const knowledgeGraph = async (): Promise<KnowledgeGraph> => {
+  const a = await analyse()
+  const { rows, bySlug, edges, degree, missing } = a
+
+  const ids = [...bySlug.keys()].sort()
+  const { placed, width, height, isolatedFrom } = layoutGraph(ids, edges)
+
+  const { sizes: islands, of: islandOf } = islandsOf(ids, edges)
 
   const nodes: GraphNode[] = placed.map((p) => {
     const row = bySlug.get(p.id) as Row
@@ -193,8 +278,6 @@ export const knowledgeGraph = async (): Promise<KnowledgeGraph> => {
       }
     })
 
-  const dangling = [...missing.values()].reduce((total, from) => total + from.length, 0)
-
   return {
     nodes,
     edges,
@@ -203,14 +286,6 @@ export const knowledgeGraph = async (): Promise<KnowledgeGraph> => {
     width,
     height,
     isolatedFrom,
-    stats: {
-      entries: rows.length,
-      withReferences,
-      references,
-      resolved,
-      dangling,
-      isolated: nodes.length - isolatedFrom,
-      islands: islands.length,
-    },
+    stats: summarise(a, nodes.length - isolatedFrom, islands),
   }
 }

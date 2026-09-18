@@ -108,6 +108,30 @@ const TOOLS = [
     ],
   },
   {
+    name: 'cairn_gaps',
+    description:
+      'Where the memory has holes: entries joined to nothing, references pointing at ' +
+      'entries nobody ever wrote, and how many separate islands the corpus has fallen ' +
+      'into. None of it shows in a list of knowledge, because a list shows what is there. ' +
+      'Use it before writing a reference, and when deciding what is worth connecting.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        show: {
+          type: 'string',
+          enum: ['summary', 'orphans', 'dangling'],
+          description:
+            'summary counts everything; orphans lists entries nothing links to; dangling ' +
+            'lists references pointing at entries that do not exist, and who points at them.',
+        },
+      },
+    },
+    run: (a) => [
+      'know',
+      a.show === 'orphans' ? '--orphans' : a.show === 'dangling' ? '--dangling' : '--gaps',
+    ],
+  },
+  {
     name: 'cairn_learn',
     description:
       'Record something that will still be true next month — infra, a convention, a ' +

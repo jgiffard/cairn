@@ -1060,6 +1060,9 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn entities assign|unassign <key> --project A,B
     cairn entities rename <key> --key <new> --title "T"
     cairn know [<slug>|<query>]    read it back, or list what applies here
+    cairn know --gaps              where the memory has holes
+    cairn know --orphans           entries nothing links to, that link to nothing
+    cairn know --dangling          references pointing at entries nobody wrote
     cairn verify <slug>            it is still true — clears the stale mark
     cairn replay                   send writes put aside while the server was down
     cairn relearn <slug> --body -  correct it
@@ -1680,6 +1683,75 @@ const commands = {
   async know() {
     const subject = positional[0]
 
+    /**
+     * Where the memory has holes.
+     *
+     * The map that found these is a web page, and everything that writes
+     * knowledge here is an agent. Without this the findings were visible only
+     * to whoever happened to open a browser -- observations rather than
+     * something anybody could act on.
+     */
+    if (flags.orphans || flags.dangling || flags.gaps) {
+      const gaps = await request('GET', '/api/v1/knowledge/gaps')
+      if (FORMAT === 'json') return emit(gaps)
+
+      const { stats } = gaps
+      if (flags.dangling) {
+        emit(
+          { count: gaps.missing.length, results: gaps.missing },
+          {
+            rows: (d) =>
+              d.results.map((m) => ({
+                slug: m.slug,
+                refs: String(m.from.length),
+                'referenced by': m.from.slice(0, 3).join(', ') + (m.from.length > 3 ? ' …' : ''),
+              })),
+            columns: ['slug', 'refs', 'referenced by'],
+          },
+        )
+        if (FORMAT === 'tsv' && gaps.missing.length > 0) {
+          process.stderr.write(
+            `${stats.dangling} reference${stats.dangling === 1 ? '' : 's'} point at ` +
+              `${gaps.missing.length} entr${gaps.missing.length === 1 ? 'y' : 'ies'} that ` +
+              `do not exist. Write one, or correct the entry that points at it.\n`,
+          )
+        }
+        return
+      }
+
+      if (flags.orphans) {
+        emit(
+          { count: gaps.orphans.length, results: gaps.orphans },
+          {
+            rows: (d) =>
+              d.results.map((o) => ({
+                slug: o.slug,
+                scope: o.project ?? 'global',
+                title: truncate(o.title, 70),
+              })),
+            columns: ['slug', 'scope', 'title'],
+          },
+        )
+        if (FORMAT === 'tsv' && gaps.orphans.length > 0) {
+          process.stderr.write(
+            `${stats.isolated} of ${stats.entries} entries reference nothing and are ` +
+              `referenced by nothing. A fact nothing points at is one nobody finds by ` +
+              `following a trail.\n`,
+          )
+        }
+        return
+      }
+
+      process.stdout.write(
+        `${stats.entries} entries, ${stats.resolved} resolving references\n` +
+          `${stats.islands} island${stats.islands === 1 ? '' : 's'}` +
+          (gaps.islands.length ? `, largest holds ${gaps.islands[0]}` : '') +
+          `\n${stats.isolated} joined to nothing  (cairn know --orphans)\n` +
+          `${gaps.missing.length} referenced but never written  (cairn know --dangling)\n`,
+      )
+      return
+    }
+
     // A bare word that is a slug we hold is a fetch; anything else is a search.
     // Agents should not have to know which, and the distinction is cheap to make.
     //
@@ -1706,6 +1778,35 @@ const commands = {
             : 'global'
         process.stdout.write(`scope: ${scope}\n\n`)
         process.stdout.write(`${k.body}\n`)
+
+        /**
+         * Which of this entry's own references point at nothing.
+         *
+         * The browser marks these where they are rendered; here the body is
+         * printed verbatim, so an agent following `[[a-slug]]` could not tell
+         * a live reference from a dead one and would fall through to a search
+         * that quietly misses. Asked for only when the body actually contains
+         * a reference, so the ordinary read stays one request.
+         */
+        const referenced = [
+          ...new Set(
+            [...k.body.matchAll(/\[\[([A-Za-z0-9][A-Za-z0-9_-]{1,118}[A-Za-z0-9])\]\]/g)].map(
+              (m) => m[1].trim().toLowerCase().replace(/_/g, '-'),
+            ),
+          ),
+        ]
+        if (referenced.length > 0) {
+          const gaps = await request('GET', '/api/v1/knowledge/gaps', undefined, { soft: true })
+          const unwritten = new Set((gaps?.missing ?? []).map((m) => m.slug))
+          const dead = referenced.filter((r) => unwritten.has(r))
+          if (dead.length > 0) {
+            process.stderr.write(
+              `\nreferences nothing has written: ${dead.join(', ')}\n` +
+                `Write one, or correct this entry — a reference that resolves to nothing ` +
+                `reads as a trail and ends in a search.\n`,
+            )
+          }
+        }
         return
       }
     }

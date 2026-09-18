@@ -589,6 +589,18 @@ export const openapiSpec = () => ({
         responses: { '201': okResponse('Recorded.'), '409': errorResponse },
       },
     },
+    '/knowledge/gaps': {
+      get: {
+        summary: 'Where the memory has holes',
+        description:
+          'Entries joined to nothing, references pointing at entries nobody ever wrote, ' +
+          'and the sizes of the separate islands the corpus has fallen into. None of it ' +
+          'appears in a list of knowledge, because a list shows what is there. Returns no ' +
+          'coordinates: a reader with a screen needs somewhere to draw each node, a reader ' +
+          'without one needs the facts.',
+        responses: { '200': okResponse('Orphans, dangling references and island sizes.') },
+      },
+    },
     '/knowledge/{slug}': {
       parameters: [
         { name: 'slug', in: 'path', required: true, schema: { type: 'string' } },
