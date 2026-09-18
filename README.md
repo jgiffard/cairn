@@ -589,6 +589,43 @@ node scripts/sync-agent-files.mjs           # repair every reachable copy
 which is what lets it run on a host that has none. A CLI is only ever updated where one is
 already installed — `/usr/local/bin` existing is not consent to install into it.
 
+## Self-hosted runner — optional
+
+Only relevant if you deploy Cairn onto the same machine a GitHub Actions runner lives on.
+Nothing here is required: a hosted runner, or deploying by hand, works fine.
+
+```bash
+node scripts/install-runner-service.mjs          # print the unit, change nothing
+sudo -E CAIRN_RUNNER_DIR=/path/to/actions-runner \
+  node scripts/install-runner-service.mjs --install
+sudo node scripts/install-runner-service.mjs --remove
+```
+
+Printing is the default, for the same reason it is elsewhere: a script that writes into
+`/etc/systemd/system` the moment it runs is a script nobody should run. Host-specific
+values come from `CAIRN_RUNNER_DIR`, `CAIRN_RUNNER_USER` and `CAIRN_RUNNER_SERVICE`, so a
+machine's layout stays out of the repository. `sudo -E` matters — plain `sudo` drops those.
+
+**The unit sets `KillMode=control-group`, and that is the point of the file.** GitHub's
+documented unit uses `KillMode=process`, which signals only the main process on stop so a
+job in flight can finish. The cost is that `systemctl stop` returns while `run-helper.sh`
+and `Runner.Listener` are still alive, orphaned in the cgroup — systemd reports it as
+`Found left-over process <pid> (Runner.Listener) in control group while starting unit`.
+With `Restart=always`, every restart then adds a listener rather than replacing one. Since
+GitHub permits one session per registered runner, the extras loop forever on `A session for
+this runner already exists` while sharing a single `_diag` and `_work`, and jobs begin
+failing in checkout on collided files and ending as `Abandoned` — a symptom that points
+nowhere near the cause.
+
+The trade-off is real and worth taking: a job interrupted by an explicit `systemctl stop`
+can be re-run, whereas a runner quietly accumulating listeners announces nothing.
+`TimeoutStopSec` still lets the tree exit on its own before systemd escalates.
+
+If a unit already exists that this installer did not write, it writes a drop-in overriding
+`KillMode` alone and leaves the rest of that unit untouched. `KillMode` is read at stop
+time, so applying it needs only a `daemon-reload` — the runner does not have to be
+restarted, and restarting it would interrupt any job in flight.
+
 ## Architecture
 
 - **Next.js 16** (App Router) · React 19 · TypeScript · Tailwind v4
