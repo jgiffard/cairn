@@ -23,7 +23,7 @@ describe('openapi spec', () => {
       '/search', '/projects', '/projects/{id}/tasks', '/tasks/{ref}',
       '/tasks/{ref}/claim', '/tasks/{ref}/beat', '/tasks/{ref}/checkpoint',
       '/tasks/{ref}/release', '/tasks/{ref}/notes', '/tasks/{ref}/comments',
-      '/tasks/{ref}/attachments', '/attachments/{id}', '/keys',
+      '/tasks/{ref}/attachments', '/attachments/{id}',
       '/tasks/{ref}/dependencies', '/projects/{id}', '/tasks/{ref}/activity', '/tasks/{ref}/children', '/labels',
     ]) {
       expect(paths).toContain(p)
@@ -72,13 +72,7 @@ describe('openapi spec', () => {
     expect(err.properties).toHaveProperty('suggestedResolution')
   })
 
-  /**
-   * The hand-written list below it says which routes matter. THIS says the
-   * spec covers all of them — which is the check that was missing when five
-   * routes (knowledge, sessions, context, entities, reconcile) shipped and
-   * /api-docs kept describing the surface without them.
-   */
-  it('documents every route that exists on disk', () => {
+  const routesOnDisk = (): string[] => {
     const root = join(process.cwd(), 'src/app/api/v1')
 
     const walk = (dir: string, prefix = ''): string[] =>
@@ -93,9 +87,32 @@ describe('openapi spec', () => {
       })
 
     // openapi.json documents the spec itself; there is nothing to say about it.
-    const routes = walk(root).filter((r) => r !== '/openapi.json')
+    return walk(root).filter((r) => r !== '/openapi.json')
+  }
+
+  /**
+   * The hand-written list below it says which routes matter. THIS says the
+   * spec covers all of them — which is the check that was missing when five
+   * routes (knowledge, sessions, context, entities, reconcile) shipped and
+   * /api-docs kept describing the surface without them.
+   */
+  it('documents every route that exists on disk', () => {
     const documented = new Set(Object.keys(spec.paths))
 
-    expect(routes.filter((r) => !documented.has(r))).toEqual([])
+    expect(routesOnDisk().filter((r) => !documented.has(r))).toEqual([])
+  })
+
+  /**
+   * The mirror of the check above, and the half that was missing. That one
+   * catches a route that shipped undocumented; this catches a documented path
+   * whose route is gone, which is a worse failure — /api-docs promises an
+   * endpoint that answers 404. It went unnoticed when /keys was deleted: the
+   * spec kept advertising it and the suite stayed green, because nothing ever
+   * looked in this direction.
+   */
+  it('documents no path that has no route on disk', () => {
+    const routes = new Set(routesOnDisk())
+
+    expect(Object.keys(spec.paths).filter((p) => !routes.has(p))).toEqual([])
   })
 })

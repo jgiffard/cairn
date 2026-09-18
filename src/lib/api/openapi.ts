@@ -742,32 +742,6 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('Applied.'), '400': errorResponse },
       },
     },
-    '/keys': {
-      get: {
-        summary: 'List your agent keys (human administrator browser session only)',
-        responses: { '200': okResponse('Keys.'), '403': errorResponse },
-      },
-      post: {
-        summary: 'Create your agent key (human administrator browser session only)',
-        description: 'The plaintext key is returned exactly once and never stored.',
-        requestBody: body({
-          type: 'object',
-          properties: {
-            agentName: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,40}$', example: 'claude-code' },
-            name: { type: 'string' },
-          },
-          required: ['agentName', 'name'],
-        }),
-        responses: { '201': okResponse('Created; includes the plaintext key.'), '403': errorResponse },
-      },
-    },
-    '/keys/{id}': {
-      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-      delete: {
-        summary: 'Revoke your agent key (human administrator browser session only)',
-        responses: { '200': okResponse('Revoked.'), '403': errorResponse },
-      },
-    },
     '/users': {
       get: {
         summary: 'List users (administrator browser session only)',
