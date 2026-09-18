@@ -26,6 +26,11 @@ jobs:
 
       - name: test
         run: npm test
+        env:
+          # Names that must not appear in a public repository, and therefore
+          # cannot be listed in one. Optional: unset, the guard that reads it
+          # passes vacuously and the shape checks still run.
+          CAIRN_PRIVATE_TERMS: ${{ secrets.CAIRN_PRIVATE_TERMS }}
 
       - name: build
         # Nothing to inject: the build reaches no database, and the Supabase

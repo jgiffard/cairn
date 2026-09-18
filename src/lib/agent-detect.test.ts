@@ -53,7 +53,7 @@ describe('detecting the runtime', () => {
   })
 
   it('recognises Codex through the wrapper, which is the path that already worked', () => {
-    expect(detect({ CODEX_HOME: '/home/dev/.codex' })).toBe('codex')
+    expect(detect({ CODEX_HOME: '/opt/codex-home' })).toBe('codex')
   })
 
   it('lets an explicit CAIRN_AGENT win over everything', () => {
