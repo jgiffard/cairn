@@ -46,6 +46,19 @@ export type GraphNode = {
   slug: string
   title: string
   project: string | null
+  /**
+   * The world this entry belongs to: a business, a stack, a subsystem.
+   *
+   * Thirty-five project keys is more colours than anyone can hold, and the
+   * grouping a reader actually thinks in sits one level up — "the Dispofi
+   * side", "the Tribe side". Carried here so the map can show it.
+   *
+   * Taken from the entry's own entity scope where it has one, and otherwise
+   * inherited from its project. An entry filed against `dispofi-api` belongs
+   * to the Dispofi world whether or not anybody said so, and making that
+   * explicit on every row is work nobody would keep up.
+   */
+  entity: string | null
   /** How many entries this one is joined to, in either direction. */
   degree: number
   /** Index into `islands`; -1 for an entry joined to nothing. */
@@ -88,6 +101,7 @@ type Row = {
   body: string
   superseded_by?: string | null
   knowledge_projects?: { project?: { key?: string } | null }[]
+  knowledge_entities?: { entity?: { key?: string } | null }[]
 }
 
 /**
@@ -138,7 +152,7 @@ type Analysed = {
 const analyse = async (): Promise<Analysed> => {
   const { data, error } = await admin()
     .from('knowledge')
-    .select('slug, title, body, superseded_by, knowledge_projects(project:projects(key))')
+    .select('slug, title, body, superseded_by, knowledge_projects(project:projects(key)), knowledge_entities(entity:entities(key))')
   if (error) throw new Error(error.message)
 
   const all = (data ?? []) as unknown as Row[]
@@ -208,6 +222,40 @@ const projectKeyOf = (row: Row): string | null =>
     .map((link) => link.project?.key)
     .filter((key): key is string => Boolean(key))
     .sort()[0] ?? null
+
+/** Its own entity scope, if it was given one. Sorted for the same reason. */
+const entityKeyOf = (row: Row): string | null =>
+  (row.knowledge_entities ?? [])
+    .map((link) => link.entity?.key)
+    .filter((key): key is string => Boolean(key))
+    .sort()[0] ?? null
+
+/**
+ * Which world each project belongs to.
+ *
+ * Read once and joined in memory rather than as a third level of embedded
+ * select: there are thirty-five projects and five entities, so this is two
+ * small queries against a join that would otherwise be nested three deep in a
+ * client that has never been asked to do that.
+ */
+const entityByProject = async (): Promise<Map<string, string>> => {
+  const { data, error } = await admin()
+    .from('project_entities')
+    .select('project:projects(key), entity:entities(key)')
+  if (error) throw new Error(error.message)
+  const out = new Map<string, string>()
+  for (const row of (data ?? []) as unknown as {
+    project?: { key?: string } | { key?: string }[] | null
+    entity?: { key?: string } | { key?: string }[] | null
+  }[]) {
+    const p = Array.isArray(row.project) ? row.project[0]?.key : row.project?.key
+    const e = Array.isArray(row.entity) ? row.entity[0]?.key : row.entity?.key
+    // A project can belong to more than one entity. First by name wins, so
+    // the answer does not depend on scan order.
+    if (p && e && (!out.has(p) || (out.get(p) as string) > e)) out.set(p, e)
+  }
+  return out
+}
 
 /** Counts that do not depend on where anything is drawn. */
 const summarise = (a: Analysed, isolated: number, islands: number[]): KnowledgeGraph['stats'] => ({
@@ -288,7 +336,7 @@ const graphFor = unstable_cache(
 export const knowledgeGraph = async (): Promise<KnowledgeGraph> => graphFor(await corpusVersion())
 
 const buildGraph = async (): Promise<KnowledgeGraph> => {
-  const a = await analyse()
+  const [a, worldOf] = await Promise.all([analyse(), entityByProject()])
   const { rows, bySlug, edges, degree, missing } = a
 
   const ids = [...bySlug.keys()].sort()
@@ -306,6 +354,8 @@ const buildGraph = async (): Promise<KnowledgeGraph> => {
       slug: p.id,
       title: row.title,
       project: key,
+      // Its own scope first, then whatever world its project lives in.
+      entity: entityKeyOf(row) ?? (key ? (worldOf.get(key) ?? null) : null),
       degree: degree.get(p.id) ?? 0,
       island: islandOf.get(p.id) ?? -1,
       // One decimal. Nothing is drawn to a tenth of a unit, and full float

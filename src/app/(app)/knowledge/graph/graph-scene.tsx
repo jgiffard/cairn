@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { projectColor } from '@/components/icons'
+import { entityColor, projectColor } from '@/components/icons'
 import { layout3D } from '@/lib/graph-3d'
 import type { KnowledgeGraph } from '@/lib/api/knowledge-graph'
 
@@ -43,13 +43,25 @@ type Props = {
 
 /** A radius that makes a hub look like one, in world units. */
 const radiusOf = (degree: number): number =>
-  degree === 0 ? 0.62 : 0.85 + Math.min(2.4, Math.sqrt(degree) * 0.66)
+  degree === 0 ? 1.5 : 0.85 + Math.min(2.4, Math.sqrt(degree) * 0.66)
 
 /** Enough links to be worth naming without being asked. */
 const LABEL_AT = 6
 
 /** How many titles can be on screen before it is a wall of text. */
 const LABEL_CAP = 34
+
+/** Segments per link. Enough for the bow to read as a curve, not a dogleg. */
+const BOW = 10
+
+/** Deterministic, and the same hash the layout and the palette use. */
+const hash = (key: string): number => {
+  let h = 0
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) >>> 0
+  return h
+}
+const unit = (key: string, salt: number): number =>
+  ((hash(key) ^ (salt * 0x9e3779b1)) >>> 0) / 4294967296
 
 type Palette = {
   bg: THREE.Color
@@ -91,7 +103,7 @@ const readPalette = (): Palette => {
  * at this node count it is indistinguishable — the light here comes from
  * hundreds of small sources, not the few blown-out ones bloom is for.
  */
-const softDot = (): THREE.Texture => {
+const softDot = (falloff: number): THREE.Texture => {
   const size = 128
   const canvas = document.createElement('canvas')
   canvas.width = size
@@ -100,8 +112,8 @@ const softDot = (): THREE.Texture => {
   if (ctx) {
     const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
     g.addColorStop(0, 'rgba(255,255,255,1)')
-    g.addColorStop(0.22, 'rgba(255,255,255,0.32)')
-    g.addColorStop(0.55, 'rgba(255,255,255,0.07)')
+    g.addColorStop(falloff * 0.4, 'rgba(255,255,255,0.32)')
+    g.addColorStop(falloff, 'rgba(255,255,255,0.07)')
     g.addColorStop(1, 'rgba(255,255,255,0)')
     ctx.fillStyle = g
     ctx.fillRect(0, 0, size, size)
@@ -134,7 +146,7 @@ const dashedRing = (): THREE.Texture => {
  * the smallest shader that carries a size and a colour per vertex and still
  * attenuates with distance the way the built-in one does.
  */
-const glowMaterial = (map: THREE.Texture, additive: boolean, opacity: number) =>
+const spriteMaterial = (map: THREE.Texture, additive: boolean, opacity: number) =>
   new THREE.ShaderMaterial({
     uniforms: {
       map: { value: map },
@@ -251,20 +263,35 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     // Haze, so distance reads as distance rather than as "smaller". It is the
     // cheapest depth cue there is, and it stops the far side of the cloud
     // competing with the near side for attention.
-    scene.fog = new THREE.Fog(palette.bg.getHex(), place.radius * 1.7, place.radius * 5.4)
+    scene.fog = new THREE.Fog(palette.bg.getHex(), place.radius * 1.9, place.radius * 6)
 
-    const camera = new THREE.PerspectiveCamera(46, 1, 0.1, place.radius * 24)
-    camera.position.set(place.radius * 1.1, place.radius * 0.85, place.radius * 2.2)
+    const camera = new THREE.PerspectiveCamera(46, 1, 0.1, place.radius * 30)
+
+    /**
+     * Framed on the cloud AND the floor.
+     *
+     * Framed on the cloud alone, the disc of entries joined to nothing entered
+     * the bottom of the frame as an arc and ran off the edge — so a reader who
+     * never dragged saw no orphans at all, while the legend told them to look
+     * at a disc below (CAIRN-217). The scene is taller than it is wide once
+     * the floor is counted, and the camera has to be told that.
+     */
+    const reach = Math.max(place.radius * 1.3, Math.abs(place.floor) + place.radius * 0.35)
+    const HOME = new THREE.Vector3(reach * 0.92, reach * 0.6, reach * 1.9)
+    /** Aimed between the cloud's middle and the floor, so neither is at an edge. */
+    const TARGET = new THREE.Vector3(0, place.floor * 0.3, 0)
+    camera.position.copy(HOME)
 
     const controls = new OrbitControls(camera, canvas)
+    controls.target.copy(TARGET)
     controls.enableDamping = true
     controls.dampingFactor = 0.075
     // Rotate and dolly only. Panning as well is three gestures competing for
     // two buttons, and a camera that can be walked far enough from the cloud
     // that there is no way back but the reset.
     controls.enablePan = false
-    controls.minDistance = place.radius * 0.5
-    controls.maxDistance = place.radius * 5
+    controls.minDistance = reach * 0.45
+    controls.maxDistance = reach * 4.5
     // Clamped off both poles: straight down the Y axis the cloud collapses to
     // a disc and the floor of orphans disappears edge-on, which are the two
     // things this view must never do.
@@ -292,20 +319,23 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
 
     // ---- what is drawn -------------------------------------------------
 
-    const drawn = graph.nodes.filter((n) => place.at.has(n.slug))
-    const slugAt = drawn.map((n) => n.slug)
-    const rowOf = new Map(slugAt.map((s, i) => [s, i]))
+    const all = graph.nodes.filter((n) => place.at.has(n.slug))
+    /** The cloud, and the disc below it, are drawn by two different meshes. */
+    const linked = all.filter((n) => n.degree > 0)
+    const adrift = all.filter((n) => n.degree === 0)
+    const slugAt = [...linked.map((n) => n.slug), ...adrift.map((n) => n.slug)]
+    const rowOf = new Map(linked.map((n, i) => [n.slug, i]))
     const colourOf = (project: string | null) =>
       project ? new THREE.Color(projectColor(project)) : palette.muted.clone()
-    let base = drawn.map((n) => colourOf(n.project))
+    let base = linked.map((n) => colourOf(n.project))
 
     const sphere = new THREE.SphereGeometry(1, 18, 14)
     const material = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.05 })
-    const nodes = new THREE.InstancedMesh(sphere, material, drawn.length)
+    const nodes = new THREE.InstancedMesh(sphere, material, linked.length)
     scene.add(nodes)
 
     const dummy = new THREE.Object3D()
-    drawn.forEach((n, i) => {
+    linked.forEach((n, i) => {
       const p = place.at.get(n.slug)
       if (!p) return
       dummy.position.set(p.x, p.y, p.z)
@@ -317,13 +347,40 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     nodes.instanceMatrix.needsUpdate = true
     if (nodes.instanceColor) nodes.instanceColor.needsUpdate = true
 
+    /**
+     * The entries joined to nothing, in a mesh of their own (CAIRN-217).
+     *
+     * Three things made them uncountable on the deployed map, and all three
+     * are fixed by taking them out of the cloud's mesh. They were the smallest
+     * nodes in the scene; they were lit, so the disc's own shading worked
+     * against them; and being furthest from the camera they took the most fog.
+     * Here they are unlit, unfogged and drawn at more than twice the size.
+     * Nothing can occlude them on that plane, so none of it costs the cloud
+     * anything.
+     */
+    const adriftMat = new THREE.MeshBasicMaterial({ fog: false, toneMapped: false })
+    const orphans = new THREE.InstancedMesh(sphere, adriftMat, adrift.length)
+    const adriftColour = palette.muted.clone()
+    adrift.forEach((n, i) => {
+      const p = place.at.get(n.slug)
+      if (!p) return
+      dummy.position.set(p.x, p.y, p.z)
+      dummy.scale.setScalar(radiusOf(0))
+      dummy.updateMatrix()
+      orphans.setMatrixAt(i, dummy.matrix)
+      orphans.setColorAt(i, adriftColour)
+    })
+    orphans.instanceMatrix.needsUpdate = true
+    if (orphans.instanceColor) orphans.instanceColor.needsUpdate = true
+    scene.add(orphans)
+
     // The glow, one additive sprite per node.
-    const dot = softDot()
+    const dot = softDot(0.55)
     const glowGeometry = new THREE.BufferGeometry()
-    const glowPos = new Float32Array(drawn.length * 3)
-    const glowCol = new Float32Array(drawn.length * 3)
-    const glowSize = new Float32Array(drawn.length)
-    drawn.forEach((n, i) => {
+    const glowPos = new Float32Array(linked.length * 3)
+    const glowCol = new Float32Array(linked.length * 3)
+    const glowSize = new Float32Array(linked.length)
+    linked.forEach((n, i) => {
       const p = place.at.get(n.slug)
       if (!p) return
       glowPos.set([p.x, p.y, p.z], i * 3)
@@ -336,20 +393,119 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     // picture out, so there it blends normally and reads as a soft shadow —
     // which is also what stops the grey, unprojected entries smudging, the way
     // their halo did on the flat map in light mode.
-    const glowMat = glowMaterial(dot, palette.dark, palette.dark ? 0.5 : 0.16)
+    const glowMat = spriteMaterial(dot, palette.dark, palette.dark ? 0.5 : 0.16)
     const glow = new THREE.Points(glowGeometry, glowMat)
     glow.frustumCulled = false
     scene.add(glow)
 
+    /**
+     * The worlds, as volumes of coloured light.
+     *
+     * One enormous soft sprite per entity, at the centre of mass its members
+     * settled into. Colour is the project everywhere else on this map and in
+     * the rest of the app, so the ENTITY — the business or stack a project
+     * belongs to — had nowhere to go; it is drawn as position and as light
+     * instead. Five worlds over thirty-five projects is the grouping a reader
+     * actually thinks in, and the map knew nothing about it.
+     *
+     * The same trick as the node glow at a hundred times the size, which is
+     * why it costs one more point in one more draw call rather than a
+     * volumetric anything. Behind everything and writing no depth, so it tints
+     * the region without hiding a single node.
+     */
+    const haze = softDot(0.95)
+    const worldGeometry = new THREE.BufferGeometry()
+    const worldPos = new Float32Array(place.worlds.length * 3)
+    const worldCol = new Float32Array(place.worlds.length * 3)
+    const worldSize = new Float32Array(place.worlds.length)
+    place.worlds.forEach((w, i) => {
+      worldPos.set([w.x, w.y, w.z], i * 3)
+      const c = new THREE.Color(entityColor(w.key))
+      worldCol.set([c.r, c.g, c.b], i * 3)
+      worldSize[i] = w.spread * 5
+    })
+    worldGeometry.setAttribute('position', new THREE.BufferAttribute(worldPos, 3))
+    worldGeometry.setAttribute('color', new THREE.BufferAttribute(worldCol, 3))
+    worldGeometry.setAttribute('size', new THREE.BufferAttribute(worldSize, 1))
+    const worldMat = spriteMaterial(haze, palette.dark, palette.dark ? 0.22 : 0.1)
+    const worldHaze = new THREE.Points(worldGeometry, worldMat)
+    worldHaze.frustumCulled = false
+    worldHaze.renderOrder = -1
+    scene.add(worldHaze)
+
+    /**
+     * Dust, purely for parallax.
+     *
+     * A cloud has no scale and no motion of its own until something nearer
+     * than it moves faster across the eye. Six hundred dim points, seeded from
+     * the slug hash so they are the same every time, and it is the whole
+     * difference between moving through something and turning a model.
+     */
+    const dustN = 600
+    const dustGeometry = new THREE.BufferGeometry()
+    const dustPos = new Float32Array(dustN * 3)
+    const dustCol = new Float32Array(dustN * 3)
+    const dustSize = new Float32Array(dustN)
+    for (let i = 0; i < dustN; i += 1) {
+      const u = unit(`dust${i}`, 11) * 2 - 1
+      const t = unit(`dust${i}`, 12) * Math.PI * 2
+      const r = reach * (1.15 + unit(`dust${i}`, 13) * 1.8)
+      const ring = Math.sqrt(1 - u * u)
+      dustPos.set([Math.cos(t) * ring * r, u * r * 0.6, Math.sin(t) * ring * r], i * 3)
+      dustCol.set([palette.muted.r, palette.muted.g, palette.muted.b], i * 3)
+      dustSize[i] = 0.5 + unit(`dust${i}`, 14) * 1.4
+    }
+    dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPos, 3))
+    dustGeometry.setAttribute('color', new THREE.BufferAttribute(dustCol, 3))
+    dustGeometry.setAttribute('size', new THREE.BufferAttribute(dustSize, 1))
+    const dustMat = spriteMaterial(dot, palette.dark, palette.dark ? 0.45 : 0.22)
+    const dust = new THREE.Points(dustGeometry, dustMat)
+    dust.frustumCulled = false
+    scene.add(dust)
+
     // Links.
     const edges = graph.edges.filter((e) => place.at.has(e.source) && place.at.has(e.target))
-    const linkPos = new Float32Array(edges.length * 6)
-    const linkCol = new Float32Array(edges.length * 6)
-    edges.forEach((e, i) => {
-      const a = place.at.get(e.source)
-      const b = place.at.get(e.target)
-      if (!a || !b) return
-      linkPos.set([a.x, a.y, a.z, b.x, b.y, b.z], i * 6)
+    /**
+     * The same bow the flat map draws, in three dimensions.
+     *
+     * Straight lines between hundreds of nodes cross into a hatch and every
+     * one of them reads the same. A consistent bow separates the crossings and
+     * gives the web the look of something grown rather than drawn. Bent AWAY
+     * from the origin, so a link always arcs out of the cloud rather than
+     * through whatever happens to be in the middle of it.
+     */
+    const va = new THREE.Vector3()
+    const vb = new THREE.Vector3()
+    const vmid = new THREE.Vector3()
+    const vctrl = new THREE.Vector3()
+    const pt = new THREE.Vector3()
+    const curveOf = (i: number, t: number, out: THREE.Vector3) => {
+      const e = edges[i]
+      if (!e) return out
+      const p = place.at.get(e.source)
+      const q = place.at.get(e.target)
+      if (!p || !q) return out
+      va.set(p.x, p.y, p.z)
+      vb.set(q.x, q.y, q.z)
+      vmid.addVectors(va, vb).multiplyScalar(0.5)
+      vctrl.copy(vmid).multiplyScalar(1.12)
+      const u = 1 - t
+      return out
+        .copy(va)
+        .multiplyScalar(u * u)
+        .addScaledVector(vctrl, 2 * u * t)
+        .addScaledVector(vb, t * t)
+    }
+    const linkPos = new Float32Array(edges.length * BOW * 6)
+    const linkCol = new Float32Array(edges.length * BOW * 6)
+    edges.forEach((_, i) => {
+      for (let seg = 0; seg < BOW; seg += 1) {
+        const o = (i * BOW + seg) * 6
+        curveOf(i, seg / BOW, pt)
+        linkPos.set([pt.x, pt.y, pt.z], o)
+        curveOf(i, (seg + 1) / BOW, pt)
+        linkPos.set([pt.x, pt.y, pt.z], o + 3)
+      }
     })
     const linkGeometry = new THREE.BufferGeometry()
     linkGeometry.setAttribute('position', new THREE.BufferAttribute(linkPos, 3))
@@ -361,6 +517,30 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       depthWrite: false,
     })
     scene.add(new THREE.LineSegments(linkGeometry, linkMat))
+
+    /**
+     * Light travelling the links of whatever is being looked at.
+     *
+     * The flat map has had this since CAIRN-208 and the scene did not, which
+     * made hovering here feel like less had happened. Only the hovered node's
+     * links: a pulse on all 452 is a buffer rewrite every frame, and a map
+     * that shimmers everywhere says nothing about anywhere.
+     */
+    const BEAMS = 96
+    const beamGeometry = new THREE.BufferGeometry()
+    const beamPos = new Float32Array(BEAMS * 3)
+    const beamCol = new Float32Array(BEAMS * 3)
+    const beamSize = new Float32Array(BEAMS)
+    beamGeometry.setAttribute('position', new THREE.BufferAttribute(beamPos, 3))
+    beamGeometry.setAttribute('color', new THREE.BufferAttribute(beamCol, 3))
+    beamGeometry.setAttribute('size', new THREE.BufferAttribute(beamSize, 1))
+    const beamMat = spriteMaterial(dot, true, 0.95)
+    const beams = new THREE.Points(beamGeometry, beamMat)
+    beams.frustumCulled = false
+    beams.visible = false
+    scene.add(beams)
+    /** Which edges the beams are riding, refreshed when the focus changes. */
+    let riding: number[] = []
 
     // References to entries nobody wrote: a dashed tether and a hollow ring.
     const gaps = graph.missing.filter((m) => place.at.has(m.slug))
@@ -408,14 +588,18 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
      * as part of it. With it they are a region with a boundary, which is what
      * the band along the foot of the flat map was doing.
      */
+    // Out of the fog. Fog exists to sell depth inside the cloud; the disc is
+    // not competing with anything, and being furthest from the camera it was
+    // taking the most haze of anything in the scene.
     const floorMat = new THREE.MeshBasicMaterial({
       color: palette.muted.getHex(),
       transparent: true,
-      opacity: 0.25,
+      opacity: 0.28,
       side: THREE.DoubleSide,
+      fog: false,
     })
     const floor = new THREE.Mesh(
-      new THREE.RingGeometry(place.radius * 1.2, place.radius * 1.225, 96),
+      new THREE.RingGeometry(place.radius * 1.2, place.radius * 1.228, 96),
       floorMat,
     )
     floor.rotation.x = Math.PI / 2
@@ -431,8 +615,8 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       const near = slug ? neighbours.get(slug) : null
       const inSet = (s: string) => slug === null || slug === s || (near?.has(s) ?? false)
 
-      for (let i = 0; i < drawn.length; i += 1) {
-        const n = drawn[i]
+      for (let i = 0; i < linked.length; i += 1) {
+        const n = linked[i]
         if (!n) continue
         const c = base[i] as THREE.Color
         if (inSet(n.slug)) {
@@ -453,16 +637,54 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       if (nodes.instanceColor) nodes.instanceColor.needsUpdate = true
       glowGeometry.getAttribute('color').needsUpdate = true
 
+      // The orphans dim with everything else, but never below legible: they
+      // are the finding, and a focus somewhere else must not erase them.
+      for (let i = 0; i < adrift.length; i += 1) {
+        const n = adrift[i]
+        if (!n) continue
+        lit.copy(adriftColour)
+        if (slug && !inSet(n.slug)) lit.lerp(palette.bg, 0.55)
+        orphans.setColorAt(i, lit)
+      }
+      if (orphans.instanceColor) orphans.instanceColor.needsUpdate = true
+
+      riding = []
       edges.forEach((e, i) => {
         const on = inSet(e.source) && inSet(e.target)
-        const a = rowOf.get(e.source)
-        const b = rowOf.get(e.target)
-        const ca = a === undefined ? palette.muted : (base[a] as THREE.Color)
-        const cb = b === undefined ? palette.muted : (base[b] as THREE.Color)
+        if (slug && on) riding.push(i)
+        const ia = rowOf.get(e.source)
+        const ib = rowOf.get(e.target)
+        const ca = ia === undefined ? palette.muted : (base[ia] as THREE.Color)
+        const cb = ib === undefined ? palette.muted : (base[ib] as THREE.Color)
         const k = on ? (slug ? 1.4 : 0.8) : 0.09
-        linkCol.set([ca.r * k, ca.g * k, ca.b * k, cb.r * k, cb.g * k, cb.b * k], i * 6)
+        // Each segment takes the colour of the end it is nearer, so a link
+        // reads as leaving one project and arriving at another.
+        for (let seg = 0; seg < BOW; seg += 1) {
+          const t0 = seg / BOW
+          const t1 = (seg + 1) / BOW
+          const o = (i * BOW + seg) * 6
+          linkCol[o] = (ca.r + (cb.r - ca.r) * t0) * k
+          linkCol[o + 1] = (ca.g + (cb.g - ca.g) * t0) * k
+          linkCol[o + 2] = (ca.b + (cb.b - ca.b) * t0) * k
+          linkCol[o + 3] = (ca.r + (cb.r - ca.r) * t1) * k
+          linkCol[o + 4] = (ca.g + (cb.g - ca.g) * t1) * k
+          linkCol[o + 5] = (ca.b + (cb.b - ca.b) * t1) * k
+        }
       })
       linkGeometry.getAttribute('color').needsUpdate = true
+
+      riding = riding.slice(0, BEAMS)
+      beams.visible = riding.length > 0
+      for (let i = 0; i < riding.length; i += 1) {
+        const e = edges[riding[i] as number]
+        const ia = e ? rowOf.get(e.source) : undefined
+        const c = ia === undefined ? palette.accent : (base[ia] as THREE.Color)
+        beamCol.set([c.r, c.g, c.b], i * 3)
+        beamSize[i] = 5.5
+      }
+      for (let i = riding.length; i < BEAMS; i += 1) beamSize[i] = 0
+      beamGeometry.getAttribute('color').needsUpdate = true
+      beamGeometry.getAttribute('size').needsUpdate = true
     }
     paintFocus(null)
 
@@ -503,10 +725,13 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       // means either the two-tap rule or the hover stops working.
       touch = event.pointerType === 'touch'
     }
+    /** Both meshes, because the entries joined to nothing are pickable too. */
     const under = (): string | null => {
       raycaster.setFromCamera(pointer, camera)
-      const hit = raycaster.intersectObject(nodes, false)[0]
-      return hit && hit.instanceId !== undefined ? (slugAt[hit.instanceId] ?? null) : null
+      const hit = raycaster.intersectObjects([nodes, orphans], false)[0]
+      if (!hit || hit.instanceId === undefined) return null
+      const offset = hit.object === orphans ? linked.length : 0
+      return slugAt[hit.instanceId + offset] ?? null
     }
 
     const onPointerDown = (event: PointerEvent) => {
@@ -558,10 +783,21 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       palette = readPalette()
       scene.background = palette.bg.clone()
       if (scene.fog) (scene.fog as THREE.Fog).color = palette.bg.clone()
-      base = drawn.map((n) => colourOf(n.project))
-      glowMat.blending = palette.dark ? THREE.AdditiveBlending : THREE.NormalBlending
-      glowMat.uniforms.opacity!.value = palette.dark ? 0.5 : 0.16
-      glowMat.needsUpdate = true
+      base = linked.map((n) => colourOf(n.project))
+      adriftColour.copy(palette.muted)
+      for (const [m, op] of [
+        [glowMat, palette.dark ? 0.5 : 0.16],
+        [worldMat, palette.dark ? 0.22 : 0.1],
+        [dustMat, palette.dark ? 0.45 : 0.22],
+      ] as [THREE.ShaderMaterial, number][]) {
+        m.blending = palette.dark ? THREE.AdditiveBlending : THREE.NormalBlending
+        m.uniforms.opacity!.value = op
+        m.needsUpdate = true
+      }
+      for (let i = 0; i < dustN; i += 1) {
+        dustCol.set([palette.muted.r, palette.muted.g, palette.muted.b], i * 3)
+      }
+      dustGeometry.getAttribute('color').needsUpdate = true
       linkMat.opacity = palette.dark ? 0.55 : 0.5
       key.intensity = palette.dark ? 1.35 : 1.9
       rim.intensity = palette.dark ? 0.85 : 0.45
@@ -594,16 +830,50 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
      * for as long as the tab is open.
      */
     const pool: HTMLSpanElement[] = []
+    const worldPool: HTMLSpanElement[] = []
     const projected = new THREE.Vector3()
+
+    /**
+     * The name of each world, floating where its members settled.
+     *
+     * Deliberately large and dim, sitting behind the titles rather than
+     * competing with them — the job a constellation name does on a star chart.
+     * It is the only place the entity is written down, and without it the
+     * coloured regions are a mood rather than a fact.
+     */
+    const drawWorlds = (w: number, h: number) => {
+      place.worlds.forEach((world, i) => {
+        projected.set(world.x, world.y, world.z).project(camera)
+        let span = worldPool[i]
+        if (!span) {
+          span = document.createElement('span')
+          span.className =
+            'absolute top-0 left-0 whitespace-nowrap text-[0.8125rem] font-medium uppercase leading-none tracking-[0.2em]'
+          overlay.appendChild(span)
+          worldPool[i] = span
+        }
+        if (projected.z <= -1 || projected.z >= 1) {
+          span.style.display = 'none'
+          return
+        }
+        if (span.textContent !== world.key) span.textContent = world.key
+        span.style.color = entityColor(world.key)
+        // Out of the way the moment anything is being looked at.
+        span.style.opacity = focusedRef.current ? '0.16' : '0.4'
+        span.style.transform = `translate3d(${Math.round((projected.x * 0.5 + 0.5) * w)}px, ${Math.round((-projected.y * 0.5 + 0.5) * h)}px, 0) translate(-50%, -50%)`
+        span.style.display = ''
+      })
+    }
 
     const drawLabels = () => {
       const slug = focusedRef.current
       const near = slug ? neighbours.get(slug) : null
       const w = canvas.clientWidth
       const h = canvas.clientHeight
+      drawWorlds(w, h)
 
-      const candidates: { node: (typeof drawn)[number]; x: number; y: number; z: number }[] = []
-      for (const n of drawn) {
+      const candidates: { node: (typeof linked)[number]; x: number; y: number; z: number }[] = []
+      for (const n of linked) {
         if (slug ? !(n.slug === slug || (near?.has(n.slug) ?? false)) : n.degree < LABEL_AT) continue
         const p = place.at.get(n.slug)
         if (!p) continue
@@ -670,7 +940,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       camera.updateProjectionMatrix()
       // What the renderer passes its own PointsMaterial. Left at a constant
       // the glow is sized for one window height and wrong in every other.
-      glowMat.uniforms.scale!.value = h * 0.5
+      for (const m of [glowMat, worldMat, dustMat, beamMat]) m.uniforms.scale!.value = h * 0.5
     }
     const observer = new ResizeObserver(resize)
     observer.observe(element)
@@ -680,10 +950,24 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     let frame = 0
     let alive = true
     let lastFocus: string | null = null
+    const born = performance.now()
+    /**
+     * The camera arrives rather than cutting.
+     *
+     * A second and a bit of easing in from further out. It costs nothing, it
+     * tells the reader the thing has depth before they touch it, and it is
+     * skipped entirely under prefers-reduced-motion.
+     */
+    const INTRO = motion.matches ? 0 : 1400
 
     const tick = () => {
       if (!alive) return
       raf = requestAnimationFrame(tick)
+      const age = performance.now() - born
+      if (INTRO > 0 && age < INTRO) {
+        const k = 1 - (1 - age / INTRO) ** 3
+        camera.position.copy(HOME).multiplyScalar(1 + 1.4 * (1 - k))
+      }
       controls.update()
       /**
        * Because `controls.update()` does not do it.
@@ -729,6 +1013,17 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       // every third frame: the camera moves slowly enough that nobody can see
       // the difference, and it takes the projection and the collision pass off
       // two frames in three.
+      // The beams ride their links. One pass over at most 96 points, and only
+      // while something is being looked at.
+      if (riding.length > 0) {
+        const t = (performance.now() % 1100) / 1100
+        for (let i = 0; i < riding.length; i += 1) {
+          curveOf(riding[i] as number, t, pt)
+          beamPos.set([pt.x, pt.y, pt.z], i * 3)
+        }
+        beamGeometry.getAttribute('position').needsUpdate = true
+      }
+
       frame += 1
       if (frame % 3 === 0) drawLabels()
 
@@ -748,7 +1043,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointerup', onPointerUp)
       canvas.removeEventListener('contextmenu', noMenu)
-      for (const span of pool) span.remove()
+      for (const span of [...pool, ...worldPool]) span.remove()
       // A WebGL context is not collected on unmount and the browser keeps only
       // a handful, so walking between the map and an entry a dozen times would
       // otherwise silently lose the oldest.
@@ -760,6 +1055,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
         else if (m) (m as THREE.Material).dispose()
       })
       dot.dispose()
+      haze.dispose()
       ringTex.dispose()
       renderer.dispose()
       canvas.remove()

@@ -132,6 +132,12 @@ export const GraphView = ({ graph }: Props) => {
                 ? 'joined to nothing'
                 : `${hovered.degree} link${hovered.degree === 1 ? '' : 's'}`}
               {hovered.project ? ` · ${hovered.project}` : ' · global'}
+              {/* The world it belongs to, which is what the coloured regions
+                  in the scene are. Only when it adds something: repeating the
+                  project key back as its own entity would be noise. */}
+              {hovered.entity && hovered.entity !== hovered.project
+                ? ` · ${hovered.entity}`
+                : ''}
             </span>
           </span>
         ) : hoveredMissing ? (
@@ -243,6 +249,22 @@ export const GraphView = ({ graph }: Props) => {
               : 'the band at the foot — joined to nothing'}
           </dd>
         </div>
+        {/* Only in the scene, because only the scene draws them. A legend
+            entry for something that is not on screen is worse than none. */}
+        {mode === 'scene' && able ? (
+          <div className="flex items-center gap-2">
+            <svg width="26" height="10" aria-hidden className="shrink-0">
+              <defs>
+                <radialGradient id="legend-world">
+                  <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.55" />
+                  <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+                </radialGradient>
+              </defs>
+              <circle cx="13" cy="5" r="9" fill="url(#legend-world)" />
+            </svg>
+            <dd>a named glow — one entity, the world a project belongs to</dd>
+          </div>
+        ) : null}
       </dl>
     </div>
   )

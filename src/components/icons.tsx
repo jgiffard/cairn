@@ -285,6 +285,17 @@ export const projectColor = (key: string) => pick(key, PROJECT_COLORS)
 export const labelColor = (label: string) => pick(label, PROJECT_COLORS)
 
 /**
+ * A world's own colour, derived the same way.
+ *
+ * An entity groups projects — a business, a stack, a subsystem — and on the
+ * map it is drawn as the region its projects settled into. Its colour has to
+ * come from the same palette as theirs or the region fights the dots inside
+ * it, and it has to be derived rather than stored for the same reason every
+ * other colour here is: nobody should have to choose one.
+ */
+export const entityColor = (key: string) => pick(key, PROJECT_COLORS)
+
+/**
  * The hexagon Linear uses for a project.
  *
  * Given a project key it takes that project's colour, filled rather than only

@@ -45,6 +45,15 @@ export type Layout3D = {
   radius: number
   /** The plane the joined-to-nothing sit on, below everything else. */
   floor: number
+  /**
+   * Where each world ended up, and how big it is.
+   *
+   * The scene draws a name and a soft volume at each of these. Computed here
+   * rather than there because it is the layout that knows where anything is,
+   * and because a centroid taken after the relaxation is the honest answer to
+   * "where is Dispofi" — not a guess made from the seed.
+   */
+  worlds: { key: string; x: number; y: number; z: number; spread: number; count: number }[]
 }
 
 /** How far apart the cloud wants to be, before anything is drawn in it. */
@@ -123,6 +132,29 @@ export const layout3D = (graph: KnowledgeGraph): Layout3D => {
   const repulsion = SPREAD * SPREAD * 0.9
   const rest = SPREAD * 0.22
 
+  /**
+   * Which world each node belongs to, as an index.
+   *
+   * Entries sharing an entity are pulled toward their own shared centre, on
+   * top of whatever their links are doing. Links alone give you islands;
+   * islands alone do not tell you that nineteen of the thirty-five projects
+   * are the same business. The pull is deliberately weaker than the springs —
+   * it should gather the worlds into regions, not drag two genuinely linked
+   * entries apart to sit with their own kind.
+   */
+  const worldKeys = [...new Set(connected.map((n) => n.entity).filter((e): e is string => Boolean(e)))].sort()
+  const worldOf = new Int32Array(count).fill(-1)
+  for (let i = 0; i < count; i += 1) {
+    const e = connected[i]?.entity
+    if (e) worldOf[i] = worldKeys.indexOf(e)
+  }
+  const worldN = worldKeys.length
+  const wx = new Float64Array(worldN)
+  const wy = new Float64Array(worldN)
+  const wz = new Float64Array(worldN)
+  const wc = new Float64Array(worldN)
+  const GATHER = 0.035
+
   // Skipped entirely when there is nothing to relax. A corpus where no entry
   // references another is not a broken corpus — it is a new install, and it
   // still has to draw. Returning early here instead left the orphans and the
@@ -163,6 +195,28 @@ export const layout3D = (graph: KnowledgeGraph): Layout3D => {
         fx[j] = (fx[j] as number) - ux
         fy[j] = (fy[j] as number) - uy
         fz[j] = (fz[j] as number) - uz
+      }
+    }
+
+    // Each world gathers toward its own centre of mass, recomputed every
+    // step so the regions form rather than being decided in advance.
+    if (worldN > 0) {
+      wx.fill(0); wy.fill(0); wz.fill(0); wc.fill(0)
+      for (let i = 0; i < count; i += 1) {
+        const w = worldOf[i] as number
+        if (w < 0) continue
+        wx[w] = (wx[w] as number) + (px[i] as number)
+        wy[w] = (wy[w] as number) + (py[i] as number)
+        wz[w] = (wz[w] as number) + (pz[i] as number)
+        wc[w] = (wc[w] as number) + 1
+      }
+      for (let i = 0; i < count; i += 1) {
+        const w = worldOf[i] as number
+        if (w < 0 || (wc[w] as number) < 2) continue
+        const n = wc[w] as number
+        fx[i] = (fx[i] as number) + (((wx[w] as number) / n) - (px[i] as number)) * GATHER * repulsion * 0.0004
+        fy[i] = (fy[i] as number) + (((wy[w] as number) / n) - (py[i] as number)) * GATHER * repulsion * 0.0004
+        fz[i] = (fz[i] as number) + (((wz[w] as number) / n) - (pz[i] as number)) * GATHER * repulsion * 0.0004
       }
     }
 
@@ -217,6 +271,29 @@ export const layout3D = (graph: KnowledgeGraph): Layout3D => {
     radius = Math.max(radius, Math.hypot(p.x, p.y, p.z))
   }
 
+  /**
+   * Where each world settled, and how far it reaches.
+   *
+   * `spread` is the mean distance of a world's members from their own centre,
+   * which is what the scene sizes its volume and its name from. A maximum
+   * would be dominated by the one outlier every cluster has.
+   */
+  const worlds: Layout3D['worlds'] = worldKeys.map((key, w) => {
+    let sx = 0, sy = 0, sz = 0, n = 0
+    for (let i = 0; i < count; i += 1) {
+      if ((worldOf[i] as number) !== w) continue
+      sx += px[i] as number; sy += py[i] as number; sz += pz[i] as number; n += 1
+    }
+    if (n === 0) return { key, x: 0, y: 0, z: 0, spread: SPREAD, count: 0 }
+    const cx = sx / n, cy = sy / n, cz = sz / n
+    let d = 0
+    for (let i = 0; i < count; i += 1) {
+      if ((worldOf[i] as number) !== w) continue
+      d += Math.hypot((px[i] as number) - cx, (py[i] as number) - cy, (pz[i] as number) - cz)
+    }
+    return { key, x: cx, y: cy, z: cz, spread: Math.max(SPREAD * 0.2, d / n), count: n }
+  })
+
   const floor = -radius * 0.95
 
   /**
@@ -266,5 +343,5 @@ export const layout3D = (graph: KnowledgeGraph): Layout3D => {
     })
   }
 
-  return { at, radius, floor }
+  return { at, radius, floor, worlds }
 }

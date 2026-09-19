@@ -11,10 +11,11 @@ import type { KnowledgeGraph } from '@/lib/api/knowledge-graph'
  * deterministic, so it is pinned here rather than trusted.
  */
 
-const node = (slug: string, degree: number, i: number) => ({
+const node = (slug: string, degree: number, i: number, entity: string | null = null) => ({
   slug,
   title: slug,
   project: null,
+  entity,
   degree,
   island: degree > 0 ? 0 : -1,
   x: i * 17,
@@ -204,5 +205,89 @@ describe('the map in three dimensions', () => {
     // alpha-beta-gamma are a triangle; delta hangs off alpha alone.
     expect(d('alpha', 'beta')).toBeLessThan(place.radius * 2)
     expect(d('beta', 'gamma')).toBeLessThan(place.radius * 2)
+  })
+
+  it('gathers the entries of one world closer together than the map as a whole', () => {
+    // Five entities group thirty-five projects, and the map used to say
+    // nothing about that. Links alone give you islands; islands alone do not
+    // tell you that nineteen of those projects are the same business.
+    const members = (key: string, n: number, from: number) =>
+      Array.from({ length: n }, (_, i) => node(`${key}-${i}`, 1, from + i, key))
+    const nodes = [...members('alpha', 6, 0), ...members('omega', 6, 10)]
+    const place = layout3D(
+      graph({
+        nodes,
+        // Every node linked to one hub of its OWN world, so the link forces
+        // do not decide the answer on their own.
+        edges: [
+          ...Array.from({ length: 5 }, (_, i) => ({ source: 'alpha-0', target: `alpha-${i + 1}` })),
+          ...Array.from({ length: 5 }, (_, i) => ({ source: 'omega-0', target: `omega-${i + 1}` })),
+        ],
+        missing: [],
+        isolatedFrom: nodes.length,
+      }),
+    )
+
+    const centre = (key: string) => {
+      const pts = nodes.filter((n) => n.entity === key).map((n) => place.at.get(n.slug))
+      const n = pts.length
+      return {
+        x: pts.reduce((s, p) => s + (p?.x ?? 0), 0) / n,
+        y: pts.reduce((s, p) => s + (p?.y ?? 0), 0) / n,
+        z: pts.reduce((s, p) => s + (p?.z ?? 0), 0) / n,
+      }
+    }
+    const a = centre('alpha')
+    const o = centre('omega')
+    const between = Math.hypot(a.x - o.x, a.y - o.y, a.z - o.z)
+
+    const within = (key: string, c: { x: number; y: number; z: number }) => {
+      const pts = nodes.filter((n) => n.entity === key).map((n) => place.at.get(n.slug))
+      return pts.reduce((s, p) => s + Math.hypot((p?.x ?? 0) - c.x, (p?.y ?? 0) - c.y, (p?.z ?? 0) - c.z), 0) / pts.length
+    }
+
+    // Each world is tighter around its own centre than the two worlds are
+    // from each other. That is what makes them read as regions.
+    expect(within('alpha', a)).toBeLessThan(between)
+    expect(within('omega', o)).toBeLessThan(between)
+  })
+
+  it('reports where each world ended up, and how far it reaches', () => {
+    // The scene draws a name and a soft volume at each of these, so they have
+    // to be the post-relaxation truth rather than the seed.
+    const nodes = [
+      node('a1', 1, 0, 'alpha'),
+      node('a2', 1, 1, 'alpha'),
+      node('b1', 1, 2, 'beta'),
+      node('b2', 1, 3, 'beta'),
+    ]
+    const place = layout3D(
+      graph({
+        nodes,
+        edges: [
+          { source: 'a1', target: 'a2' },
+          { source: 'b1', target: 'b2' },
+        ],
+        missing: [],
+        isolatedFrom: 4,
+      }),
+    )
+
+    expect(place.worlds.map((w) => w.key)).toEqual(['alpha', 'beta'])
+    for (const w of place.worlds) {
+      expect(w.count).toBe(2)
+      expect(Number.isFinite(w.x) && Number.isFinite(w.y) && Number.isFinite(w.z)).toBe(true)
+      expect(w.spread).toBeGreaterThan(0)
+    }
+  })
+
+  it('leaves a corpus with no entities alone', () => {
+    // Most installs will have none, and the gathering must then be a no-op
+    // rather than a force pulling everything to one point.
+    const place = layout3D(graph())
+    expect(place.worlds).toEqual([])
+    for (const p of place.at.values()) {
+      expect(Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)).toBe(true)
+    }
   })
 })
