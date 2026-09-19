@@ -297,7 +297,23 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     const controls = new OrbitControls(camera, canvas)
     controls.target.copy(TARGET)
     controls.enableDamping = true
-    controls.dampingFactor = 0.075
+    const DAMPING = 0.075
+    controls.dampingFactor = DAMPING
+    /**
+     * Set when the rotation has to stop DEAD rather than coast.
+     *
+     * Turning `autoRotate` off only stops it accelerating. The accumulated
+     * spherical delta then decays at the damping factor — about thirteen
+     * frames at 0.075, a fifth of a second — and measured on the deployed map
+     * that coast was just enough to slide a node out from under the cursor
+     * that had paused it. Hover dropped, rotation resumed, and it oscillated:
+     * stop, drift off, start, catch again.
+     *
+     * A damping factor of 1 for a single update multiplies that residual by
+     * zero, which is the one frame of "stop now" the public API does not
+     * otherwise offer.
+     */
+    let halt = false
     // Rotate and dolly only. Panning as well is three gestures competing for
     // two buttons, and a camera that can be walked far enough from the cloud
     // that there is no way back but the reset.
@@ -1104,7 +1120,12 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
           .multiplyScalar((want || from) / (from || 1))
           .add(TARGET)
       }
+      if (halt) controls.dampingFactor = 1
       controls.update()
+      if (halt) {
+        controls.dampingFactor = DAMPING
+        halt = false
+      }
       /**
        * Because `controls.update()` does not do it.
        *
@@ -1147,6 +1168,8 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
            * lit, and the whole thing is sliding out from under the pointer.
            */
           controls.autoRotate = slug === null && !motion.matches
+          // Stop dead on the way in; coasting away is fine on the way out.
+          if (slug !== null) halt = true
         }
       }
 
