@@ -534,7 +534,9 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     beamGeometry.setAttribute('position', new THREE.BufferAttribute(beamPos, 3))
     beamGeometry.setAttribute('color', new THREE.BufferAttribute(beamCol, 3))
     beamGeometry.setAttribute('size', new THREE.BufferAttribute(beamSize, 1))
-    const beamMat = spriteMaterial(dot, true, 0.95)
+    // Additive on the dark ground is light; on white it washes to nothing,
+    // which is where the glow already learned this lesson.
+    const beamMat = spriteMaterial(dot, palette.dark, palette.dark ? 0.95 : 0.7)
     const beams = new THREE.Points(beamGeometry, beamMat)
     beams.frustumCulled = false
     beams.visible = false
@@ -789,6 +791,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
         [glowMat, palette.dark ? 0.5 : 0.16],
         [worldMat, palette.dark ? 0.22 : 0.1],
         [dustMat, palette.dark ? 0.45 : 0.22],
+        [beamMat, palette.dark ? 0.95 : 0.7],
       ] as [THREE.ShaderMaterial, number][]) {
         m.blending = palette.dark ? THREE.AdditiveBlending : THREE.NormalBlending
         m.uniforms.opacity!.value = op
