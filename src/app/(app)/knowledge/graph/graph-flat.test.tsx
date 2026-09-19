@@ -40,7 +40,7 @@ describe('the map draws', () => {
   it('draws every entry, and every reference to nothing', () => {
     // Counted by position rather than by element, because each node is drawn
     // twice — once as its glow and once as itself.
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     for (const { x, y } of [...graph().nodes, ...graph().missing]) {
       expect(html).toContain(`cx="${x}"`)
@@ -51,20 +51,20 @@ describe('the map draws', () => {
   it('draws a node joined to nothing, rather than leaving it out', () => {
     // The isolates are the finding. Dropping them for being edgeless would
     // remove the single most informative thing on the page.
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     expect(html).toContain('cy="200"')
   })
 
   it('draws a reference to an entry nobody wrote', () => {
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     expect(html).toContain('stroke-dasharray')
     expect(html).toContain('var(--danger)')
   })
 
   it('never emits a NaN coordinate', () => {
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     expect(html).not.toContain('NaN')
   })
@@ -73,7 +73,7 @@ describe('the map draws', () => {
     // A superseded entry is excluded from the nodes; a reference to it must
     // not take the whole page down with it.
     const html = renderToStaticMarkup(
-      <GraphFlat graph={graph({ edges: [{ source: 'alpha', target: 'gone' }] })} focused={null} setFocused={() => {}} />,
+      <GraphFlat graph={graph({ edges: [{ source: 'alpha', target: 'gone' }] })} focused={null} setFocused={() => {}} spotlight={null} />,
     )
 
     expect(html).toContain('<circle')
@@ -83,7 +83,7 @@ describe('the map draws', () => {
   it('takes its colours from the theme tokens, so light and dark both work', () => {
     // A hard-coded hex here would look correct in whichever theme it was
     // written in and wrong in the other, with nothing to catch it.
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     // The project palette is deliberately literal — `projectColor` is the same
     // hash every project icon in the app uses, and a project's colour is meant
@@ -94,7 +94,7 @@ describe('the map draws', () => {
   })
 
   it('says what it is, for a reader who cannot see it', () => {
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     expect(html).toMatch(/aria-label="[^"]*joined to nothing"/)
   })
@@ -102,7 +102,7 @@ describe('the map draws', () => {
   it('bows its links rather than ruling them', () => {
     // Straight lines between hundreds of nodes cross into a hatch and every
     // one reads the same. The bow is what separates the crossings.
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     expect(html).toMatch(/<path d="M[^"]*Q[^"]*"/)
   })
@@ -112,8 +112,8 @@ describe('the map draws', () => {
     // for the same reason the layout is: this remounts whenever the live
     // stream reports a change, and a map that re-choreographs itself every few
     // minutes is a map nobody can read.
-    const first = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
-    const second = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const first = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
+    const second = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     expect(second).toBe(first)
     expect(first).toContain('--drift')
@@ -123,14 +123,14 @@ describe('the map draws', () => {
     // A pulse on all 450 links is a repaint every frame, and a map that
     // shimmers everywhere says nothing about anywhere. Nothing is hovered in a
     // server render, so there should be no beam at all.
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     expect(html).not.toContain('graph-beam')
   })
 
   it('renders an empty corpus without drawing anything', () => {
     const html = renderToStaticMarkup(
-      <GraphFlat graph={graph({ nodes: [], edges: [], missing: [], isolatedFrom: 0 })} focused={null} setFocused={() => {}} />,
+      <GraphFlat graph={graph({ nodes: [], edges: [], missing: [], isolatedFrom: 0 })} focused={null} setFocused={() => {}} spotlight={null} />,
     )
 
     // The legend has circles of its own, so this asks about the map rather
@@ -145,7 +145,7 @@ describe('the map draws', () => {
     // focusability: without this, Tab from the breadcrumb walked several
     // hundred unnamed, unstyled stops. The page says plainly that the map is
     // not a navigation surface; the zoom buttons are the keyboard path in.
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     expect(html).toContain('tabindex="-1"')
     expect(html).toContain('aria-label="Zoom in"')
@@ -155,7 +155,7 @@ describe('the map draws', () => {
     // Every node is in the viewport at once, so the default viewport prefetch
     // schedules one request per entry on first paint — 377 of them here, each
     // through the app layout.
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     expect(html).not.toContain('prefetch="true"')
   })
@@ -164,7 +164,7 @@ describe('the map draws', () => {
     // Mounting the halo only when lit meant focusing one node unmounted ~370
     // circles and remounted them on leave — a great deal of work to make a
     // picture quieter. It is always drawn and dimmed to nothing instead.
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     // Two gradients, one glow. Entries with no project take the weaker one:
     // their colour is a plain grey, and a grey glow on a white ground reads
@@ -179,7 +179,7 @@ describe('the map draws', () => {
     // The one case where the halo had no hue to separate it from the ground.
     // Measured on the deployed map in light mode it read as a dirty cloud
     // behind the cluster, or as a compression artefact — not as light.
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     const strong = html.match(/id="halo"[\s\S]*?<\/radialGradient>/)?.[0] ?? ''
     const weak = html.match(/id="halo-global"[\s\S]*?<\/radialGradient>/)?.[0] ?? ''
@@ -194,7 +194,7 @@ describe('the map draws', () => {
     // over the dots rather than small text. There is no layout in a static
     // render, so what is asserted is the thing that broke: the size is not a
     // constant baked into the markup.
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     expect(html).not.toContain('font-size="7.6"')
   })
@@ -207,7 +207,7 @@ describe('the map draws', () => {
     const crowded = graph({
       nodes: graph().nodes.map((n) => ({ ...n, degree: 9 })),
     })
-    const html = renderToStaticMarkup(<GraphFlat graph={crowded} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={crowded} focused={null} setFocused={() => {}} spotlight={null} />)
 
     const titles = html.match(/<text[^>]*paint-order="stroke"[^>]*>/g) ?? []
     expect(titles.length).toBeGreaterThan(0)
@@ -218,7 +218,7 @@ describe('the map draws', () => {
     // They sit in a grid at the foot of the map and read as a count, so there
     // is nothing for breathing to say about them — and it takes a third of the
     // animated groups off a loop that runs for as long as the page is open.
-    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={graph()} focused={null} setFocused={() => {}} spotlight={null} />)
 
     expect((html.match(/graph-still/g) ?? []).length).toBe(
       graph().nodes.filter((n) => n.degree === 0).length,
@@ -240,7 +240,7 @@ describe('the map draws', () => {
         y: 100,
       })),
     })
-    const html = renderToStaticMarkup(<GraphFlat graph={crowded} focused={null} setFocused={() => {}} />)
+    const html = renderToStaticMarkup(<GraphFlat graph={crowded} focused={null} setFocused={() => {}} spotlight={null} />)
 
     // Twelve nodes a pixel apart, all important enough to label: at most one
     // title can fit there.

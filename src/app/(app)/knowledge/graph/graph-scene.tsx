@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { entityColor, projectColor } from '@/components/icons'
 import { layout3D } from '@/lib/graph-3d'
+import { inSpotlight, type Spotlight } from '@/lib/graph-spotlight'
 import type { KnowledgeGraph } from '@/lib/api/knowledge-graph'
 
 /**
@@ -39,6 +40,8 @@ type Props = {
   /** Lifted, so the shell can draw one title bar over either renderer. */
   onHover: (slug: string | null) => void
   focused: string | null
+  /** One project or world lit against the rest, or null for all of it. */
+  spotlight: Spotlight
 }
 
 /** A radius that makes a hub look like one, in world units. */
@@ -186,7 +189,7 @@ const spriteMaterial = (map: THREE.Texture, additive: boolean, opacity: number) 
     blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
   })
 
-export const GraphScene = ({ graph, onHover, focused }: Props) => {
+export const GraphScene = ({ graph, onHover, focused, spotlight }: Props) => {
   const host = useRef<HTMLDivElement>(null)
   const layer = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -196,6 +199,12 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
   useEffect(() => {
     focusedRef.current = focused
   }, [focused])
+
+  /** Same reason: the scene is built once and reads this every frame. */
+  const spotRef = useRef<Spotlight>(null)
+  useEffect(() => {
+    spotRef.current = spotlight
+  }, [spotlight])
 
   const onHoverRef = useRef(onHover)
   useEffect(() => {
@@ -372,6 +381,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     const linked = all.filter((n) => n.degree > 0)
     const adrift = all.filter((n) => n.degree === 0)
     const slugAt = [...linked.map((n) => n.slug), ...adrift.map((n) => n.slug)]
+    const byslug = new Map(all.map((n) => [n.slug, n]))
     const rowOf = new Map(linked.map((n, i) => [n.slug, i]))
     const colourOf = (project: string | null) =>
       project ? new THREE.Color(projectColor(project)) : palette.muted.clone()
@@ -698,7 +708,22 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
 
     const paintFocus = (slug: string | null) => {
       const near = slug ? neighbours.get(slug) : null
-      const inSet = (s: string) => slug === null || slug === s || (near?.has(s) ?? false)
+      const spot = spotRef.current
+      /**
+       * Hover wins over the spotlight.
+       *
+       * A spotlight is the resting state — "I am looking at Dispofi" — and
+       * pointing at a node is a question asked on top of it. If the two
+       * fought, hovering a neighbour that happens to sit outside the lit
+       * project would dim the thing you are pointing at, which is the one
+       * result nobody wants from a hover.
+       */
+      const inSet = (s: string) => {
+        if (slug !== null) return slug === s || (near?.has(s) ?? false)
+        if (!spot) return true
+        const n = byslug.get(s)
+        return n ? inSpotlight(n, spot) : false
+      }
 
       for (let i = 0; i < linked.length; i += 1) {
         const n = linked[i]
@@ -967,7 +992,11 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
         // coloured haze is the one place on this map contrast can vanish.
         span.style.textShadow = '0 0 6px var(--bg), 0 0 12px var(--bg)'
         // Out of the way the moment anything is being looked at.
-        span.style.opacity = focusedRef.current ? '0.25' : '0.72'
+        const spot = spotRef.current
+        const dimmed =
+          Boolean(focusedRef.current) ||
+          Boolean(spot && !(spot.kind === 'entity' && spot.key === world.key))
+        span.style.opacity = dimmed ? '0.25' : '0.72'
         span.style.transform = `translate3d(${Math.round((projected.x * 0.5 + 0.5) * w)}px, ${Math.round((-projected.y * 0.5 + 0.5) * h)}px, 0) translate(-50%, -50%)`
         span.style.display = ''
       })
@@ -1083,6 +1112,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     let frame = 0
     let alive = true
     let lastFocus: string | null = null
+    let lastSpot: Spotlight = null
     const born = performance.now()
     /**
      * The camera arrives rather than cutting.
@@ -1173,8 +1203,9 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
         }
       }
 
-      if (focusedRef.current !== lastFocus) {
+      if (focusedRef.current !== lastFocus || spotRef.current !== lastSpot) {
         lastFocus = focusedRef.current
+        lastSpot = spotRef.current
         paintFocus(lastFocus)
       }
 
