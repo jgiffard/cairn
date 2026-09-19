@@ -151,12 +151,12 @@ export const GraphView = ({ graph }: Props) => {
           <>
             <span className="hidden sm:inline">
               {mode === 'scene' && able
-                ? 'Hover to name it · drag to orbit · scroll to move in or out'
+                ? 'Hover to name it · drag to orbit · scroll toward the cursor · double-click to reset'
                 : 'Hover a node · drag to pan · scroll to zoom · double-click to reset'}
             </span>
             <span className="sm:hidden">
               {mode === 'scene' && able
-                ? 'Tap a node · drag to orbit · pinch to move in'
+                ? 'Tap a node · drag to orbit · pinch to move in · double-tap to reset'
                 : 'Tap a node · drag to pan · pinch to zoom'}
             </span>
           </>
