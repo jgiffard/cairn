@@ -1,619 +1,127 @@
 'use client'
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
-import { projectColor } from '@/components/icons'
-import type { GraphNode, KnowledgeGraph } from '@/lib/api/knowledge-graph'
+import dynamic from 'next/dynamic'
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
+import { Box, Map as MapIcon } from 'lucide-react'
+import { GraphFlat } from './graph-flat'
+import type { KnowledgeGraph } from '@/lib/api/knowledge-graph'
 
 /**
- * The map, drawn as inline SVG.
+ * The map, and the choice of how to draw it.
  *
- * SVG rather than canvas, and that is the load-bearing choice. Colour here is
- * `var(--border)`, `var(--danger)` and the project palette, so the light/dark
- * swap — a class flipped on `<html>` by next-themes, which notifies no
- * JavaScript at all — is a plain CSS repaint. A canvas would have to read the
- * custom properties back out with getComputedStyle and repaint the scene from
- * a MutationObserver on that class, which is a lot of machinery to end up
- * where a stylesheet already was.
+ * Two renderers sit under this: the flat SVG one, which is the original and
+ * still the honest answer to "how much of this corpus is joined to nothing",
+ * and a WebGL scene you can orbit. The shell owns the things that belong to
+ * neither — what is under the pointer, the legend, the toggle — so that the
+ * title bar reads the same whichever is mounted and hovering a node means the
+ * same thing in both.
  *
- * It is also why this is not WebGL. Three dimensions would photograph well and
- * read worse: depth hides exactly what this page exists to show — how much of
- * the corpus is joined to nothing — behind whatever happens to be in front of
- * it. What makes a flat map feel alive is light and motion, and both are
- * cheaper here than a camera.
- *
- * Every position arrives as a prop and nothing is simulated in the browser, so
- * the picture cannot jump when `router.refresh()` lands after an agent writes
- * a note. The drift below moves nodes AROUND those fixed anchors; it never
- * changes them.
+ * three.js is a large dependency and it is only ever needed here, so the scene
+ * is loaded on demand. `ssr: false` is not a preference: it touches `document`
+ * to build its textures and reads the stylesheet for the palette, neither of
+ * which exist on the server.
  */
-
-/** Breathing room around the drawing, as a share of its longest side. */
-const MARGIN = 0.04
-
-/** Enough links to be worth naming without being asked. */
-const LABEL_AT = 6
+const GraphScene = dynamic(() => import('./graph-scene'), {
+  ssr: false,
+  loading: () => null,
+})
 
 type Props = { graph: KnowledgeGraph }
 
-/** Deterministic, and the same hash the layout and the palette use. */
-const hash = (key: string): number => {
-  let h = 0
-  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) >>> 0
-  return h
+type Mode = 'scene' | 'flat'
+
+const STORAGE = 'cairn:knowledge-map-mode'
+
+/**
+ * Whether this browser can actually do it.
+ *
+ * Asked by trying, because the alternatives all lie: a WebGL2 entry in
+ * `navigator` says nothing about whether a context can be allocated, and
+ * machines with the GPU blocklisted report support right up until creation
+ * fails. A failed probe here is what keeps the flat map on screen instead of a
+ * black rectangle.
+ *
+ * Asked exactly once, and the answer kept. The probe allocates a real context,
+ * and it is read on every render through `useSyncExternalStore`, which
+ * compares what it gets back by identity — an uncached boolean would be a new
+ * probe per render and a new context per probe.
+ */
+let probed: { able: boolean; mode: Mode } | null = null
+
+const capability = (): { able: boolean; mode: Mode } => {
+  if (probed) return probed
+  let able = false
+  try {
+    const canvas = document.createElement('canvas')
+    const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+    if (gl) {
+      able = true
+      // Released immediately: a probe that keeps its context spends one of the
+      // handful the browser will hand out.
+      ;(gl as WebGLRenderingContext).getExtension('WEBGL_lose_context')?.loseContext()
+    }
+  } catch {
+    able = false
+  }
+  let saved: string | null = null
+  try {
+    saved = window.localStorage.getItem(STORAGE)
+  } catch {
+    // Private windows and blocked site data both throw here, and a remembered
+    // preference is not worth failing a render over.
+  }
+  probed = { able, mode: able && saved !== 'flat' ? 'scene' : 'flat' }
+  return probed
 }
 
-/** A radius that makes a hub look like one. */
-const radiusOf = (degree: number): number =>
-  degree === 0 ? 2.6 : 3.4 + Math.min(9, Math.sqrt(degree) * 2.6)
-
 /**
- * A link, bowed rather than ruled.
+ * Nothing to subscribe to: the answer cannot change while the page is open.
  *
- * Straight lines between hundreds of nodes cross into a hatch pattern and
- * every one of them reads the same. A consistent bow — always the same side,
- * always the same fraction of the span — separates the crossings and gives
- * the web the look of something grown rather than drawn.
+ * `useSyncExternalStore` rather than a `useState` set from an effect, because
+ * this is exactly what it is for — a value React cannot compute during render
+ * on the server, read consistently on the client. Done with an effect instead,
+ * the first paint is always the flat map and a capable browser then re-renders
+ * into the scene, which is the cascading render the rule warns about and which
+ * anyone on WebGL would see as a flash.
  */
-const curve = (ax: number, ay: number, bx: number, by: number): string => {
-  const mx = (ax + bx) / 2
-  const my = (ay + by) / 2
-  const dx = bx - ax
-  const dy = by - ay
-  const length = Math.hypot(dx, dy) || 1
-  const bow = Math.min(18, length * 0.12)
-  return `M${ax} ${ay} Q${mx - (dy / length) * bow} ${my + (dx / length) * bow} ${bx} ${by}`
-}
-
-/** Everything the drawn layers need, and nothing that changes on a wheel tick. */
-type LayerProps = {
-  graph: KnowledgeGraph
-  at: Map<string, GraphNode>
-  neighbours: Map<string, Set<string>>
-  focused: string | null
-  onFocus: (slug: string | null) => void
-}
-
-const isLit = (focused: string | null, neighbours: LayerProps['neighbours'], slug: string) =>
-  focused === null || focused === slug || (neighbours.get(focused)?.has(slug) ?? false)
-
-/**
- * The three drawn layers, memoised.
- *
- * None of this depends on the zoom or the pan — those are one transform on the
- * group above. Left inline, a wheel tick re-diffed roughly 2,500 SVG elements,
- * at trackpad rates of fifty to a hundred a second, and a hover did the same.
- * Split out, a zoom re-renders one attribute.
- */
-const EdgeLayer = memo(function EdgeLayer({ graph, at, neighbours, focused }: LayerProps) {
-  return (
-    <g stroke="var(--fg-subtle)" strokeLinecap="round" fill="none">
-      {graph.edges.map(({ source, target }) => {
-        const a = at.get(source)
-        const b = at.get(target)
-        if (!a || !b) return null
-        const on = isLit(focused, neighbours, source) && isLit(focused, neighbours, target)
-        const path = curve(a.x, a.y, b.x, b.y)
-        return (
-          <g key={`${source}-${target}`}>
-            <path
-              d={path}
-              strokeWidth={on && focused ? 1.5 : 1}
-              opacity={on ? (focused ? 0.9 : 0.34) : 0.09}
-            />
-            {/* Light travelling the links of whatever is being looked at.
-                Only those links: a pulse on all 450 is a repaint every frame,
-                and a map that shimmers everywhere says nothing about
-                anywhere. */}
-            {focused && on && (
-              <path
-                className="graph-beam"
-                d={path}
-                stroke={a.project ? projectColor(a.project) : 'var(--accent)'}
-                strokeWidth={1.8}
-              />
-            )}
-          </g>
-        )
-      })}
-    </g>
-  )
-})
-
-/**
- * A reference to something nobody wrote, drawn where it was made.
- *
- * Dashed and hollow, because the whole point is that it is not there —
- * dropping it is what kept 31 of these invisible.
- */
-const MissingLayer = memo(function MissingLayer({
-  graph,
-  at,
-  neighbours,
-  focused,
-  onFocus,
-}: LayerProps) {
-  return (
-    <g>
-      {graph.missing.map((gap) => {
-        const anchor = at.get(gap.from[0] as string)
-        const on = isLit(focused, neighbours, gap.slug)
-        return (
-          <g key={gap.slug} opacity={on ? 1 : 0.12}>
-            {anchor && (
-              <path
-                d={curve(anchor.x, anchor.y, gap.x, gap.y)}
-                fill="none"
-                stroke="var(--danger)"
-                strokeWidth={1}
-                strokeDasharray="2 3"
-                opacity={0.55}
-              />
-            )}
-            <circle
-              cx={gap.x}
-              cy={gap.y}
-              r={3.6}
-              fill="none"
-              stroke="var(--danger)"
-              strokeWidth={1.2}
-              strokeDasharray="2.5 2"
-              onPointerEnter={() => onFocus(gap.slug)}
-              onPointerLeave={() => onFocus(null)}
-              className="cursor-help"
-            />
-          </g>
-        )
-      })}
-    </g>
-  )
-})
-
-/**
- * The nodes, and the light around them.
- *
- * The halo is drawn unconditionally and dimmed to nothing, rather than mounted
- * only when lit: focusing one node used to unmount roughly 370 circles and
- * remount them on leave, which is a great deal of work to make a picture
- * quieter.
- *
- * Drift is skipped for anything joined to nothing. Those sit in a grid at the
- * foot of the map and read as a count, so there is nothing for breathing to
- * say about them — and it takes a third of the animated groups off a raster
- * loop that never stops while the page is open.
- */
-const NodeLayer = memo(function NodeLayer({
-  graph,
-  at: _at,
-  neighbours,
-  focused,
-  onFocus,
-  onOpen,
-}: LayerProps & { onOpen: (slug: string, event: React.MouseEvent) => void }) {
-  return (
-    <>
-      {graph.nodes.map((n) => {
-        const on = isLit(focused, neighbours, n.slug)
-        const r = radiusOf(n.degree)
-        const colour = n.project ? projectColor(n.project) : 'var(--fg-muted)'
-        const seed = hash(n.slug)
-        return (
-          <g
-            key={n.slug}
-            className={n.degree === 0 ? 'graph-node graph-still' : 'graph-node'}
-            style={
-              {
-                '--delay': `${-(seed % 9000) / 1000}s`,
-                '--drift': `${6 + (seed % 5)}s`,
-                '--rise': `${((seed % 700) / 1000).toFixed(2)}s`,
-              } as React.CSSProperties
-            }
-          >
-            <circle
-              cx={n.x}
-              cy={n.y}
-              r={r * 3.2}
-              fill="url(#halo)"
-              color={colour}
-              opacity={on ? (n.degree === 0 ? 0.35 : focused ? 1 : 0.8) : 0}
-              className="pointer-events-none"
-            />
-            <Link
-              href={`/knowledge/${n.slug}`}
-              // Every node is in the viewport at once, so the default viewport
-              // prefetch schedules a request per entry on first paint — 377 of
-              // them, each through the app layout.
-              prefetch={false}
-              // The map is not a navigation surface; the page says so. One tab
-              // stop per entry would put several hundred unnamed, unstyled
-              // stops between the breadcrumb and the legend, and a focusable
-              // element inside role="img" is wrong anyway.
-              tabIndex={-1}
-            >
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={r}
-                fill={colour}
-                stroke="var(--bg)"
-                strokeWidth={n.degree === 0 ? 0.7 : 1.1}
-                opacity={on ? (n.degree === 0 ? 0.6 : 1) : 0.16}
-                onPointerEnter={() => onFocus(n.slug)}
-                onPointerLeave={() => onFocus(null)}
-                onClick={(event) => onOpen(n.slug, event)}
-                className="cursor-pointer transition-opacity"
-              />
-            </Link>
-          </g>
-        )
-      })}
-    </>
-  )
-})
+const noSubscribe = () => () => {}
+/** The server has no canvas, and the flat map is the safe thing to agree on. */
+const onServer = (): { able: boolean; mode: Mode } => SERVER_STATE
+const SERVER_STATE: { able: boolean; mode: Mode } = { able: false, mode: 'flat' }
 
 export const GraphView = ({ graph }: Props) => {
   const [focused, setFocused] = useState<string | null>(null)
-  // Read by the click handler, which must stay referentially stable or the
-  // memoised node layer re-renders on every hover — the thing this avoids.
-  const focusedRef = useRef<string | null>(null)
-  const [zoom, setZoom] = useState(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
-  const drag = useRef<{ x: number; y: number; panX: number; panY: number; moved: boolean } | null>(
-    null,
-  )
-  /** Live pointers, so two fingers can pinch. */
-  const touches = useRef(new Map<number, { x: number; y: number }>())
-  const pinch = useRef<{ apart: number; zoom: number } | null>(null)
-  /** Whether the gesture that just ended moved the map, read by the click. */
-  const dragged = useRef(false)
-  /** A click event does not carry it, and touch has to behave differently. */
-  const lastPointer = useRef<string>('mouse')
 
-  /** Who each node touches, so hovering one can dim everything it does not. */
-  const neighbours = useMemo(() => {
-    const map = new Map<string, Set<string>>()
-    const join = (a: string, b: string) => {
-      if (!map.has(a)) map.set(a, new Set())
-      map.get(a)?.add(b)
+  const { able, mode: preferred } = useSyncExternalStore(noSubscribe, capability, onServer)
+  /** What the toggle was last set to, which outranks the remembered answer. */
+  const [chosen, setChosen] = useState<Mode | null>(null)
+  const mode = able ? (chosen ?? preferred) : 'flat'
+
+  const choose = useCallback((next: Mode) => {
+    setChosen(next)
+    setFocused(null)
+    try {
+      window.localStorage.setItem(STORAGE, next)
+    } catch {
+      // As above: remembering is a convenience, not a requirement.
     }
-    for (const { source, target } of graph.edges) {
-      join(source, target)
-      join(target, source)
-    }
-    for (const gap of graph.missing) {
-      for (const from of gap.from) {
-        join(from, gap.slug)
-        join(gap.slug, from)
-      }
-    }
-    return map
-  }, [graph.edges, graph.missing])
-
-  const lit = (slug: string): boolean => isLit(focused, neighbours, slug)
-
-  const at = useMemo(() => new Map(graph.nodes.map((n) => [n.slug, n])), [graph.nodes])
-  const node = at
-
-  /**
-   * Opening a node, kept out of the layer so the layer can be memoised.
-   *
-   * A drag that ended on a node is a drag, not a click. And on a touch screen
-   * the gesture that reveals a node IS the gesture that opens it, so the first
-   * tap reads it and only a second one follows the link.
-   */
-  const openNode = useCallback(
-    (slug: string, event: React.MouseEvent) => {
-      if (dragged.current) event.preventDefault()
-      else if (lastPointer.current === 'touch' && focusedRef.current !== slug) {
-        event.preventDefault()
-        setFocused(slug)
-      }
-    },
-    [],
-  )
-  const hovered = focused ? node.get(focused) : null
-  const hoveredMissing = focused ? graph.missing.find((m) => m.slug === focused) : null
-
-  /**
-   * The frame, fitted to what is actually drawn.
-   *
-   * Sized from the extremes of every node and stub rather than from the
-   * layout's own numbers, because a dangling stub sits outside the island it
-   * hangs off and would otherwise be clipped at the edge.
-   */
-  const box = useMemo(() => {
-    const xs = [...graph.nodes.map((n) => n.x), ...graph.missing.map((m) => m.x)]
-    const ys = [...graph.nodes.map((n) => n.y), ...graph.missing.map((m) => m.y)]
-    if (xs.length === 0) return { x: 0, y: 0, w: 100, h: 100 }
-    const minX = Math.min(...xs)
-    const minY = Math.min(...ys)
-    // Floored at something drawable. A single entry puts every coordinate at
-    // zero, and a 1-unit box against a node of radius 2.6 with a halo of 8.3
-    // scaled that one dot to fill the window.
-    const w = Math.max(90, Math.max(...xs) - minX)
-    const h = Math.max(90, Math.max(...ys) - minY)
-    const pad = Math.max(w, h) * MARGIN
-    return { x: minX - pad, y: minY - pad, w: w + pad * 2, h: h + pad * 2 }
-  }, [graph.nodes, graph.missing])
-
-  /**
-   * Which titles to draw, chosen so that none lands on another.
-   *
-   * Drawn by importance and skipped on collision. Without this the dense
-   * clusters stacked a dozen titles into one grey smear — worse than no labels
-   * at all, because it hid the nodes underneath as well as itself.
-   *
-   * The text is sized in SCREEN units, not map units, so zooming in does not
-   * magnify the same wall of text: the boxes shrink against the map, more of
-   * them fit, and the corpus labels itself as you go in. Which is the
-   * behaviour anyone who has used a map expects.
-   */
-  /**
-   * Zoom, in steps, for the labels only.
-   *
-   * The collision pass is cheap but it is not free, and a trackpad delivers a
-   * hundred zoom events a second. Rounding to quarter-steps means it runs when
-   * the set of labels could actually change, rather than on every tick.
-   */
-  const labelZoom = Math.max(0.5, Math.round(zoom * 4) / 4)
-
-  const labels = useMemo(() => {
-    const size = 7.6 / labelZoom
-    const near = focused ? neighbours.get(focused) : null
-    const candidates = focused
-      ? graph.nodes
-          .filter((n) => n.slug === focused || (near?.has(n.slug) ?? false))
-          .sort((a, b) => (a.slug === focused ? -1 : b.slug === focused ? 1 : b.degree - a.degree))
-      : graph.nodes.filter((n) => n.degree >= LABEL_AT).sort((a, b) => b.degree - a.degree)
-
-    const placed: { x: number; y: number; w: number; h: number }[] = []
-    const out: { node: GraphNode; text: string; size: number }[] = []
-
-    for (const n of candidates.slice(0, 160)) {
-      const text = n.title.length > 42 ? `${n.title.slice(0, 41)}…` : n.title
-      // Close enough for a box test, and far cheaper than measuring text.
-      const w = text.length * size * 0.5
-      const h = size * 1.35
-      const x = n.x - w / 2
-      const y = n.y - radiusOf(n.degree) - 4 - h
-
-      const clash = placed.some(
-        (b) => x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + h > b.y,
-      )
-      if (clash) continue
-
-      placed.push({ x, y, w, h })
-      out.push({ node: n, text, size })
-      if (out.length >= 60) break
-    }
-    return out
-  }, [graph.nodes, focused, labelZoom, neighbours])
-
-  const reset = useCallback(() => {
-    setZoom(1)
-    setPan({ x: 0, y: 0 })
   }, [])
 
-  useEffect(() => {
-    focusedRef.current = focused
-  }, [focused])
-
-  const svg = useRef<SVGSVGElement>(null)
-
-  /**
-   * Zoom, anchored where the pointer is.
-   *
-   * Anchored to the centre of the box it pushed whatever you were looking at
-   * off the screen, so reading one island meant alternating zoom and drag.
-   * Keeping the point under the cursor fixed is what every map does.
-   */
-  const zoomAt = useCallback(
-    (factor: number, clientX?: number, clientY?: number) => {
-      const element = svg.current
-      setZoom((current) => {
-        const next = Math.min(8, Math.max(0.6, current * factor))
-        if (!element || clientX === undefined || clientY === undefined) return next
-
-        const rect = element.getBoundingClientRect()
-        // Where the cursor is in the frame, as a share of it, measured from
-        // the centre — the point the transform rotates around.
-        const fx = (clientX - rect.left) / (rect.width || 1) - 0.5
-        const fy = (clientY - rect.top) / (rect.height || 1) - 0.5
-        const shownW = box.w / current
-        const shownH = box.h / current
-        const grownW = box.w / next
-        const grownH = box.h / next
-        setPan((p) => ({
-          x: p.x + fx * (grownW - shownW),
-          y: p.y + fy * (grownH - shownH),
-        }))
-        return next
-      })
-    },
-    [box.w, box.h],
-  )
-
-  /**
-   * The wheel, attached by hand.
-   *
-   * React registers `wheel` passively, so `preventDefault` inside an `onWheel`
-   * prop does nothing at all — the browser logs that it was ignored. Nothing
-   * scrolled only because this page happens not to, and ctrl+wheel still
-   * zoomed the browser and the map at once.
-   */
-  useEffect(() => {
-    const element = svg.current
-    if (!element) return
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault()
-      zoomAt(event.deltaY < 0 ? 1.12 : 0.89, event.clientX, event.clientY)
-    }
-    element.addEventListener('wheel', onWheel, { passive: false })
-    return () => element.removeEventListener('wheel', onWheel)
-  }, [zoomAt])
+  const at = useMemo(() => new Map(graph.nodes.map((n) => [n.slug, n])), [graph.nodes])
+  const hovered = focused ? at.get(focused) : null
+  const hoveredMissing = focused ? graph.missing.find((m) => m.slug === focused) : null
 
   return (
     <div className="bg-bg relative h-full w-full overflow-hidden">
-      <svg
-        ref={svg}
-        viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}
-        className="graph block h-full w-full cursor-grab touch-none select-none active:cursor-grabbing"
-        role="img"
-        aria-label={`${graph.stats.entries} knowledge entries, ${graph.edges.length} links between them, ${graph.stats.isolated} joined to nothing`}
-        onPointerDown={(event) => {
-          lastPointer.current = event.pointerType
-          touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
-          drag.current = {
-            x: event.clientX,
-            y: event.clientY,
-            panX: pan.x,
-            panY: pan.y,
-            moved: false,
-          }
-          event.currentTarget.setPointerCapture(event.pointerId)
-        }}
-        onPointerMove={(event) => {
-          if (touches.current.has(event.pointerId)) {
-            touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
-          }
+      {mode === 'scene' && able ? (
+        <GraphScene graph={graph} focused={focused} onHover={setFocused} />
+      ) : (
+        <GraphFlat graph={graph} focused={focused} setFocused={setFocused} />
+      )}
 
-          /**
-           * Two fingers: pinch.
-           *
-           * `touch-action: none` is what lets this pan at all, and it also
-           * turns off the browser's own pinch — so without this the map had no
-           * zoom whatsoever on a phone, which meant 377 nodes as sub-pixel
-           * dots with no way to get closer.
-           */
-          if (touches.current.size >= 2) {
-            const [a, b] = [...touches.current.values()]
-            if (a && b) {
-              const apart = Math.hypot(a.x - b.x, a.y - b.y)
-              if (!pinch.current) pinch.current = { apart, zoom }
-              else if (pinch.current.apart > 0) {
-                const wanted = pinch.current.zoom * (apart / pinch.current.apart)
-                zoomAt(wanted / zoom, (a.x + b.x) / 2, (a.y + b.y) / 2)
-              }
-            }
-            drag.current = null
-            return
-          }
-
-          const from = drag.current
-          if (!from) return
-          if (event.pointerType === 'mouse' && event.buttons === 0) {
-            drag.current = null
-            return
-          }
-          // Screen pixels are viewBox units scaled by the zoom, so a drag has
-          // to be divided back out or the map races the cursor.
-          const scale = box.w / (event.currentTarget.clientWidth || 1) / zoom
-          if (Math.abs(event.clientX - from.x) + Math.abs(event.clientY - from.y) > 4) {
-            from.moved = true
-          }
-          setPan({
-            x: from.panX + (event.clientX - from.x) * scale,
-            y: from.panY + (event.clientY - from.y) * scale,
-          })
-        }}
-        onPointerUp={(event) => {
-          touches.current.delete(event.pointerId)
-          if (touches.current.size < 2) pinch.current = null
-          dragged.current = drag.current?.moved ?? false
-          drag.current = null
-        }}
-        onDoubleClick={reset}
-        onPointerCancel={(event) => {
-          // Without this a cancelled gesture — a long-press menu, a touch the
-          // system took over — leaves the drag open, and since pointermove
-          // fires on plain hover the map then pans with no button held.
-          touches.current.delete(event.pointerId)
-          pinch.current = null
-          drag.current = null
-        }}
-      >
-        <defs>
-          {/* Light falls off around a node instead of stopping at its edge.
-              Two circles rather than a blur filter: a filter over hundreds of
-              nodes is a repaint the browser struggles with, and this costs
-              nothing. */}
-          <radialGradient id="halo">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.5" />
-            <stop offset="55%" stopColor="currentColor" stopOpacity="0.12" />
-            <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-
-        <g
-          transform={`translate(${box.x + box.w / 2} ${box.y + box.h / 2}) scale(${zoom}) translate(${-(box.x + box.w / 2) + pan.x} ${-(box.y + box.h / 2) + pan.y})`}
-        >
-          <EdgeLayer
-            graph={graph}
-            at={at}
-            neighbours={neighbours}
-            focused={focused}
-            onFocus={setFocused}
-          />
-
-          <MissingLayer
-            graph={graph}
-            at={at}
-            neighbours={neighbours}
-            focused={focused}
-            onFocus={setFocused}
-          />
-
-          <NodeLayer
-            graph={graph}
-            at={at}
-            neighbours={neighbours}
-            focused={focused}
-            onFocus={setFocused}
-            onOpen={openNode}
-          />
-
-          {/* The hubs carry their names without being asked, because a map of
-              unlabelled dots tells you the shape and nothing else. Everything
-              quieter than that waits to be hovered, or the picture becomes a
-              wall of text with a graph behind it. */}
-          <g className="pointer-events-none">
-            {labels.map(({ node: n, text, size }) => (
-              <text
-                key={n.slug}
-                x={n.x}
-                y={n.y - radiusOf(n.degree) - 4}
-                textAnchor="middle"
-                fill={n.slug === focused ? 'var(--fg)' : 'var(--fg-muted)'}
-                fontSize={size}
-                stroke="var(--bg)"
-                strokeWidth={size * 0.34}
-                paintOrder="stroke"
-                opacity={focused ? 1 : 0.8}
-              >
-                {text}
-              </text>
-            ))}
-          </g>
-
-          {/* The map says what its own regions are. The band along the foot is
-              the finding, and a reader should not have to infer it. */}
-          {graph.stats.isolated > 0 && graph.nodes.length > graph.isolatedFrom && (
-            <text
-              x={box.x + box.w * 0.012}
-              y={(graph.nodes[graph.isolatedFrom]?.y ?? 0) - 22}
-              fill="var(--fg-subtle)"
-              fontSize={9}
-              stroke="var(--bg)"
-              strokeWidth={2.6}
-              paintOrder="stroke"
-              className="pointer-events-none"
-            >
-              {graph.stats.isolated} joined to nothing
-            </text>
-          )}
-        </g>
-      </svg>
-
+      {/* What is under the pointer. One bar, written once, over either
+          renderer — hovering a node has to mean the same thing in both or the
+          toggle stops being a change of view and becomes a change of page. */}
       <div className="border-border bg-surface/90 text-fg-subtle pointer-events-none absolute top-2 left-2 max-w-[min(42rem,calc(100%-1rem))] truncate rounded-md border px-2.5 py-1.5 text-[0.7rem] backdrop-blur">
         {hovered ? (
           <span className="text-fg">
@@ -631,15 +139,69 @@ export const GraphView = ({ graph }: Props) => {
             {hoveredMissing.slug} — never written, referenced by {hoveredMissing.from.length}
           </span>
         ) : (
-          <span>Hover a node · drag to pan · scroll to zoom · double-click to reset</span>
+          // Written for whatever is actually being used. On a phone the flat
+          // map's bar read "Hover a node · scroll to zoom", naming two
+          // gestures that do not exist there and omitting the one that does.
+          <>
+            <span className="hidden sm:inline">
+              {mode === 'scene' && able
+                ? 'Hover a node · drag to orbit · scroll to move in or out'
+                : 'Hover a node · drag to pan · scroll to zoom · double-click to reset'}
+            </span>
+            <span className="sm:hidden">
+              {mode === 'scene' && able
+                ? 'Tap a node · drag to orbit · pinch to move in'
+                : 'Tap a node · drag to pan · pinch to zoom'}
+            </span>
+          </>
         )}
       </div>
+
+      {/* Flat or spatial. Offered rather than decided, because the two are
+          good at different things: the scene shows how the corpus clusters,
+          the flat map shows what is joined to nothing without anything being
+          able to hide behind anything else. Hidden entirely where WebGL is
+          unavailable — a toggle to something that cannot be drawn is worse
+          than no toggle. */}
+      {able ? (
+        <div
+          role="group"
+          aria-label="How to draw the map"
+          className="border-border bg-surface/90 absolute top-2 right-2 flex items-center gap-0.5 rounded-md border p-0.5 backdrop-blur"
+        >
+          <button
+            type="button"
+            aria-pressed={mode === 'scene'}
+            onClick={() => choose('scene')}
+            title="Spatial — drag to orbit"
+            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[0.7rem] transition-colors ${
+              mode === 'scene'
+                ? 'bg-surface-raised text-fg'
+                : 'text-fg-subtle hover:text-fg'
+            }`}
+          >
+            <Box size={12} aria-hidden />
+            Spatial
+          </button>
+          <button
+            type="button"
+            aria-pressed={mode === 'flat'}
+            onClick={() => choose('flat')}
+            title="Flat — every entry visible at once"
+            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[0.7rem] transition-colors ${
+              mode === 'flat' ? 'bg-surface-raised text-fg' : 'text-fg-subtle hover:text-fg'
+            }`}
+          >
+            <MapIcon size={12} aria-hidden />
+            Flat
+          </button>
+        </div>
+      ) : null}
 
       {/* The legend, because "what are the dotted red circles?" was the first
           thing asked after ten minutes of looking at this. Every mark on the
           map means something and none of it was stated where it was being
-          read — the explanation was eight lines of low-contrast prose below
-          the frame, which is not where anyone looks. */}
+          read. */}
       <dl className="border-border bg-surface/90 text-fg-subtle pointer-events-none absolute bottom-2 left-2 hidden space-y-1 rounded-md border px-2.5 py-2 text-[0.68rem] backdrop-blur sm:block">
         <div className="flex items-center gap-2">
           <svg width="26" height="10" aria-hidden className="shrink-0">
@@ -675,40 +237,13 @@ export const GraphView = ({ graph }: Props) => {
             <circle cx="12" cy="5" r="1.6" fill="var(--fg-subtle)" opacity="0.6" />
             <circle cx="20" cy="5" r="1.6" fill="var(--fg-subtle)" opacity="0.6" />
           </svg>
-          <dd>the band at the foot — joined to nothing</dd>
+          <dd>
+            {mode === 'scene' && able
+              ? 'the disc below — joined to nothing'
+              : 'the band at the foot — joined to nothing'}
+          </dd>
         </div>
       </dl>
-
-      {/* A wheel is not the only way to zoom, and on a touch screen there is
-          no wheel at all. Also the keyboard path into the map, since the nodes
-          themselves are deliberately not tab stops. */}
-      <div className="absolute right-2 bottom-2 flex items-center gap-1">
-        {zoom !== 1 || pan.x !== 0 || pan.y !== 0 ? (
-          <button
-            type="button"
-            onClick={reset}
-            className="border-border bg-surface text-fg-subtle hover:text-fg rounded-md border px-2 py-1 text-[0.7rem]"
-          >
-            Reset view
-          </button>
-        ) : null}
-        <button
-          type="button"
-          aria-label="Zoom out"
-          onClick={() => zoomAt(0.8)}
-          className="border-border bg-surface text-fg-subtle hover:text-fg h-7 w-7 rounded-md border text-[0.9rem] leading-none"
-        >
-          −
-        </button>
-        <button
-          type="button"
-          aria-label="Zoom in"
-          onClick={() => zoomAt(1.25)}
-          className="border-border bg-surface text-fg-subtle hover:text-fg h-7 w-7 rounded-md border text-[0.9rem] leading-none"
-        >
-          +
-        </button>
-      </div>
     </div>
   )
 }
