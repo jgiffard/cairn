@@ -33,7 +33,8 @@ const graph = (over: Partial<KnowledgeGraph> = {}): KnowledgeGraph => {
   ]
   return {
     nodes,
-    edges: [
+    entities: [],
+  edges: [
       { source: 'alpha', target: 'beta' },
       { source: 'alpha', target: 'gamma' },
       { source: 'beta', target: 'gamma' },
@@ -187,7 +188,8 @@ describe('the map in three dimensions', () => {
     const place = layout3D(
       graph({
         nodes: [node('lonely', 0, 0), node('adrift', 0, 1)],
-        edges: [],
+        entities: [],
+    edges: [],
         missing: [],
         isolatedFrom: 0,
       }),

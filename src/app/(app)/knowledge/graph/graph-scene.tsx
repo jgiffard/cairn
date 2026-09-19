@@ -445,6 +445,33 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
      * volumetric anything. Behind everything and writing no depth, so it tints
      * the region without hiding a single node.
      */
+    /**
+     * A world is painted in the colour of what is actually in it.
+     *
+     * It used to be `entityColor(key)`, a hash of the name into the same
+     * palette the projects use — which meant the glow over the pink Tribe
+     * cluster came out green, and the name with it. A region whose colour
+     * disagrees with the dots inside it is worse than no colour: it reads as
+     * a second, contradictory classification.
+     *
+     * So each world takes the most common project colour among its own
+     * members. Dispofi is blue because nineteen blue-ish projects are what
+     * Dispofi IS. Ties break on the project key, so the answer does not
+     * depend on iteration order.
+     */
+    const worldHue = new Map<string, string>()
+    for (const w of place.worlds) {
+      const tally = new Map<string, number>()
+      for (const n of linked) {
+        if (n.entity !== w.key || !n.project) continue
+        tally.set(n.project, (tally.get(n.project) ?? 0) + 1)
+      }
+      const winner = [...tally.entries()].sort(
+        (a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1),
+      )[0]
+      worldHue.set(w.key, winner ? projectColor(winner[0]) : entityColor(w.key))
+    }
+
     const haze = softDot(0.95)
     const worldGeometry = new THREE.BufferGeometry()
     const worldPos = new Float32Array(place.worlds.length * 3)
@@ -452,7 +479,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     const worldSize = new Float32Array(place.worlds.length)
     place.worlds.forEach((w, i) => {
       worldPos.set([w.x, w.y, w.z], i * 3)
-      const c = new THREE.Color(entityColor(w.key))
+      const c = new THREE.Color(worldHue.get(w.key) ?? entityColor(w.key))
       worldCol.set([c.r, c.g, c.b], i * 3)
       worldSize[i] = w.spread * 5
     })
@@ -646,7 +673,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     const worldInk = (key: string): string => {
       const memo = inkCache.get(key + (palette.dark ? 'd' : 'l'))
       if (memo) return memo
-      const c = new THREE.Color(entityColor(key))
+      const c = new THREE.Color(worldHue.get(key) ?? entityColor(key))
       if (!palette.dark) c.lerp(new THREE.Color(0x000000), 0.42)
       const out = `#${c.getHexString()}`
       inkCache.set(key + (palette.dark ? 'd' : 'l'), out)
@@ -756,6 +783,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
         hovering = null
         onHoverRef.current(null)
       }
+      controls.autoRotate = !motion.matches
     }
     /** Where the pointer is, in the -1..1 space the raycaster wants. */
     const aim = (event: PointerEvent) => {
@@ -887,6 +915,8 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
      * slowly rotating camera committing a React render fifteen times a second
      * for as long as the tab is open.
      */
+    /** What each world is called, which is not the same as its key. */
+    const titleOf = new Map(graph.entities.map((e) => [e.key, e.title]))
     const pool: HTMLSpanElement[] = []
     const worldPool: HTMLSpanElement[] = []
     const projected = new THREE.Vector3()
@@ -914,7 +944,8 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
           span.style.display = 'none'
           return
         }
-        if (span.textContent !== world.key) span.textContent = world.key
+        const name = titleOf.get(world.key) ?? world.key
+        if (span.textContent !== name) span.textContent = name
         span.style.color = worldInk(world.key)
         // Knocked out of the ground, like the titles — a coloured word over a
         // coloured haze is the one place on this map contrast can vanish.
@@ -1106,6 +1137,16 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
           hovering = slug
           onHoverRef.current(slug)
           canvas.style.cursor = slug ? 'pointer' : ''
+          /**
+           * Nothing moves while you are reading it.
+           *
+           * The auto-rotation is there to say the picture has depth before
+           * anybody touches it. Once a node is under the cursor that job is
+           * done, and the rotation becomes something actively working against
+           * the reader: the title bar names an entry, the neighbourhood is
+           * lit, and the whole thing is sliding out from under the pointer.
+           */
+          controls.autoRotate = slug === null && !motion.matches
         }
       }
 

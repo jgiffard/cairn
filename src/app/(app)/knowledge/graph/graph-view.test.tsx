@@ -19,6 +19,7 @@ const graph = (over: Partial<KnowledgeGraph> = {}): KnowledgeGraph => ({
     { slug: 'beta', title: 'Beta', project: null, entity: null, degree: 1, island: 0, x: 60, y: 30 },
     { slug: 'lonely', title: 'Lonely', project: null, entity: null, degree: 0, island: -1, x: 0, y: 200 },
   ],
+  entities: [],
   edges: [{ source: 'alpha', target: 'beta' }],
   missing: [{ slug: 'never-written', from: ['alpha'], x: 40, y: 80 }],
   islands: [2],
@@ -85,5 +86,23 @@ describe('the map shell', () => {
 
     expect(html).toContain('<svg')
     expect(html).not.toContain('NaN')
+  })
+
+  it('names a world the way the rest of the app names it', () => {
+    // The map had only the entity KEY, so it wrote "dispofi" where settings
+    // and the knowledge list both say "Dispofi". A key identifies; a title is
+    // what somebody chose to call the thing. The scene is client-only so this
+    // asserts the shell passes the titles down rather than the rendering.
+    const g = graph({
+      entities: [
+        { key: 'dispofi', title: 'Dispofi' },
+        { key: 'tribe', title: 'Tribe' },
+      ],
+    })
+
+    expect(g.entities.map((e) => e.title)).toEqual(['Dispofi', 'Tribe'])
+    // and the shell renders without them, because most installs have none
+    const html = renderToStaticMarkup(<GraphView graph={graph({ entities: [] })} />)
+    expect(html).toContain('<svg')
   })
 })
