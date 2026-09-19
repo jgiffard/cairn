@@ -78,6 +78,15 @@ export type MissingNode = {
 
 export type KnowledgeGraph = {
   nodes: GraphNode[]
+  /**
+   * The worlds, named as the rest of the app names them.
+   *
+   * The map had only the entity KEY, so it wrote "dispofi" where settings and
+   * the knowledge list both say "Dispofi". A key is an identifier; a title is
+   * what somebody chose to call the thing, and the map should agree with
+   * every other surface about that.
+   */
+  entities: { key: string; title: string }[]
   edges: { source: string; target: string }[]
   missing: MissingNode[]
   islands: number[]
@@ -238,6 +247,16 @@ const entityKeyOf = (row: Row): string | null =>
  * small queries against a join that would otherwise be nested three deep in a
  * client that has never been asked to do that.
  */
+/** Every world and what it is called. Five rows; read alongside the rest. */
+const entityTitles = async (): Promise<{ key: string; title: string }[]> => {
+  const { data, error } = await admin().from('entities').select('key, title').order('key')
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((row) => ({
+    key: row.key as string,
+    title: (row.title as string) || (row.key as string),
+  }))
+}
+
 const entityByProject = async (): Promise<Map<string, string>> => {
   const { data, error } = await admin()
     .from('project_entities')
@@ -336,7 +355,11 @@ const graphFor = unstable_cache(
 export const knowledgeGraph = async (): Promise<KnowledgeGraph> => graphFor(await corpusVersion())
 
 const buildGraph = async (): Promise<KnowledgeGraph> => {
-  const [a, worldOf] = await Promise.all([analyse(), entityByProject()])
+  const [a, worldOf, entities] = await Promise.all([
+    analyse(),
+    entityByProject(),
+    entityTitles(),
+  ])
   const { rows, bySlug, edges, degree, missing } = a
 
   const ids = [...bySlug.keys()].sort()
@@ -386,6 +409,7 @@ const buildGraph = async (): Promise<KnowledgeGraph> => {
 
   return {
     nodes,
+    entities,
     edges,
     missing: missingNodes,
     islands,

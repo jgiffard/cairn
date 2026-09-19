@@ -17,6 +17,7 @@ const graph = (over: Partial<KnowledgeGraph> = {}): KnowledgeGraph => ({
     { slug: 'beta', title: 'Beta', project: null, entity: null, degree: 1, island: 0, x: 60, y: 30 },
     { slug: 'lonely', title: 'Lonely', project: null, entity: null, degree: 0, island: -1, x: 0, y: 200 },
   ],
+  entities: [],
   edges: [{ source: 'alpha', target: 'beta' }],
   missing: [{ slug: 'never-written', from: ['alpha'], x: 40, y: 80 }],
   islands: [2],

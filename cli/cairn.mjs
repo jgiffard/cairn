@@ -1041,6 +1041,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn map [<KEY>|none]                       which project this directory is
     cairn --version                              this CLI, the server, and whether they match
     cairn projects [--archived]                  --archived includes retired ones
+    cairn project create <KEY> "<title>" [--body -]   KEY is 2-10 uppercase
     cairn project rename <KEY> "<title>"
     cairn project archive <KEY>                  hides it; the tasks stay searchable
     cairn project restore <KEY>
@@ -1547,8 +1548,38 @@ const commands = {
   },
 
   async project() {
-    const sub = need(positional[0], 'usage: cairn project <rename|delete> <KEY> [...]')
+    const sub = need(
+      positional[0],
+      'usage: cairn project <create|rename|archive|restore|delete> <KEY> [...]',
+    )
     const key = need(positional[1], 'a project key is required')
+
+    /**
+     * Creating one, which this CLI could not do until now.
+     *
+     * The server has always accepted POST /api/v1/projects, so any agent that
+     * went looking at the OpenAPI document could open a project while an agent
+     * following the CLI concluded it was not allowed to. Two agents reading
+     * the same system got different answers about what they may do, and that
+     * asymmetry is what this closes — the capability was already there.
+     */
+    if (sub === 'create') {
+      const title = need(positional[2], 'usage: cairn project create <KEY> "<title>"')
+      // Checked here as well as on the server, so the error names the rule
+      // rather than coming back as a validation failure from a POST.
+      if (!/^[A-Z][A-Z0-9]{1,9}$/.test(key)) {
+        die(`"${key}" is not a project key — 2 to 10 uppercase letters or digits, e.g. CAIRN`)
+      }
+      const description = flags.body === undefined ? undefined : await resolveValue(flags.body)
+      emit(
+        await request('POST', '/api/v1/projects', {
+          key,
+          title,
+          ...(description ? { description } : {}),
+        }),
+      )
+      return
+    }
 
     if (sub === 'rename') {
       const title = need(positional[2], 'usage: cairn project rename <KEY> "<new title>"')
@@ -1575,7 +1606,7 @@ const commands = {
       emit(await request('DELETE', `/api/v1/projects/${key}?confirm=${encodeURIComponent(key)}`))
       return
     }
-    die(`unknown subcommand "${sub}" — expected rename, archive, restore or delete`)
+    die(`unknown subcommand "${sub}" — expected create, rename, archive, restore or delete`)
   },
 
   async claim() {
