@@ -18,12 +18,17 @@ import type { KnowledgeGraph } from '@/lib/api/knowledge-graph'
  * shape in all three is what makes the depth mean something: clusters become
  * volumes you can orbit rather than discs you are looking at edge-on.
  *
- * The entries joined to nothing do NOT take part. They sit on a flat disc
- * below the cloud, in a deterministic spiral. That is deliberate and it is the
- * whole answer to the objection against drawing this in 3D at all: depth hides
- * things behind other things, and the one thing this page exists to show is
- * how much of the corpus is joined to nothing. On a plane of their own, under
- * everything else, they stay countable from any angle the camera can reach.
+ * The entries joined to nothing do NOT take part. They sit on a sphere shell
+ * AROUND the cloud, spread by a Fibonacci distribution. That is deliberate and
+ * it is the whole answer to the objection against drawing this in 3D at all:
+ * depth hides things behind other things, and the one thing this page exists
+ * to show is how much of the corpus is joined to nothing.
+ *
+ * Nothing can occlude the outermost layer of a scene, so a shell gives the
+ * same guarantee a floor did — countable from every angle the camera can
+ * reach — without a slab of geometry sitting under the map. It also says the
+ * right thing: unconnected matter on the periphery of the structure, rather
+ * than sediment at the bottom of it.
  */
 
 /** Deterministic, and the same hash the layout and the palette use. */
@@ -43,8 +48,8 @@ export type Layout3D = {
   at: Map<string, Point3>
   /** Roughly the radius of the connected cloud, for framing the camera. */
   radius: number
-  /** The plane the joined-to-nothing sit on, below everything else. */
-  floor: number
+  /** The sphere the joined-to-nothing sit on, outside everything else. */
+  shell: number
   /**
    * Where each world ended up, and how big it is.
    *
@@ -294,26 +299,35 @@ export const layout3D = (graph: KnowledgeGraph): Layout3D => {
     return { key, x: cx, y: cy, z: cz, spread: Math.max(SPREAD * 0.2, d / n), count: n }
   })
 
-  const floor = -radius * 0.95
+  /** Outside everything, which is what makes them impossible to hide. */
+  const shell = radius * 1.5
 
   /**
-   * The entries joined to nothing, on a disc of their own.
+   * The entries joined to nothing, on a shell of their own.
    *
-   * A phyllotaxis spiral — the arrangement seeds take in a sunflower head —
-   * because it fills a disc evenly at any count, with no rows to line up and
-   * no gaps that read as structure. They have no links, so any structure the
-   * eye finds in them would be a lie.
+   * A Fibonacci sphere — the same golden-angle idea a sunflower head uses,
+   * lifted onto a sphere — because it spaces points evenly at any count, with
+   * no rows to line up and no poles to bunch at. They have no links, so any
+   * structure the eye found in them would be a lie, and an even scatter is the
+   * only honest arrangement.
+   *
+   * The radius is nudged per entry so the shell reads as a diffuse halo rather
+   * than a hard glass sphere around the map, which would look like a container
+   * and imply a boundary that is not there.
    */
   const golden = Math.PI * (3 - Math.sqrt(5))
-  const discR = radius * 1.15
+  const howMany = Math.max(1, isolated.length)
   isolated.forEach((n, i) => {
-    const t = (i + 0.5) / Math.max(1, isolated.length)
-    const r = discR * Math.sqrt(t)
+    const up = 1 - (2 * (i + 0.5)) / howMany
+    const ring = Math.sqrt(Math.max(0, 1 - up * up))
     const a = i * golden
+    const r = shell * (0.9 + unit(n.slug, 15) * 0.24)
     at.set(n.slug, {
-      x: Math.cos(a) * r,
-      y: floor - radius * 0.12,
-      z: Math.sin(a) * r,
+      x: Math.cos(a) * ring * r,
+      // Flattened, because a true sphere around a cloud that is itself wider
+      // than it is tall reads as a bubble rather than a halo.
+      y: up * r * 0.72,
+      z: Math.sin(a) * ring * r,
     })
   })
 
@@ -343,5 +357,5 @@ export const layout3D = (graph: KnowledgeGraph): Layout3D => {
     })
   }
 
-  return { at, radius, floor, worlds }
+  return { at, radius, shell, worlds }
 }

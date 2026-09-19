@@ -70,7 +70,7 @@ describe('the map in three dimensions', () => {
       expect(b.at.get(slug)).toEqual(p)
     }
     expect(a.radius).toBe(b.radius)
-    expect(a.floor).toBe(b.floor)
+    expect(a.shell).toBe(b.shell)
   })
 
   it('does not depend on the order the entries arrive in', () => {
@@ -108,23 +108,31 @@ describe('the map in three dimensions', () => {
     expect(Number.isFinite(place.radius)).toBe(true)
   })
 
-  it('keeps the entries joined to nothing below everything else', () => {
+  it('keeps the entries joined to nothing outside everything else', () => {
     // This is the whole answer to the objection against drawing the map in 3D:
     // depth hides things behind other things, and how much of the corpus is
-    // joined to nothing is the one finding the page exists to deliver. On a
-    // plane of their own, under the cloud, they stay countable from any angle
-    // the camera is allowed to reach.
+    // joined to nothing is the one finding the page exists to deliver.
+    //
+    // They used to sit on a plane below the cloud. They now sit on a shell
+    // around it, which gives the same guarantee for a better reason — nothing
+    // can occlude the outermost layer of a scene — and without a slab of
+    // geometry under the map. So what is asserted is that every one of them is
+    // further from the centre than every connected entry.
     const place = layout3D(graph())
     const connected = ['alpha', 'beta', 'gamma', 'delta']
     const orphans = ['lonely', 'adrift']
+    const out = (slug: string) => {
+      const p = place.at.get(slug)
+      return Math.hypot(p?.x ?? 0, p?.y ?? 0, p?.z ?? 0)
+    }
 
-    const lowestConnected = Math.min(...connected.map((s) => place.at.get(s)?.y ?? Infinity))
+    const furthestConnected = Math.max(...connected.map(out))
     for (const slug of orphans) {
-      expect(place.at.get(slug)?.y).toBeLessThan(lowestConnected)
+      expect(out(slug)).toBeGreaterThan(furthestConnected)
     }
   })
 
-  it('spreads the orphans over a disc rather than stacking them', () => {
+  it('spreads the orphans over the shell rather than stacking them', () => {
     // They have no links, so any structure the eye finds in them would be a
     // lie — but they still have to be individually visible to be counted.
     const many = {
@@ -138,12 +146,21 @@ describe('the map in three dimensions', () => {
     const points = Array.from({ length: 40 }, (_, i) => place.at.get(`orphan-${i}`))
 
     expect(points.every(Boolean)).toBe(true)
-    // All on one plane...
-    const ys = new Set(points.map((p) => p?.y))
-    expect(ys.size).toBe(1)
-    // ...and no two in the same spot.
-    const spots = new Set(points.map((p) => `${p?.x.toFixed(4)},${p?.z.toFixed(4)}`))
+    // No two in the same spot...
+    const spots = new Set(points.map((p) => `${p?.x.toFixed(4)},${p?.y.toFixed(4)},${p?.z.toFixed(4)}`))
     expect(spots.size).toBe(40)
+    // ...and spread over the sphere rather than bunched on one side, which is
+    // what a naive random scatter and a badly seeded spiral both produce. The
+    // centre of mass of an even shell sits near the middle.
+    let mx = 0
+    let my = 0
+    let mz = 0
+    for (const p of points) {
+      mx += (p?.x ?? 0) / 40
+      my += (p?.y ?? 0) / 40
+      mz += (p?.z ?? 0) / 40
+    }
+    expect(Math.hypot(mx, my, mz)).toBeLessThan(place.shell * 0.25)
   })
 
   it('hangs a never-written reference off whatever cited it', () => {
