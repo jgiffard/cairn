@@ -267,14 +267,32 @@ export const layout3D = (graph: KnowledgeGraph): Layout3D => {
     }
   }
 
-  let radius = SPREAD
+  /**
+   * How big the cloud is, measured at the ninetieth percentile rather than at
+   * the furthest node.
+   *
+   * The maximum is the wrong number and it showed: a handful of two-entry
+   * islands drift a long way out under repulsion, and framing the camera on
+   * the furthest of them left the dense core — which is the entire thing
+   * anybody came to look at — occupying about a fifth of the screen. A
+   * percentile ignores the stragglers and describes where the corpus actually
+   * is. They are still drawn, and still reachable by scrolling out; they just
+   * no longer get a vote on the framing.
+   *
+   * Same lesson the world `spread` above already learned by taking a mean
+   * rather than a max: every cluster has one outlier, and letting it set the
+   * scale makes the picture about the outlier.
+   */
+  const out: number[] = []
   for (let i = 0; i < count; i += 1) {
     const n = connected[i]
     if (!n) continue
     const p = { x: px[i] as number, y: py[i] as number, z: pz[i] as number }
     at.set(n.slug, p)
-    radius = Math.max(radius, Math.hypot(p.x, p.y, p.z))
+    out.push(Math.hypot(p.x, p.y, p.z))
   }
+  out.sort((a, b) => a - b)
+  const radius = Math.max(SPREAD, out[Math.floor(out.length * 0.9)] ?? SPREAD)
 
   /**
    * Where each world settled, and how far it reaches.
@@ -299,8 +317,14 @@ export const layout3D = (graph: KnowledgeGraph): Layout3D => {
     return { key, x: cx, y: cy, z: cz, spread: Math.max(SPREAD * 0.2, d / n), count: n }
   })
 
-  /** Outside everything, which is what makes them impossible to hide. */
-  const shell = radius * 1.5
+  /**
+   * Outside the corpus, which is what makes them impossible to hide.
+   *
+   * Close enough that the shell and the cloud frame together — pushed further
+   * out, the camera has to pull back to include it and the graph shrinks to a
+   * knot in the middle of a lot of empty space.
+   */
+  const shell = radius * 1.32
 
   /**
    * The entries joined to nothing, on a shell of their own.

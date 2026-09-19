@@ -307,4 +307,30 @@ describe('the map in three dimensions', () => {
       expect(Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)).toBe(true)
     }
   })
+
+  it('does not let one far-flung island decide how big the map is', () => {
+    // radius drives the camera framing and the shell. Taken as the MAXIMUM
+    // distance it was decided by whichever two-entry island drifted furthest
+    // under repulsion, and the dense core — the entire thing anybody came to
+    // look at — ended up a knot in the middle of a lot of empty space.
+    const core = Array.from({ length: 24 }, (_, i) => node(`core-${i}`, 2, i, 'core'))
+    const edges = Array.from({ length: 23 }, (_, i) => ({
+      source: 'core-0',
+      target: `core-${i + 1}`,
+    }))
+    const tight = layout3D(graph({ nodes: core, edges, missing: [], isolatedFrom: core.length }))
+
+    // the same corpus plus one pair flung far away from everything
+    const withStraggler = layout3D(
+      graph({
+        nodes: [...core, node('far-a', 1, 400, 'far'), node('far-b', 1, 401, 'far')],
+        edges: [...edges, { source: 'far-a', target: 'far-b' }],
+        missing: [],
+        isolatedFrom: core.length + 2,
+      }),
+    )
+
+    // A couple of stragglers out of twenty-six must not double the scale.
+    expect(withStraggler.radius).toBeLessThan(tight.radius * 1.6)
+  })
 })

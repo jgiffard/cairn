@@ -281,7 +281,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
      * narrow one.
      */
     const FOV = 46
-    const half = place.shell * 1.16
+    const half = place.shell * 1.05
     const TARGET = new THREE.Vector3(0, 0, 0)
     const fitFor = (aspect: number) => {
       const vertical = half / Math.tan((FOV * Math.PI) / 360)
