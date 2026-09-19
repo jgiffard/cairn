@@ -12,6 +12,32 @@ type Config<P, B> = {
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
+/** X-Forwarded-* is a comma-separated list; the first entry is the client's hop. */
+const premierSaut = (valeur: string | null): string | null =>
+  valeur?.split(',')[0]?.trim() || null
+
+/**
+ * The origin this deployment is actually served on.
+ *
+ * `req.url` alone is wrong behind a reverse proxy that terminates TLS — which
+ * is the deployment the README documents. The proxy forwards a plaintext
+ * request, so the URL reads `http://`, while the browser announces `https://`,
+ * and the comparison below could never match: every browser write was refused
+ * with "Browser mutations must come from the Cairn origin", including the first
+ * agent key a fresh install has to issue.
+ *
+ * Trusting these headers assumes the application is reachable only through the
+ * proxy — which the architecture already requires, since the container binds no
+ * host port and sits on an internal network. A deployment that exposed the app
+ * directly would let a client forge them, and would have larger problems.
+ */
+const origineServie = (req: Request): string => {
+  const url = new URL(req.url)
+  const proto = premierSaut(req.headers.get('x-forwarded-proto')) ?? url.protocol.replace(':', '')
+  const host = premierSaut(req.headers.get('x-forwarded-host')) ?? url.host
+  return `${proto}://${host}`
+}
+
 /**
  * Browser sessions use cookies, so unsafe requests must prove they came from
  * this exact origin. Bearer callers are not vulnerable to ambient-cookie CSRF.
@@ -20,7 +46,7 @@ export const isTrustedMutationOrigin = (req: Request): boolean => {
   if (SAFE_METHODS.has(req.method)) return true
   if (/^Bearer\s+\S+/i.test(req.headers.get('authorization') ?? '')) return true
   const origin = req.headers.get('origin')
-  return origin !== null && origin === new URL(req.url).origin
+  return origin !== null && origin === origineServie(req)
 }
 
 /**
