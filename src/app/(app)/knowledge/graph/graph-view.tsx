@@ -3,7 +3,9 @@
 import dynamic from 'next/dynamic'
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
 import { Box, Map as MapIcon } from 'lucide-react'
+import { Select } from '@/components/ui/control'
 import { GraphFlat } from './graph-flat'
+import { spotlightOptions, type Spotlight } from '@/lib/graph-spotlight'
 import type { KnowledgeGraph } from '@/lib/api/knowledge-graph'
 
 /**
@@ -91,6 +93,8 @@ const SERVER_STATE: { able: boolean; mode: Mode } = { able: false, mode: 'flat' 
 
 export const GraphView = ({ graph }: Props) => {
   const [focused, setFocused] = useState<string | null>(null)
+  /** One project or one world, lit against everything else. */
+  const [spotlight, setSpotlight] = useState<Spotlight>(null)
 
   const { able, mode: preferred } = useSyncExternalStore(noSubscribe, capability, onServer)
   /** What the toggle was last set to, which outranks the remembered answer. */
@@ -108,15 +112,31 @@ export const GraphView = ({ graph }: Props) => {
   }, [])
 
   const at = useMemo(() => new Map(graph.nodes.map((n) => [n.slug, n])), [graph.nodes])
+
+  const titles = useMemo(
+    () => new Map(graph.entities.map((e) => [e.key, e.title])),
+    [graph.entities],
+  )
+  const options = useMemo(() => spotlightOptions(graph.nodes, titles), [graph.nodes, titles])
+  const litCount = spotlight
+    ? ((spotlight.kind === 'project' ? options.projects : options.entities).find(
+        (o) => o.key === spotlight.key,
+      )?.count ?? 0)
+    : 0
   const hovered = focused ? at.get(focused) : null
   const hoveredMissing = focused ? graph.missing.find((m) => m.slug === focused) : null
 
   return (
     <div className="bg-bg relative h-full w-full overflow-hidden">
       {mode === 'scene' && able ? (
-        <GraphScene graph={graph} focused={focused} onHover={setFocused} />
+        <GraphScene graph={graph} focused={focused} onHover={setFocused} spotlight={spotlight} />
       ) : (
-        <GraphFlat graph={graph} focused={focused} setFocused={setFocused} />
+        <GraphFlat
+          graph={graph}
+          focused={focused}
+          setFocused={setFocused}
+          spotlight={spotlight}
+        />
       )}
 
       {/* What is under the pointer. One bar, written once, over either
@@ -148,6 +168,12 @@ export const GraphView = ({ graph }: Props) => {
           // Written for whatever is actually being used. On a phone the flat
           // map's bar read "Hover a node · scroll to zoom", naming two
           // gestures that do not exist there and omitting the one that does.
+          spotlight ? (
+            <span className="text-fg">
+              {litCount} {litCount === 1 ? 'entry' : 'entries'} in {spotlight.key}
+              <span className="text-fg-subtle"> · everything else dimmed</span>
+            </span>
+          ) : (
           <>
             <span className="hidden sm:inline">
               {mode === 'scene' && able
@@ -160,7 +186,51 @@ export const GraphView = ({ graph }: Props) => {
                 : 'Tap a node · drag to pan · pinch to zoom'}
             </span>
           </>
+          )
         )}
+      </div>
+
+      {/* Where is my project on this map.
+          Grouping by project was the other way to answer it, and the corpus
+          argues against: a median of three entries per project, eight of
+          fifteen under five, and 12% belonging to none. Thirty-five
+          gravitational wells over that is confetti. A highlight answers the
+          same question without moving anything, which is also more honest —
+          you see how scattered a project's knowledge really is rather than a
+          clump the layout invented. */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2">
+        <Select
+          size="sm"
+          aria-label="Light up one project or entity"
+          className="w-auto max-w-[14rem]"
+          value={spotlight ? `${spotlight.kind}:${spotlight.key}` : ''}
+          onChange={(e) => {
+            const v = e.target.value
+            if (!v) return setSpotlight(null)
+            const [kind, key] = v.split(':')
+            setSpotlight({ kind: kind as 'project' | 'entity', key: key as string })
+          }}
+        >
+          <option value="">Everything</option>
+          {options.entities.length > 0 ? (
+            <optgroup label="Worlds">
+              {options.entities.map((o) => (
+                <option key={`entity:${o.key}`} value={`entity:${o.key}`}>
+                  {o.label} ({o.count})
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+          {options.projects.length > 0 ? (
+            <optgroup label="Projects">
+              {options.projects.map((o) => (
+                <option key={`project:${o.key}`} value={`project:${o.key}`}>
+                  {o.label} ({o.count})
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+        </Select>
       </div>
 
       {/* Flat or spatial. Offered rather than decided, because the two are

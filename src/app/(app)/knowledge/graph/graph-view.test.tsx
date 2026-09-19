@@ -105,4 +105,39 @@ describe('the map shell', () => {
     const html = renderToStaticMarkup(<GraphView graph={graph({ entities: [] })} />)
     expect(html).toContain('<svg')
   })
+
+  it('offers the spotlight, and starts with everything lit', () => {
+    // A map that opens blacked out looks broken, so "Everything" has to be
+    // the resting state and the selected one.
+    const html = renderToStaticMarkup(<GraphView graph={graph()} />)
+
+    expect(html).toContain('Light up one project or entity')
+    expect(html).toContain('Everything')
+  })
+
+  it('offers only the projects and worlds that are on the map', () => {
+    // CAIRN has no knowledge in this fixture, so it must not be offered —
+    // picking it would black the map out with no explanation.
+    const html = renderToStaticMarkup(
+      <GraphView
+        graph={graph({
+          nodes: [
+            { slug: 'a', title: 'A', project: 'BB', entity: 'tribe', degree: 1, island: 0, x: 0, y: 0 },
+            { slug: 'b', title: 'B', project: null, entity: null, degree: 0, island: -1, x: 0, y: 9 },
+          ],
+          entities: [
+            { key: 'tribe', title: 'Tribe' },
+            { key: 'nowhere', title: 'Nowhere' },
+          ],
+          edges: [],
+          missing: [],
+          isolatedFrom: 1,
+        })}
+      />,
+    )
+
+    expect(html).toContain('BB')
+    expect(html).toContain('Tribe')
+    expect(html).not.toContain('Nowhere')
+  })
 })

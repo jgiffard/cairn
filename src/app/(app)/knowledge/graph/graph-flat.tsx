@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { projectColor } from '@/components/icons'
+import { inSpotlight, type Spotlight } from '@/lib/graph-spotlight'
 import type { GraphNode, KnowledgeGraph } from '@/lib/api/knowledge-graph'
 
 /**
@@ -42,6 +43,8 @@ type Props = {
   graph: KnowledgeGraph
   focused: string | null
   setFocused: (slug: string | null) => void
+  /** One project or world lit against the rest, or null for all of it. */
+  spotlight: Spotlight
 }
 
 /** Deterministic, and the same hash the layout and the palette use. */
@@ -79,11 +82,31 @@ type LayerProps = {
   at: Map<string, GraphNode>
   neighbours: Map<string, Set<string>>
   focused: string | null
+  /** Passed through the memo boundary so a change to it redraws the layers. */
+  spotlight: Spotlight
   onFocus: (slug: string | null) => void
 }
 
-const isLit = (focused: string | null, neighbours: LayerProps['neighbours'], slug: string) =>
-  focused === null || focused === slug || (neighbours.get(focused)?.has(slug) ?? false)
+/**
+ * Hover wins over the spotlight.
+ *
+ * A spotlight is the resting state — "I am looking at Dispofi" — and pointing
+ * at a node is a question asked on top of it. If the two fought, hovering a
+ * neighbour that happens to sit outside the lit project would dim the very
+ * thing under the cursor.
+ */
+const isLit = (
+  focused: string | null,
+  neighbours: LayerProps['neighbours'],
+  slug: string,
+  spotlight: Spotlight = null,
+  at?: Map<string, GraphNode>,
+) => {
+  if (focused !== null) return focused === slug || (neighbours.get(focused)?.has(slug) ?? false)
+  if (!spotlight) return true
+  const node = at?.get(slug)
+  return node ? inSpotlight(node, spotlight) : false
+}
 
 /**
  * The three drawn layers, memoised.
@@ -93,14 +116,16 @@ const isLit = (focused: string | null, neighbours: LayerProps['neighbours'], slu
  * at trackpad rates of fifty to a hundred a second, and a hover did the same.
  * Split out, a zoom re-renders one attribute.
  */
-const EdgeLayer = memo(function EdgeLayer({ graph, at, neighbours, focused }: LayerProps) {
+const EdgeLayer = memo(function EdgeLayer({ graph, at, neighbours, focused, spotlight }: LayerProps) {
   return (
     <g stroke="var(--fg-subtle)" strokeLinecap="round" fill="none">
       {graph.edges.map(({ source, target }) => {
         const a = at.get(source)
         const b = at.get(target)
         if (!a || !b) return null
-        const on = isLit(focused, neighbours, source) && isLit(focused, neighbours, target)
+        const on =
+          isLit(focused, neighbours, source, spotlight, at) &&
+          isLit(focused, neighbours, target, spotlight, at)
         const path = curve(a.x, a.y, b.x, b.y)
         return (
           <g key={`${source}-${target}`}>
@@ -139,13 +164,14 @@ const MissingLayer = memo(function MissingLayer({
   at,
   neighbours,
   focused,
+  spotlight,
   onFocus,
 }: LayerProps) {
   return (
     <g>
       {graph.missing.map((gap) => {
         const anchor = at.get(gap.from[0] as string)
-        const on = isLit(focused, neighbours, gap.slug)
+        const on = isLit(focused, neighbours, gap.slug, spotlight, at)
         return (
           <g key={gap.slug} opacity={on ? 1 : 0.12}>
             {anchor && (
@@ -192,16 +218,17 @@ const MissingLayer = memo(function MissingLayer({
  */
 const NodeLayer = memo(function NodeLayer({
   graph,
-  at: _at,
+  at,
   neighbours,
   focused,
+  spotlight,
   onFocus,
   onOpen,
 }: LayerProps & { onOpen: (slug: string, event: React.MouseEvent) => void }) {
   return (
     <>
       {graph.nodes.map((n) => {
-        const on = isLit(focused, neighbours, n.slug)
+        const on = isLit(focused, neighbours, n.slug, spotlight, at)
         const r = radiusOf(n.degree)
         const colour = n.project ? projectColor(n.project) : 'var(--fg-muted)'
         const seed = hash(n.slug)
@@ -259,7 +286,7 @@ const NodeLayer = memo(function NodeLayer({
   )
 })
 
-export const GraphFlat = ({ graph, focused, setFocused }: Props) => {
+export const GraphFlat = ({ graph, focused, setFocused, spotlight }: Props) => {
   // Read by the click handler, which must stay referentially stable or the
   // memoised node layer re-renders on every hover — the thing this avoids.
   const focusedRef = useRef<string | null>(null)
@@ -295,8 +322,6 @@ export const GraphFlat = ({ graph, focused, setFocused }: Props) => {
     }
     return map
   }, [graph.edges, graph.missing])
-
-  const lit = (slug: string): boolean => isLit(focused, neighbours, slug)
 
   const at = useMemo(() => new Map(graph.nodes.map((n) => [n.slug, n])), [graph.nodes])
 
@@ -646,6 +671,7 @@ export const GraphFlat = ({ graph, focused, setFocused }: Props) => {
             at={at}
             neighbours={neighbours}
             focused={focused}
+            spotlight={spotlight}
             onFocus={setFocused}
           />
 
@@ -654,6 +680,7 @@ export const GraphFlat = ({ graph, focused, setFocused }: Props) => {
             at={at}
             neighbours={neighbours}
             focused={focused}
+            spotlight={spotlight}
             onFocus={setFocused}
           />
 
@@ -662,6 +689,7 @@ export const GraphFlat = ({ graph, focused, setFocused }: Props) => {
             at={at}
             neighbours={neighbours}
             focused={focused}
+            spotlight={spotlight}
             onFocus={setFocused}
             onOpen={openNode}
           />
