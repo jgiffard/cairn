@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation'
 import { LiveUpdates } from '@/components/live-updates'
 import Link from 'next/link'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Waypoints } from 'lucide-react'
 import { currentUser, listProjects } from '@/lib/data'
-import { listKnowledge, supersededByInfo } from '@/lib/api/knowledge'
+import { countKnowledge, listKnowledge, supersededByInfo } from '@/lib/api/knowledge'
 import { listEntities } from '@/lib/api/entities'
 import { searchAll } from '@/lib/api/search'
 import { MobileNavButton } from '@/components/mobile-nav-context'
@@ -11,6 +11,16 @@ import { KnowledgeControls } from './knowledge-controls'
 import { KnowledgeList, type KnowledgeListItem } from './knowledge-list'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * One page of the corpus.
+ *
+ * Was 300, which the corpus had already outgrown — 81 entries existed that this
+ * page would not show and did not admit to hiding. Raised well clear of it, and
+ * the true total is now counted separately and printed, so the header states
+ * the size of the corpus rather than the size of the fetch.
+ */
+const PAGE = 1000
 
 const KnowledgePage = async ({
   searchParams,
@@ -33,16 +43,19 @@ const KnowledgePage = async ({
   // Fetched regardless of the active filters: it is the source of the label
   // vocabulary offered in the filter itself, which must not shrink to only
   // the labels already matching the current filter.
-  const [projects, entities, universe] = await Promise.all([
+  const [projects, entities, universe, total] = await Promise.all([
     listProjects(user.id),
     listEntities(user.id),
-    listKnowledge(user.id, { limit: 300, includeSuperseded: true }),
+    listKnowledge(user.id, { limit: PAGE, includeSuperseded: true }),
+    countKnowledge({ includeSuperseded }),
   ])
   const labelUniverse = [...new Set(universe.flatMap((r) => r.labels))].sort()
 
   let items: KnowledgeListItem[] = []
   let failure: string | null = null
   let widened = false
+  // Whether what is on screen is a narrowing of the corpus rather than all of it.
+  const narrowed = query.length >= 2 || Boolean(project || entity || label)
 
   const entityKeys = new Set(entities.map((e) => e.key))
 
@@ -92,7 +105,7 @@ const KnowledgePage = async ({
             project: project || undefined,
             entity: entity || undefined,
             label: label || undefined,
-            limit: 300,
+            limit: PAGE,
             includeSuperseded,
           })
         : universe.filter((r) => !includeSuperseded ? !r.superseded_by : true)
@@ -133,14 +146,28 @@ const KnowledgePage = async ({
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
         <span className="text-fg text-[0.8125rem]">Knowledge</span>
+        {/* The size of the corpus, not the size of the fetch. When a filter or
+            a search is narrowing it, say so against the whole — "12 of 381"
+            answers a different question from "12" and is the one being asked.
+            And if the page ever caps again, admit it rather than silently
+            showing a prefix. */}
         <span className="text-fg-subtle ml-auto hidden text-[0.75rem] sm:block">
-          {items.length} {items.length === 1 ? 'entry' : 'entries'}
+          {narrowed
+            ? `${items.length} of ${total} ${total === 1 ? 'entry' : 'entries'}`
+            : `${total} ${total === 1 ? 'entry' : 'entries'}`}
+          {!narrowed && items.length < total ? ` · showing first ${items.length}` : ''}
           {widened ? ' · loose match' : ''}
         </span>
+        {/* The only way into the map, and it used to be one unlined word in the
+            same grey as the count beside it — indistinguishable from static
+            metadata, on a 26px target, with no entry in the sidebar either.
+            Given a border and an icon it reads as a control, which is what it
+            is. */}
         <Link
           href="/knowledge/graph"
-          className="text-fg-muted hover:text-fg ml-auto text-[0.75rem] transition-colors sm:ml-3"
+          className="border-border text-fg-muted hover:text-fg hover:border-fg-subtle ml-3 flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[0.75rem] transition-colors"
         >
+          <Waypoints size={13} aria-hidden />
           Map
         </Link>
       </header>

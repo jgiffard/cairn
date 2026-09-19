@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { ProjectIcon } from '@/components/icons'
-import { Activity, BookOpen, Columns3, FolderKanban, HeartPulse, History, Inbox, Search, X } from 'lucide-react'
+import { Activity, BookOpen, Columns3, FolderKanban, HeartPulse, History, Inbox, Search, Waypoints, X } from 'lucide-react'
 
 /**
  * 34 projects is too many for a plain list, so the nav filters.
@@ -33,6 +33,11 @@ export const ProjectNav = ({
     { href: '/board', label: 'Board', icon: Columns3 },
     { href: '/search', label: 'Search', icon: Search },
     { href: '/knowledge', label: 'Knowledge', icon: BookOpen },
+    // The map had no entry here at all, so the only route to it was a single
+    // unlined word in the corner of the knowledge list. It is the better
+    // answer to "what do we know, and what is joined to nothing"; it should
+    // not be the harder one to find.
+    { href: '/knowledge/graph', label: 'Map', icon: Waypoints },
     { href: '/sessions', label: 'Sessions', icon: History },
     { href: '/activity', label: 'Activity', icon: Activity },
     { href: '/vitals', label: 'Vitals', icon: HeartPulse },
@@ -46,7 +51,13 @@ export const ProjectNav = ({
           // Knowledge alone has a child route (/knowledge/[slug]) that
           // should still light up this entry.
           const active =
-            pathname === href || (href === '/knowledge' && pathname.startsWith('/knowledge/'))
+            pathname === href ||
+            // Knowledge alone has child routes (/knowledge/[slug]) that should
+            // still light up this entry — but not the map, which now has its
+            // own, or both would be lit at once.
+            (href === '/knowledge' &&
+              pathname.startsWith('/knowledge/') &&
+              pathname !== '/knowledge/graph')
           return (
             <li key={href}>
               <Link

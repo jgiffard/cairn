@@ -160,6 +160,25 @@ export const entitiesForProject = async (_userId: string, key: string): Promise<
   return [...new Set(keys)].sort()
 }
 
+/**
+ * How many entries there actually are, which is not how many were fetched.
+ *
+ * The list page asked for a page of 300 and then printed that page's length as
+ * the total. The corpus was 381, so it under-reported by 81 and disagreed with
+ * the map standing one click away — the kind of thing that makes a reader
+ * distrust both numbers. A count is a separate, cheap query; the page size is
+ * not an answer to "how much do we know".
+ */
+export const countKnowledge = async (
+  filters: { includeSuperseded?: boolean } = {},
+): Promise<number> => {
+  let q = admin().from('knowledge').select('id', { count: 'exact', head: true })
+  if (!filters.includeSuperseded) q = q.is('superseded_by', null)
+  const { count, error } = await q
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}
+
 export const listKnowledge = async (
   userId: string,
   filters: {

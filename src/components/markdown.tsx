@@ -35,16 +35,27 @@ const components: Components = {
       // Marked when the target does not exist, so a reference to something
       // nobody wrote reads as a loose end rather than as a working link.
       const missing = (rest as Record<string, unknown>)['data-knowledge-missing'] === 'true'
+      // And not a link at all. It used to be one, and following it landed on
+      // the generic empty state — "That task or project does not exist, or it
+      // was deleted" — which is the wrong noun for a knowledge slug and tells
+      // the reader the entry was lost rather than never written. The tooltip
+      // already says "— yet"; the mark should not then invite a click that
+      // contradicts it.
+      if (missing) {
+        return (
+          <span
+            title={`No knowledge "${knowledgeRef}" — yet`}
+            className="text-fg-subtle decoration-dotted cursor-help underline underline-offset-2"
+          >
+            {children}
+          </span>
+        )
+      }
       return (
         <Link
           href={href}
-          prefetch={!missing}
-          title={missing ? `No knowledge "${knowledgeRef}" — yet` : undefined}
-          className={
-            missing
-              ? 'text-fg-subtle decoration-dotted underline underline-offset-2'
-              : 'text-accent decoration-1 underline-offset-2 hover:underline'
-          }
+          prefetch
+          className="text-accent decoration-1 underline-offset-2 hover:underline"
         >
           {children}
         </Link>
