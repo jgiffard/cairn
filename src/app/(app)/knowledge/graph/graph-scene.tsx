@@ -45,9 +45,6 @@ type Props = {
 const radiusOf = (degree: number): number =>
   degree === 0 ? 1.5 : 0.85 + Math.min(2.4, Math.sqrt(degree) * 0.66)
 
-/** Enough links to be worth naming without being asked. */
-const LABEL_AT = 6
-
 /** How many titles can be on screen before it is a wall of text. */
 const LABEL_CAP = 34
 
@@ -268,27 +265,24 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     const camera = new THREE.PerspectiveCamera(46, 1, 0.1, place.radius * 30)
 
     /**
-     * Fitted to everything that is drawn, rather than to a guessed multiple.
+     * Fitted to the shell, which is the outermost thing there is.
      *
-     * Framed on the cloud alone, the disc of entries joined to nothing ran off
-     * the bottom of the frame and a reader who never dragged saw no orphans at
-     * all (CAIRN-217). Framed on a hand-picked multiple of the cloud radius
-     * instead, the disc came into view but took over: it is wider than the
-     * cloud and sits below it, so the interesting half ended up squeezed into
-     * a corner. Neither is a judgement anybody should be making by eye.
+     * This has been wrong twice, both times by guessing. Framed on the cloud
+     * alone the orphans ran off the bottom of the frame (CAIRN-217); framed on
+     * a hand-picked multiple, the disc of them took over and squeezed the
+     * cloud into a corner. Now the entries joined to nothing are on a shell
+     * AROUND everything rather than a plane beneath it, the scene is a sphere
+     * centred on the origin — so the bound is just its radius, and no camera
+     * angle sees more of it than another. The thing that made framing hard was
+     * the shape, not the arithmetic.
      *
-     * So the bounds are measured — top of the cloud to the orphan plane, and
-     * the widest thing in the scene, which is the ring — and the camera is put
-     * where a sphere around all of it exactly fills the frame. The vertical
-     * field is the binding one on a wide window and the horizontal one on a
-     * narrow window, so both are solved and the larger distance wins.
+     * Solved for the vertical AND horizontal fields, larger distance winning,
+     * because the vertical binds on a wide window and the horizontal on a
+     * narrow one.
      */
     const FOV = 46
-    const top = place.radius
-    const bottom = place.floor - place.radius * 0.2
-    const half = Math.max(place.radius, place.radius * 1.24, (top - bottom) / 2)
-    /** Centred on what is drawn, so nothing starts at an edge. */
-    const TARGET = new THREE.Vector3(0, (top + bottom) / 2, 0)
+    const half = place.shell * 1.16
+    const TARGET = new THREE.Vector3(0, 0, 0)
     const fitFor = (aspect: number) => {
       const vertical = half / Math.tan((FOV * Math.PI) / 360)
       const horizontal = half / Math.tan(Math.atan(Math.tan((FOV * Math.PI) / 360) * aspect))
@@ -617,20 +611,6 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     // Out of the fog. Fog exists to sell depth inside the cloud; the disc is
     // not competing with anything, and being furthest from the camera it was
     // taking the most haze of anything in the scene.
-    const floorMat = new THREE.MeshBasicMaterial({
-      color: palette.muted.getHex(),
-      transparent: true,
-      opacity: 0.28,
-      side: THREE.DoubleSide,
-      fog: false,
-    })
-    const floor = new THREE.Mesh(
-      new THREE.RingGeometry(place.radius * 1.2, place.radius * 1.228, 96),
-      floorMat,
-    )
-    floor.rotation.x = Math.PI / 2
-    floor.position.y = place.floor - place.radius * 0.12
-    scene.add(floor)
 
     // ---- focus ---------------------------------------------------------
 
@@ -854,7 +834,6 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       ambient.intensity = palette.dark ? 0.6 : 1
       gapMat.color.set(palette.danger.getHex())
       ringMat.color.set(palette.danger.getHex())
-      floorMat.color.set(palette.muted.getHex())
       paintFocus(focusedRef.current)
     }
     const themeWatch = new MutationObserver(repaint)
@@ -924,9 +903,24 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       const h = canvas.clientHeight
       drawWorlds(w, h)
 
+      /**
+       * Nothing is named until you ask.
+       *
+       * The at-rest pass drew about twenty-eight hub titles permanently, which
+       * is a wall of text laid over the thing it is labelling — and on a map
+       * whose subject is the connections, the text was the loudest layer on
+       * screen. Hover names what you are pointing at and its neighbours, and
+       * that is the only time a title appears. The world names stay: three or
+       * four words for the whole picture is not the same as a label per dot.
+       */
+      if (!slug) {
+        for (const span of pool) span.style.display = 'none'
+        return
+      }
+
       const candidates: { node: (typeof linked)[number]; x: number; y: number; z: number }[] = []
       for (const n of linked) {
-        if (slug ? !(n.slug === slug || (near?.has(n.slug) ?? false)) : n.degree < LABEL_AT) continue
+        if (!(n.slug === slug || (near?.has(n.slug) ?? false))) continue
         const p = place.at.get(n.slug)
         if (!p) continue
         projected.set(p.x, p.y, p.z).project(camera)

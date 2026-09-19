@@ -151,7 +151,7 @@ export const GraphView = ({ graph }: Props) => {
           <>
             <span className="hidden sm:inline">
               {mode === 'scene' && able
-                ? 'Hover a node · drag to orbit · scroll to move in or out'
+                ? 'Hover to name it · drag to orbit · scroll to move in or out'
                 : 'Hover a node · drag to pan · scroll to zoom · double-click to reset'}
             </span>
             <span className="sm:hidden">
@@ -245,7 +245,7 @@ export const GraphView = ({ graph }: Props) => {
           </svg>
           <dd>
             {mode === 'scene' && able
-              ? 'the disc below — joined to nothing'
+              ? 'the shell around it — joined to nothing'
               : 'the band at the foot — joined to nothing'}
           </dd>
         </div>
