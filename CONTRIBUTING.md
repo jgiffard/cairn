@@ -75,6 +75,15 @@ with it must filter by owner explicitly — `.eq('owner_user_id', …)`, or thro
 embedded relation for a join. RLS is the browser-side boundary and defence in depth, not
 what protects server-side reads.
 
+## Licence
+
+Contributions are made under the [Sustainable Use License](./LICENSE), the licence this
+project ships under. You keep the copyright in what you write; you are granting the
+project the right to use it under those terms.
+
+Work contributed before 2026-09-19 was contributed under MIT and is acknowledged as such —
+see [`LICENSE-MIT-HISTORY`](./LICENSE-MIT-HISTORY).
+
 ## Credit
 
 Contributions keep their authorship: a PR is merged rather than squashed into a

@@ -19,7 +19,7 @@
     "postgres"
   ],
   "private": false,
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "node": ">=22"
   },

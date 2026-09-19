@@ -1,7 +1,7 @@
 # Cairn
 
 [![CI](https://github.com/montytorr/cairn/actions/workflows/ci.yml/badge.svg)](https://github.com/montytorr/cairn/actions/workflows/ci.yml)
-[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](./LICENSE)
+[![Licence: Sustainable Use](https://img.shields.io/badge/licence-Sustainable%20Use-blue.svg)](./LICENSE)
 [![Version](https://img.shields.io/badge/version-0.5.1-blue.svg)](./CHANGELOG.md)
 
 **The tracker your agents read before they start, and write to as they work.**
@@ -889,4 +889,11 @@ machine that wrote the code had already been set up in a way that hid them.
 
 ## Licence
 
-MIT
+[Sustainable Use License](./LICENSE) — the licence n8n publishes, for the reason they
+publish it. Read the source, run it yourself for your own business or personally, modify
+it, fork it, share your changes. The one thing it does not permit is selling Cairn itself
+as a service.
+
+Releases up to and including v0.5.1 were MIT and stay MIT for anyone who has them; a
+licence change is not retroactive. [`LICENSE-MIT-HISTORY`](./LICENSE-MIT-HISTORY) says
+exactly what moved and what did not.
