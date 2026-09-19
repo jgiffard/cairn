@@ -268,19 +268,37 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     const camera = new THREE.PerspectiveCamera(46, 1, 0.1, place.radius * 30)
 
     /**
-     * Framed on the cloud AND the floor.
+     * Fitted to everything that is drawn, rather than to a guessed multiple.
      *
-     * Framed on the cloud alone, the disc of entries joined to nothing entered
-     * the bottom of the frame as an arc and ran off the edge — so a reader who
-     * never dragged saw no orphans at all, while the legend told them to look
-     * at a disc below (CAIRN-217). The scene is taller than it is wide once
-     * the floor is counted, and the camera has to be told that.
+     * Framed on the cloud alone, the disc of entries joined to nothing ran off
+     * the bottom of the frame and a reader who never dragged saw no orphans at
+     * all (CAIRN-217). Framed on a hand-picked multiple of the cloud radius
+     * instead, the disc came into view but took over: it is wider than the
+     * cloud and sits below it, so the interesting half ended up squeezed into
+     * a corner. Neither is a judgement anybody should be making by eye.
+     *
+     * So the bounds are measured — top of the cloud to the orphan plane, and
+     * the widest thing in the scene, which is the ring — and the camera is put
+     * where a sphere around all of it exactly fills the frame. The vertical
+     * field is the binding one on a wide window and the horizontal one on a
+     * narrow window, so both are solved and the larger distance wins.
      */
-    const reach = Math.max(place.radius * 1.3, Math.abs(place.floor) + place.radius * 0.35)
-    const HOME = new THREE.Vector3(reach * 0.92, reach * 0.6, reach * 1.9)
-    /** Aimed between the cloud's middle and the floor, so neither is at an edge. */
-    const TARGET = new THREE.Vector3(0, place.floor * 0.3, 0)
-    camera.position.copy(HOME)
+    const FOV = 46
+    const top = place.radius
+    const bottom = place.floor - place.radius * 0.2
+    const half = Math.max(place.radius, place.radius * 1.24, (top - bottom) / 2)
+    /** Centred on what is drawn, so nothing starts at an edge. */
+    const TARGET = new THREE.Vector3(0, (top + bottom) / 2, 0)
+    const fitFor = (aspect: number) => {
+      const vertical = half / Math.tan((FOV * Math.PI) / 360)
+      const horizontal = half / Math.tan(Math.atan(Math.tan((FOV * Math.PI) / 360) * aspect))
+      // A tenth of headroom, so the outermost node is not flush to the glass.
+      return Math.max(vertical, horizontal) * 1.1
+    }
+    const reach = fitFor(1.8)
+    /** Off-axis, because straight-on hides the depth this view exists for. */
+    const HOME = new THREE.Vector3(0.42, 0.34, 0.84).normalize().multiplyScalar(reach)
+    camera.position.copy(TARGET).add(HOME)
 
     const controls = new OrbitControls(camera, canvas)
     controls.target.copy(TARGET)
@@ -290,8 +308,8 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     // two buttons, and a camera that can be walked far enough from the cloud
     // that there is no way back but the reset.
     controls.enablePan = false
-    controls.minDistance = reach * 0.45
-    controls.maxDistance = reach * 4.5
+    controls.minDistance = reach * 0.3
+    controls.maxDistance = reach * 3
     // Clamped off both poles: straight down the Y axis the cloud collapses to
     // a disc and the floor of orphans disappears edge-on, which are the two
     // things this view must never do.
@@ -299,6 +317,12 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     controls.maxPolarAngle = Math.PI * 0.84
     controls.rotateSpeed = 0.6
     controls.zoomSpeed = 0.85
+
+    /** Set the moment the reader touches the controls, so nothing moves under them. */
+    let touched = false
+    controls.addEventListener('start', () => {
+      touched = true
+    })
 
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
     controls.autoRotate = !motion.matches
@@ -613,6 +637,28 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     const lit = new THREE.Color()
     const white = new THREE.Color(0xffffff)
 
+    /**
+     * A world's name, in ink that survives the ground it is written on.
+     *
+     * The palette these come from was built for filled marks — a hexagon, a
+     * dot — where a mid-tone reads fine against either theme. As TEXT on white
+     * the lighter half of it is barely there: measured on the deployed map,
+     * pale blue DISPOFI and amber AGENT-PROJECTS were close to illegible. On
+     * the dark ground the same colours are fine, so this darkens rather than
+     * replaces, and only where it has to. Hue is kept, because hue is what
+     * ties the name to its haze and to the dots underneath it.
+     */
+    const inkCache = new Map<string, string>()
+    const worldInk = (key: string): string => {
+      const memo = inkCache.get(key + (palette.dark ? 'd' : 'l'))
+      if (memo) return memo
+      const c = new THREE.Color(entityColor(key))
+      if (!palette.dark) c.lerp(new THREE.Color(0x000000), 0.42)
+      const out = `#${c.getHexString()}`
+      inkCache.set(key + (palette.dark ? 'd' : 'l'), out)
+      return out
+    }
+
     const paintFocus = (slug: string | null) => {
       const near = slug ? neighbours.get(slug) : null
       const inSet = (s: string) => slug === null || slug === s || (near?.has(s) ?? false)
@@ -851,7 +897,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
         if (!span) {
           span = document.createElement('span')
           span.className =
-            'absolute top-0 left-0 whitespace-nowrap text-[0.8125rem] font-medium uppercase leading-none tracking-[0.2em]'
+            'absolute top-0 left-0 whitespace-nowrap text-[0.9375rem] font-semibold uppercase leading-none tracking-[0.22em]'
           overlay.appendChild(span)
           worldPool[i] = span
         }
@@ -860,9 +906,12 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
           return
         }
         if (span.textContent !== world.key) span.textContent = world.key
-        span.style.color = entityColor(world.key)
+        span.style.color = worldInk(world.key)
+        // Knocked out of the ground, like the titles — a coloured word over a
+        // coloured haze is the one place on this map contrast can vanish.
+        span.style.textShadow = '0 0 6px var(--bg), 0 0 12px var(--bg)'
         // Out of the way the moment anything is being looked at.
-        span.style.opacity = focusedRef.current ? '0.16' : '0.4'
+        span.style.opacity = focusedRef.current ? '0.25' : '0.72'
         span.style.transform = `translate3d(${Math.round((projected.x * 0.5 + 0.5) * w)}px, ${Math.round((-projected.y * 0.5 + 0.5) * h)}px, 0) translate(-50%, -50%)`
         span.style.display = ''
       })
@@ -941,6 +990,15 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       renderer.setSize(w, h, false)
       camera.aspect = w / h
       camera.updateProjectionMatrix()
+      // A narrow window needs the camera further back than a wide one for the
+      // same scene. Only ever pushes out, and only before the reader has
+      // taken the controls — moving the camera under someone mid-orbit is
+      // worse than a slightly tight frame.
+      if (!touched) {
+        const want = fitFor(camera.aspect)
+        camera.position.copy(TARGET).addScaledVector(HOME.clone().normalize(), want)
+        controls.maxDistance = want * 3
+      }
       // What the renderer passes its own PointsMaterial. Left at a constant
       // the glow is sized for one window height and wrong in every other.
       for (const m of [glowMat, worldMat, dustMat, beamMat]) m.uniforms.scale!.value = h * 0.5
@@ -967,9 +1025,17 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       if (!alive) return
       raf = requestAnimationFrame(tick)
       const age = performance.now() - born
-      if (INTRO > 0 && age < INTRO) {
+      if (INTRO > 0 && age < INTRO && !touched) {
+        // Along the view axis from the target, and inside maxDistance —
+        // pushed past it, OrbitControls clamps the camera back every frame
+        // and the arrival stutters against its own limit.
         const k = 1 - (1 - age / INTRO) ** 3
-        camera.position.copy(HOME).multiplyScalar(1 + 1.4 * (1 - k))
+        const from = camera.position.distanceTo(TARGET)
+        const want = reach * (1 + 0.55 * (1 - k))
+        camera.position
+          .sub(TARGET)
+          .multiplyScalar((want || from) / (from || 1))
+          .add(TARGET)
       }
       controls.update()
       /**
