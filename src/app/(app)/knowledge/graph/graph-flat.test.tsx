@@ -13,9 +13,9 @@ import type { KnowledgeGraph } from '@/lib/api/knowledge-graph'
 
 const graph = (over: Partial<KnowledgeGraph> = {}): KnowledgeGraph => ({
   nodes: [
-    { slug: 'alpha', title: 'Alpha', project: 'ACME', degree: 2, island: 0, x: 10, y: 10 },
-    { slug: 'beta', title: 'Beta', project: null, degree: 1, island: 0, x: 60, y: 30 },
-    { slug: 'lonely', title: 'Lonely', project: null, degree: 0, island: -1, x: 0, y: 200 },
+    { slug: 'alpha', title: 'Alpha', project: 'ACME', entity: null, degree: 2, island: 0, x: 10, y: 10 },
+    { slug: 'beta', title: 'Beta', project: null, entity: null, degree: 1, island: 0, x: 60, y: 30 },
+    { slug: 'lonely', title: 'Lonely', project: null, entity: null, degree: 0, island: -1, x: 0, y: 200 },
   ],
   edges: [{ source: 'alpha', target: 'beta' }],
   missing: [{ slug: 'never-written', from: ['alpha'], x: 40, y: 80 }],
@@ -232,6 +232,7 @@ describe('the map draws', () => {
         slug: `n${i}`,
         title: `A fairly long knowledge title number ${i}`,
         project: null,
+        entity: null,
         degree: 9,
         island: 0,
         x: 100 + i,
