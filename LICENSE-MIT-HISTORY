@@ -1,0 +1,40 @@
+What the licence change does and does not do
+============================================
+
+Cairn was released under the MIT License from its first commit through v0.5.1.
+From the release following that tag it is licensed under the Sustainable Use
+License, in the file LICENSE beside this one.
+
+A licence change is not retroactive, and nobody should read it as one.
+
+  - Every release up to and including v0.5.1 remains MIT, permanently, for
+    anyone who already has it or obtains it later. That cannot be withdrawn.
+  - The git history remains MIT. A fork taken from any commit up to that tag
+    carries the MIT terms with it.
+  - Only new work, from the next release onward, is under the new licence.
+
+Why
+---
+
+Cairn is going to have a hosted offering alongside the code you can run
+yourself. MIT permits anyone to take this software and sell exactly that hosted
+service, including in competition with the people who wrote it, and that is a
+poor foundation to fund the work from.
+
+The Sustainable Use License keeps what matters about an open project: you can
+read the source, run it yourself for your own business or personally, modify it,
+fork it, and share those changes. What it stops is one specific thing — selling
+Cairn itself as a service.
+
+This is the licence n8n publishes and uses, and the change is made for the same
+reason they made it.
+
+Contributions
+-------------
+
+Contributions made before this change were made under MIT and are acknowledged
+as such. Contributions from this point are made under the Sustainable Use
+License; CONTRIBUTING.md says so.
+
+If you contributed to Cairn under MIT and would rather your work were not
+relicensed, say so in an issue and it will be honoured.
