@@ -311,6 +311,20 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     controls.maxPolarAngle = Math.PI * 0.84
     controls.rotateSpeed = 0.6
     controls.zoomSpeed = 0.85
+    /**
+     * The wheel moves toward whatever is under the cursor, not the middle.
+     *
+     * Dollying at the centre means reading anything off-axis is a loop of
+     * zoom, drag, zoom, drag — the same complaint the flat map had in
+     * CAIRN-214, for the same reason. OrbitControls can do this itself; it
+     * moves the orbit target along the way, which is what makes the NEXT drag
+     * rotate around what you just moved in to look at rather than around the
+     * middle of a scene you have left behind.
+     *
+     * It works with `enablePan` off: the target is repositioned inside the
+     * zoom branch rather than through the pan path.
+     */
+    controls.zoomToCursor = true
 
     /** Set the moment the reader touches the controls, so nothing moves under them. */
     let touched = false
@@ -792,6 +806,21 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       }
       open(slug)
     }
+    /**
+     * Double-click to come home.
+     *
+     * Zooming toward the cursor moves the orbit target with it, which is the
+     * point — but it also means a few wheel ticks into a corner of the shell
+     * leaves no obvious way back, and the scene had no reset at all. The flat
+     * map has bound this to double-click since it was built; same gesture
+     * here, and the camera eases rather than cuts so it is clear what
+     * happened.
+     */
+    let homing = 0
+    const goHome = () => {
+      homing = performance.now()
+    }
+
     const noMenu = (event: Event) => event.preventDefault()
 
     canvas.addEventListener('pointermove', onPointerMove)
@@ -799,6 +828,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     canvas.addEventListener('pointerdown', onPointerDown)
     canvas.addEventListener('pointerup', onPointerUp)
     canvas.addEventListener('contextmenu', noMenu)
+    canvas.addEventListener('dblclick', goHome)
 
     // ---- theme ---------------------------------------------------------
 
@@ -1001,6 +1031,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     observer.observe(element)
     resize()
 
+    const _home = new THREE.Vector3()
     let raf = 0
     let frame = 0
     let alive = true
@@ -1018,6 +1049,17 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
     const tick = () => {
       if (!alive) return
       raf = requestAnimationFrame(tick)
+      // Easing home, if a double-click asked for it. Driven before
+      // controls.update() so its damping smooths the last of the travel
+      // rather than fighting it.
+      if (homing) {
+        const k = Math.min(1, (performance.now() - homing) / 700)
+        const e = 1 - (1 - k) ** 3
+        controls.target.lerp(TARGET, e * 0.35)
+        camera.position.lerp(_home.copy(TARGET).add(HOME), e * 0.35)
+        if (k >= 1) homing = 0
+      }
+
       const age = performance.now() - born
       if (INTRO > 0 && age < INTRO && !touched) {
         // Along the view axis from the target, and inside maxDistance —
@@ -1106,6 +1148,7 @@ export const GraphScene = ({ graph, onHover, focused }: Props) => {
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointerup', onPointerUp)
       canvas.removeEventListener('contextmenu', noMenu)
+      canvas.removeEventListener('dblclick', goHome)
       for (const span of [...pool, ...worldPool]) span.remove()
       // A WebGL context is not collected on unmount and the browser keeps only
       // a handful, so walking between the map and an entry a dozen times would
