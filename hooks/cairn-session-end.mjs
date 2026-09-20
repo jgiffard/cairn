@@ -476,18 +476,32 @@ const keepFiles = (files, cwd) =>
     .map((f) => (cwd && f.startsWith(`${cwd}/`) ? f.slice(cwd.length + 1) : f))
     .slice(0, 200)
 
+/**
+ * Head and tail, never the middle.
+ *
+ * A long transcript states the shape of the work at the top and its
+ * conclusions at the bottom. The middle is the fifteen tangents.
+ */
+const headAndTail = (text, headChars, tailChars) => {
+  if (text.length <= headChars + tailChars) return text
+  return `${text.slice(0, headChars)}\n\n[...]\n\n${text.slice(-tailChars)}`
+}
+
 const buildDigest = (t) => {
   const parts = []
-  if (t.prompts.length) parts.push(`# What was asked\n${t.prompts.join('\n\n---\n\n').slice(0, 6000)}`)
 
-  // The tail of the assistant's own narration is where conclusions live; the
-  // head is where the shape of the work is stated. Both beat the middle.
-  const narration = t.assistantText.join('\n\n')
-  if (narration) {
-    const head = narration.slice(0, 6000)
-    const tail = narration.length > 12_000 ? narration.slice(-10_000) : ''
-    parts.push(`# What the agent said\n${head}${tail ? `\n\n[...]\n\n${tail}` : ''}`)
+  // The prompts used to be head-only, and that was fine while a session was an
+  // afternoon. Since the recorder also runs at compaction, the normal session
+  // being summarised is a long one: this file was first written up from a
+  // transcript two days old, and the recorded request was the first hour's ask
+  // -- true on the Friday, and no longer what the session was about. The last
+  // prompts say what it turned into; the first say what it set out to do.
+  if (t.prompts.length) {
+    parts.push(`# What was asked\n${headAndTail(t.prompts.join('\n\n---\n\n'), 3500, 4500)}`)
   }
+
+  const narration = t.assistantText.join('\n\n')
+  if (narration) parts.push(`# What the agent said\n${headAndTail(narration, 6000, 10_000)}`)
 
   return parts.join('\n\n').slice(0, MAX_DIGEST_CHARS)
 }
@@ -495,7 +509,10 @@ const buildDigest = (t) => {
 const PROMPT = `You are writing one entry in an engineering memory that other agents read months later.
 
 Return ONLY a JSON object, no prose around it, with exactly these keys:
-  "request"    one sentence: what was actually asked for
+  "request"    one sentence: what was actually asked for. A long session often
+               carries several unrelated requests -- the digest below is its
+               beginning and its end, with the middle cut -- so cover the span
+               rather than only the first thing in it.
   "learned"    what is now known that was not before - findings, causes, measurements,
                and dead ends. Dead ends matter as much as fixes. Empty string if nothing.
   "completed"  what actually landed. Empty string if nothing did.
