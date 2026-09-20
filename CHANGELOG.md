@@ -53,6 +53,14 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **A long session was summarised by its first hour.** `buildDigest` gave the agent's
+  narration head *and* tail, with a comment saying why the middle is worthless, but took the
+  prompts head-only. That was fine while a session was an afternoon; now that the recorder
+  also runs at compaction, the normal session being written up is a long one. The first
+  session recorded under the new trigger was two days old and its `request` read "reconcile
+  gaps, fix settings/users duplication" — true on the Friday, and nothing to do with what
+  the session had become. Prompts now get the same head-and-tail treatment, and the
+  summariser is told the middle was cut so it covers the span rather than the opening.
 - **The no-sessions alarm asserted a cause it cannot know.** It ended "The session hooks
   are not running, or cannot write" — and a count of zero cannot distinguish a runtime with
   nothing to say from one that cannot speak. It named only the second, and was wrong both
