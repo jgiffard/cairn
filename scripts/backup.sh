@@ -4,6 +4,7 @@
 #
 #   CAIRN_BACKUP_DIR     where to write backups (default: /srv/backups/cairn)
 #   CAIRN_DB_CONTAINER   Postgres container name (default: cairn-postgres)
+#   CAIRN_DB_USER        Postgres role for pg_dump (default: postgres)
 #   CAIRN_ATTACHMENT_DIR attachment tree (default: /srv/cairn/attachments)
 #
 # Backs up BOTH halves, because either alone is useless: a database dump
@@ -17,6 +18,7 @@ set -euo pipefail
 DEST=${CAIRN_BACKUP_DIR:-/srv/backups/cairn}
 DB_CONTAINER=${CAIRN_DB_CONTAINER:-cairn-postgres}
 DB_NAME=${CAIRN_DB_NAME:-cairn}
+DB_USER=${CAIRN_DB_USER:-postgres}
 ATTACHMENTS=${CAIRN_ATTACHMENT_DIR:-/srv/cairn/attachments}
 
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
@@ -36,7 +38,7 @@ log "starting backup $STAMP"
 
 # Public is the complete application database. Supabase-owned schemas, roles,
 # owners and grants are deliberately excluded so the dump is stock-PG portable.
-if ! docker exec "$DB_CONTAINER" pg_dump -U postgres -d "$DB_NAME" -Fc \
+if ! docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" -d "$DB_NAME" -Fc \
       --schema=public --no-owner --no-privileges > "$TMP"; then
   fail "pg_dump failed"
 fi
