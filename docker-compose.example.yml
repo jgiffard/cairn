@@ -41,6 +41,25 @@ services:
       - '3000'
 
     # Hardening: the app needs no write access to its own filesystem.
+    #
+    # One consequence shows up in the logs and is not a fault:
+    #
+    #   Failed to update prerender cache for <hash>
+    #   Error: ENOENT: no such file or directory, mkdir '/app/.next/cache'
+    #
+    # Next tries to flush its cache to disk and cannot, because of the line
+    # below. The error code is a lie: Node's RECURSIVE mkdir reports ENOENT for
+    # a read-only filesystem, where the non-recursive form on the same path in
+    # the same process correctly reports EROFS. Nothing is missing, and no
+    # amount of creating or chowning `.next/cache` in the Dockerfile will help
+    # — an existing, correctly-owned directory on a read-only filesystem is
+    # exactly as unwritable as one that is absent.
+    #
+    # Nothing is lost either. Next populates its in-memory cache BEFORE it
+    # writes to disk, and swallows the write failure with that warning, so
+    # `unstable_cache` works normally for the life of the process. What a
+    # read-only rootfs costs is persistence across a restart or a deploy,
+    # which is the price of the line below and was worth paying.
     user: 'nextjs'
     read_only: true
     tmpfs:
