@@ -562,14 +562,27 @@ installer prints what to add.
 itself, but the prose on a session row — what was asked, what was learned, what landed,
 what is next — is written by a model. The hook pipes up to 24 KB of transcript to
 `claude -p` and parses the JSON that comes back. So a session row has prose only where
-Claude Code is installed **and logged in as the identity running the hook**, and there is
-one small model call per session close.
+Claude Code is installed **and logged in as the identity running the hook**.
 
 ```bash
 CAIRN_SUMMARY_CLI=claude                            # or a wrapper, see below
 CAIRN_SUMMARY_MODEL=claude-haiku-4-5-20251001
 CAIRN_SUMMARY_TIMEOUT_MS=60000
+CAIRN_SUMMARY_MIN_INTERVAL_MS=600000                # see below
 ```
+
+**How often that call happens.** Not once per session, because not every runtime has a
+session-end event to hang it on. Claude Code records at `SessionEnd` *and* `PreCompact`,
+and Codex has no `SessionEnd` at all so it records on `Stop` — the end of every assistant
+turn. Left alone that is one model call per turn.
+
+So the hook reuses the last summary it wrote for a session when the digest is byte-for-byte
+what it already summarised, or when the previous call was under
+`CAIRN_SUMMARY_MIN_INTERVAL_MS` ago. The deterministic half — files, task refs, counts — is
+written fresh every time regardless; only the prose is reused, and reused rather than
+omitted, so a row never loses prose it already had. The stamps live in
+`~/.cairn/summaries.json`, fifty sessions deep. Set the interval to `0` to summarise every
+time.
 
 The hook keeps the row when the summariser cannot be reached, because losing the record of
 a session over a missing summary would be the worse trade. The cost of that choice is that
