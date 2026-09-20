@@ -71,6 +71,24 @@ const RECORDED = '_Recorded automatically when the session ended._'
  * the failure it prevents is silent: a wrong checkpoint reads exactly like a
  * right one.
  */
+/**
+ * The subset a given session may write a checkpoint onto.
+ *
+ * Pure and exported beside splitHeldByWorked, because this is the other half
+ * of the same silent failure: a wrong checkpoint reads exactly like a right
+ * one, and `cairn context` hands it to the next agent as fact.
+ *
+ * A task whose claim names no session is kept. It was claimed before the
+ * column existed, or by a runtime that cannot name itself, and dropping those
+ * would quietly stop checkpointing work that is genuinely held — trading a
+ * silent bug for a silent regression.
+ */
+export const heldByThisSession = <T extends { claimed_session: string | null }>(
+  held: T[],
+  sessionId: string | null,
+): T[] =>
+  sessionId ? held.filter((t) => t.claimed_session === null || t.claimed_session === sessionId) : held
+
 export const splitHeldByWorked = <T>(
   held: T[],
   taskRefs: string[],
@@ -106,15 +124,34 @@ const checkpointHeldTasks = async (actor: Actor, session: SessionRow): Promise<s
 
   const { data, error } = await admin()
     .from('tasks')
-    .select('id, number, project:projects!project_id!inner(key)')
+    .select('id, number, claimed_session, project:projects!project_id!inner(key)')
     .eq('claimed_by', actor.actorId)
   if (error) throw new Error(error.message)
 
-  const held = (data ?? []) as unknown as {
+  const all = (data ?? []) as unknown as {
     id: string
     number: number
+    claimed_session: string | null
     project: { key: string }
   }[]
+
+  /**
+   * Held by THIS session, not by everything wearing the same name.
+   *
+   * `claimed_by` is an actorLabel, so four Claude Code sessions on one machine
+   * all match it. This used to write one session's checkpoint onto another
+   * session's tasks: three knowledge-map tasks carried a report about merging
+   * an unrelated pull request, because the identity matched and nothing else
+   * was consulted. CAIRN-182 fixed the version of this that stamped tasks the
+   * session never touched; the same wrong summary arrives here through
+   * identity instead of through the file list.
+   *
+   * A task with no claimed_session is still included. It was claimed before
+   * that column existed, or by a runtime with no session to give, and
+   * excluding it would quietly stop checkpointing work that is genuinely held
+   * — a silent regression to fix a silent bug.
+   */
+  const held = heldByThisSession(all, actor.sessionId)
   if (held.length === 0) return []
 
   const summary = [session.completed, session.next_steps && `Next: ${session.next_steps}`]

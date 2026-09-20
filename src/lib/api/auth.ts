@@ -19,6 +19,29 @@ export type Actor = {
   role: UserRole
   /** Identity used for rate limiting: the key id, or the user for UI sessions. */
   rateKey: string
+  /**
+   * Which session is making this request, when the caller can say.
+   *
+   * `actorId` names a runtime and a human — `claude-code · cal@example.com` —
+   * and four Claude Code sessions on one machine all write that same string.
+   * It is an identity, not a worker. This is the worker, and it is optional
+   * because Codex and OpenClaw may not have one to give.
+   */
+  sessionId: string | null
+}
+
+/**
+ * The caller's session, if it named one.
+ *
+ * A header rather than a body field, so it arrives on every request without
+ * every endpoint growing a parameter for it. Bounded and filtered because it
+ * is stored and displayed: anything unexpected is dropped rather than
+ * sanitised, since a session id we cannot trust is no better than none.
+ */
+const sessionOf = (req: Request): string | null => {
+  const raw = req.headers.get('x-cairn-session')?.trim()
+  if (!raw || raw.length > 100) return null
+  return /^[A-Za-z0-9._:-]+$/.test(raw) ? raw : null
 }
 
 const bearerToken = (req: Request): string | null => {
@@ -86,6 +109,7 @@ export const authenticate = async (req: Request): Promise<Actor | null> => {
       userDisplayName: data.user_display_name,
       role: data.role,
       rateKey: `key:${data.id}`,
+      sessionId: sessionOf(req),
     }
   }
 
@@ -101,5 +125,8 @@ export const authenticate = async (req: Request): Promise<Actor | null> => {
     userDisplayName: user.displayName,
     role: user.role,
     rateKey: `user:${user.id}`,
+    // A browser has no session id to give, and should not: the person at the
+    // keyboard is the same worker whichever tab they are in.
+    sessionId: null,
   }
 }

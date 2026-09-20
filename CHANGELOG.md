@@ -11,6 +11,18 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **A claim now says which session holds it, not just which human.** `claimed_by` is a label
+  like `claude-code · cal@example.com`, and every Claude Code session on a machine writes
+  exactly that — four run here at once. The claim itself was never the broken part; the
+  things around it were. `release` matched on the label and would drop another session's
+  claim silently, `--mine` answered "this human's agents" while looking like "this session",
+  and the session-end hook stamped its checkpoint onto every task the *label* held, so one
+  session's afternoon landed on another's tasks. Nobody could answer "which session is
+  holding this", which cost a duplicated implementation the day this was written. The CLI
+  now sends its session id (`CAIRN_SESSION_ID`, or `CLAUDE_CODE_SESSION_ID`, which Claude
+  Code already exports), releasing another session's claim requires `--force`, and a claim
+  that names no session behaves exactly as before — because "cannot tell" must not become
+  "not yours".
 - **Vitals counts the work nobody said they were doing.** CAIRN-135 measured that 36% of
   closed tasks had never been claimed, shipped auto-claim on note and checkpoint, and that
   number then had no reader — nothing recomputed it, so nobody would have known if it went

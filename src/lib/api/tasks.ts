@@ -5,7 +5,7 @@ import { projectIdForFormerKey } from './project-keys'
 /** Columns returned by `show`. Kept explicit so responses stay predictable. */
 export const TASK_FIELDS =
   'id, project_id, number, title, description, type, status, priority, labels, due_date, position, ' +
-  'actor_type, actor_id, claimed_by, claimed_at, heartbeat_at, attempt, ownership_version, ' +
+  'actor_type, actor_id, claimed_by, claimed_session, claimed_at, heartbeat_at, attempt, ownership_version, ' +
   'checkpoint_summary, checkpoint_payload, checkpoint_at, checkpoint_version, blocked_reason, blocked_at, ' +
   'resolution, resolution_kind, resolved_at, resolved_by, duplicate_of, parent_id, ' +
   'memory_session_id, observation_ids, created_at, updated_at, ' +
@@ -13,7 +13,7 @@ export const TASK_FIELDS =
 
 /** Terse columns for list/search output. See the CLI's output discipline. */
 export const TASK_LIST_FIELDS =
-  'id, number, title, type, status, priority, labels, claimed_by, claimed_at, heartbeat_at, attempt, ownership_version, checkpoint_version, ' +
+  'id, number, title, type, status, priority, labels, claimed_by, claimed_session, claimed_at, heartbeat_at, attempt, ownership_version, checkpoint_version, ' +
   // project_id as well as the embed: an activity row records the project by id,
   // and it is the only scope that survives the task being deleted.
   'resolution, updated_at, project_id, project:projects!project_id!inner(key)'

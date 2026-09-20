@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shouldClaimByWorking } from './claim'
+import { isAnotherSessionsClaim, shouldClaimByWorking } from './claim'
 
 /**
  * Writing to a task's work log is working on it.
@@ -41,5 +41,40 @@ describe('when working on a task should claim it', () => {
     // necessarily picked the work up, and showing them as holding it would be
     // a claim about them they did not make.
     expect(shouldClaimByWorking(human, { status: 'todo' })).toBe(false)
+  })
+})
+
+/**
+ * A claim names a session, not just a human.
+ *
+ * `claimed_by` is an actorLabel — `claude-code · cal@example.com` — and every
+ * Claude Code session on a machine writes exactly that. Four run here at once.
+ * The claim itself was never the broken part: claim_task_atomic refuses a
+ * second holder. What was broken is everything that read the label and
+ * believed it named a worker, and the cost was not theoretical — two sessions
+ * implemented the same fix forty minutes apart because neither could see who
+ * held the task.
+ */
+describe('whose claim this is', () => {
+  it('knows another session when both sides can say', () => {
+    expect(isAnotherSessionsClaim('session-a', 'session-b')).toBe(true)
+  })
+
+  it('is not a foreign claim when the session matches', () => {
+    expect(isAnotherSessionsClaim('session-a', 'session-a')).toBe(false)
+  })
+
+  it('treats a claim that names no session as releasable', () => {
+    // Claimed before the column existed, or by a runtime with no session to
+    // give. "Cannot tell" must not become "not yours", or releases that have
+    // always worked start failing.
+    expect(isAnotherSessionsClaim(null, 'session-b')).toBe(false)
+    expect(isAnotherSessionsClaim(undefined, 'session-b')).toBe(false)
+  })
+
+  it('treats a caller with no session as unable to object', () => {
+    // Codex and OpenClaw may not have one. They keep today's behaviour rather
+    // than being locked out of releasing anything.
+    expect(isAnotherSessionsClaim('session-a', null)).toBe(false)
   })
 })
