@@ -5,7 +5,7 @@ import { assess, type Vitals } from './vitals'
 const healthy = (over: Partial<Vitals> = {}): Vitals => ({
   windowHours: 24,
   sessions: { recent: 6, recentWithFiles: 5, recentSummarised: 6, baseline: 40, baselineWithFiles: 35 },
-  tasks: { opened: 4, closed: 5, stalled: 1, held: 2 },
+  tasks: { opened: 4, closed: 5, stalled: 1, held: 2, closedUnclaimed: 0 },
   autoReleased: 0,
   knowledgeWritten: 2,
   agents: [
@@ -67,6 +67,28 @@ describe('assess', () => {
     // there would be worse than the false positive it removes.
     const v = healthy({ agents: [{ agent: 'openclaw', recent: 0, baseline: 1045 }] })
     expect(codes(v)).toContain('agent-silent')
+  })
+
+  it('counts work that was closed without anyone claiming it', () => {
+    // CAIRN-135 measured 36% and nothing has recomputed it since.
+    const v = healthy({ tasks: { opened: 4, closed: 8, stalled: 1, held: 2, closedUnclaimed: 3 } })
+    const f = assess(v).find((x) => x.code === 'closed-unclaimed')
+    expect(f?.severity).toBe('warning')
+    expect(f?.message).toContain('3 of 8')
+  })
+
+  it('does not cry about one of two', () => {
+    // A floor under the ratio, because a small week is not a pattern and a
+    // warning that fires on noise teaches people to skip the line.
+    const v = healthy({ tasks: { opened: 1, closed: 2, stalled: 1, held: 2, closedUnclaimed: 1 } })
+    expect(codes(v)).not.toContain('closed-unclaimed')
+  })
+
+  it('says nothing when the server is too old to send the number', () => {
+    // Absent is not zero and is not a problem either; a check that cannot see
+    // the number must not invent one.
+    const v = healthy({ tasks: { opened: 4, closed: 8, stalled: 1, held: 2 } })
+    expect(codes(v)).not.toContain('closed-unclaimed')
   })
 
   it('catches the jsonb bug, where the total never dropped', () => {

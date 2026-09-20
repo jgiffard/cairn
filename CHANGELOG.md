@@ -11,6 +11,15 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **Vitals counts the work nobody said they were doing.** CAIRN-135 measured that 36% of
+  closed tasks had never been claimed, shipped auto-claim on note and checkpoint, and that
+  number then had no reader — nothing recomputed it, so nobody would have known if it went
+  back up. `cairn vitals` now reports when a quarter or more of the tasks closed in the
+  window never held a claim at any point in their life, with a floor of five closed so a
+  small week is not mistaken for a pattern. Not an alarm, and deliberately not auto-claim on
+  close: CAIRN-146 rejected inferring intent from an ambiguous signal, and closing is at
+  least as ambiguous as annotating — `--kind verified` exists precisely for closing somebody
+  else's fix.
 - **A map of the knowledge corpus** at `/knowledge/graph`, and the same findings without a
   screen through `cairn know --gaps` / `--orphans` / `--dangling`, a `GET
   /api/v1/knowledge/gaps` route and a `cairn_gaps` MCP tool. It answers what a list of
