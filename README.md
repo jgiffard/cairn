@@ -537,11 +537,23 @@ node scripts/install-hooks.mjs        # --dry-run to see what it would write
 It is idempotent: every entry it writes is tagged, so re-running after an upgrade replaces
 its own and touches nobody else's. Coverage differs by runtime:
 
-| Runtime | Session start | File read | Session end |
+| Runtime | Session start | File read | Session recorded |
 |---|---|---|---|
-| Claude Code | `SessionStart` | `PreToolUse(Read)` | `SessionEnd` |
-| Codex | `SessionStart` | `PreToolUse(Read)` | `Stop` — there is no `SessionEnd`, so it leans on the API being idempotent |
-| OpenClaw | manual — push `cairn context` output into the existing `agent:bootstrap` hook | — | — · schedule `cairn reconcile` instead |
+| Claude Code | `SessionStart` | `PreToolUse(Read)` | `SessionEnd` **and** `PreCompact` |
+| Codex | `SessionStart` | `PreToolUse(Read)` | `Stop` — there is no `SessionEnd` |
+| OpenClaw | manual — push `cairn context` output into the existing `agent:bootstrap` hook | — | swept from disk on a schedule — it has no session event of any kind |
+
+All three lean on the same property: `cairn session end` upserts on (platform, id), so a
+session may be written as many times as you like and there is still one row, rewritten in
+place and a little richer each time.
+
+**Why Claude Code needs `PreCompact` as well as `SessionEnd`.** A session is recorded when
+it ends, and a session that runs for days does not end — it compacts. On the machine this
+was found on, four transcripts had been open since the same morning, one of them 39 MB,
+and the last session recorded from that host was the minute those four began, 54 hours
+earlier. Nothing was broken: the hooks fired, the key authenticated, the parser worked on
+a real transcript. The trigger never came. Compaction is the event that is guaranteed to
+happen to a session too long to end, because it is what happens *instead* of ending.
 
 Codex hook entries must also be trusted in `~/.codex/config.toml` before they run; the
 installer prints what to add.

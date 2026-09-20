@@ -53,6 +53,21 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **A session that never ends was never recorded.** The session row is written at
+  `SessionEnd`, and a session that runs for days does not end — it compacts. On the machine
+  this was found on, four Claude Code transcripts had been open since the same morning, one
+  of them 39 MB, and the last session recorded from that host was the minute those four
+  began, 54 hours earlier. Nothing was broken: the hooks fired, the key authenticated, the
+  parser read a real transcript correctly. The trigger never came. `install-hooks.mjs` now
+  installs `PreCompact` alongside `SessionEnd`, because compaction is what happens *instead*
+  of ending, and `cairn session end` upserts on (platform, id) so the row is rewritten in
+  place rather than duplicated.
+- **Re-running `install-hooks.mjs` duplicated hooks it had not installed itself.** It
+  recognised its own entries only by the tag it writes, so hooks installed by hand — or by a
+  version of the script from before the tag existed — were invisible to it and a second copy
+  was appended beside them. Two session recorders means two model calls per event. It now
+  also recognises its scripts by name, and by name rather than absolute path, because the
+  stale entry most in need of replacing is exactly the one that points somewhere else.
 - **The browser UI could not write behind a TLS-terminating reverse proxy** — the
   deployment the README documents. The origin check compared the browser's `Origin`
   against the request's own URL, which reads `http://` once the proxy has terminated TLS,
