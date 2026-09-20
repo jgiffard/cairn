@@ -53,6 +53,15 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **The summariser ran on every Codex turn.** Codex has no `SessionEnd`, so the recorder is
+  wired to `Stop`, which fires at the end of each assistant turn — and `record()` summarised
+  unconditionally, so a forty-turn session made forty model calls, each with up to 24 KB of
+  transcript, to write and rewrite one row. Nobody chose one call per turn; it arrived
+  because `Stop` was the only event Codex had. The hook now reuses the last summary for a
+  session when the digest is byte-for-byte what it already summarised, or when the previous
+  call was under `CAIRN_SUMMARY_MIN_INTERVAL_MS` (default ten minutes). The deterministic
+  half is still written fresh every time, and the prose is reused rather than omitted, so a
+  row never loses prose it already had.
 - **Vitals called the owner of the instance a silent agent.** `monty.torr@gmail.com has
   written nothing in 24h, against 97 in the week before … verify it was expected to be active
   before investigating hooks or keys` — that is a person, the 97 is a week of his own clicks

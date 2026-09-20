@@ -18,6 +18,7 @@
  * useful; a session that was never recorded is not.
  */
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { createReadStream, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -523,6 +524,86 @@ Be specific and concrete: name files, numbers, error codes, task refs. Do not
 congratulate, do not summarise the summary, do not invent anything that is not
 in the transcript below.`
 
+/**
+ * The summariser is the only part of this that costs money, and Codex calls it
+ * on every turn.
+ *
+ * Codex has no SessionEnd, so `install-hooks.mjs` wires the recorder to Stop,
+ * which fires at the end of each assistant turn. `record()` then summarised
+ * unconditionally: a forty-turn session made forty model calls, each with up
+ * to 24 KB of transcript, to write and rewrite one row. The row was always
+ * right -- `cairn session end` upserts on (platform, id) -- but the calls
+ * multiplied, which is the exact economics the comment at the top of this file
+ * says the design escaped. Nobody chose one call per turn; it arrived because
+ * Stop was the only event Codex had.
+ *
+ * Two rules, and between them they cost nothing in quality:
+ *
+ *   - If the digest is byte-for-byte what was last summarised for this
+ *     session, the model would return what it returned before. Reuse it.
+ *   - Otherwise, if the last call for this session was under
+ *     CAIRN_SUMMARY_MIN_INTERVAL_MS ago, reuse it anyway. The deterministic
+ *     half -- files, task refs, counts -- is still written fresh every time,
+ *     and a row with slightly older prose beats a row rewritten forty times.
+ *
+ * Reuse rather than omission on purpose: leaving the prose out would blank
+ * fields that already held something true.
+ *
+ * The digest is capped at MAX_DIGEST_CHARS, so its LENGTH stops changing once
+ * a session is long. Its CONTENT does not -- the tail moves -- so this hashes
+ * rather than measures.
+ */
+const SUMMARY_STATE = join(homedir(), '.cairn', 'summaries.json')
+const MIN_INTERVAL_MS = Number(process.env.CAIRN_SUMMARY_MIN_INTERVAL_MS ?? 600_000)
+/** Enough that one machine's sessions do not accumulate without bound. */
+const KEEP_SUMMARIES = 50
+
+const readSummaryState = () => {
+  try {
+    const parsed = JSON.parse(readFileSync(SUMMARY_STATE, 'utf8'))
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+const rememberSummary = (sessionId, digestHash, summary) => {
+  try {
+    const state = readSummaryState()
+    state[sessionId] = { at: Date.now(), digestHash, summary }
+    const kept = Object.entries(state)
+      .sort(([, a], [, b]) => (b?.at ?? 0) - (a?.at ?? 0))
+      .slice(0, KEEP_SUMMARIES)
+    mkdirSync(dirname(SUMMARY_STATE), { recursive: true })
+    writeFileSync(SUMMARY_STATE, JSON.stringify(Object.fromEntries(kept)))
+  } catch {
+    // A stamp we cannot write costs one extra model call next time, which is
+    // not worth failing a session record over.
+  }
+}
+
+/**
+ * The summary for this digest, from the model or from last time.
+ *
+ * Returns the summary and whether it is new, so the caller can stamp only what
+ * it actually paid for.
+ */
+const summaryFor = async (sessionId, digest) => {
+  const digestHash = createHash('sha256').update(digest).digest('hex')
+  const previous = sessionId ? readSummaryState()[sessionId] : null
+
+  if (previous?.summary) {
+    if (previous.digestHash === digestHash) return { summary: previous.summary, fresh: false }
+    if (Date.now() - (previous.at ?? 0) < MIN_INTERVAL_MS) {
+      return { summary: previous.summary, fresh: false }
+    }
+  }
+
+  const summary = await summarise(digest)
+  if (summary && sessionId) rememberSummary(sessionId, digestHash, summary)
+  return { summary, fresh: true }
+}
+
 const summarise = (digest) =>
   new Promise((resolve) => {
     if (!digest.trim()) return resolve(null)
@@ -650,7 +731,7 @@ const record = async (payload) => {
 
   const cwd = payload.cwd ?? t.cwd
   const files = keepFiles(t.files, cwd)
-  const summary = (await summarise(buildDigest(t))) ?? {}
+  const summary = (await summaryFor(sessionId, buildDigest(t))).summary ?? {}
 
   const args = [
     'session',
