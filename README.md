@@ -856,11 +856,18 @@ to those files.
 ```bash
 export CAIRN_BACKUP_DIR=/srv/backups/cairn
 export CAIRN_DB_CONTAINER=cairn-postgres
+export CAIRN_DB_USER=postgres            # the role pg_dump connects as
 export CAIRN_ATTACHMENT_DIR=/srv/cairn/attachments
 
 ./scripts/backup.sh          # nightly, from cron — 7 daily, 4 weekly
 ./scripts/restore-drill.sh   # weekly — actually restores and verifies
 ```
+
+`CAIRN_DB_USER` defaults to `postgres`, which is not the role `.env.example` gives you —
+that is `cairn_app`. The default is kept for the deployments already running on it, and a
+backup that stops working is the worst thing to break quietly, so set this to whatever role
+actually owns your database. Reported by [jgiffard](https://github.com/jgiffard), who found
+it by reading the script rather than by losing a backup.
 
 `restore-drill.sh` restores the newest dump into a throwaway database, asserts the data is
 really there — including that the generated `search_vector` survived, which would otherwise

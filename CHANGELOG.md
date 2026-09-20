@@ -71,6 +71,14 @@ out under **Breaking** with what to do about it.
   call was under `CAIRN_SUMMARY_MIN_INTERVAL_MS` (default ten minutes). The deterministic
   half is still written fresh every time, and the prose is reused rather than omitted, so a
   row never loses prose it already had.
+- **`backup.sh` could not back up the database the README tells you to create.** It dumped
+  with `pg_dump -U postgres`, hardcoded, while `.env.example` documents `cairn_app` — so a
+  deployment that followed the instructions either failed with `role "postgres" does not
+  exist` or, on a cluster that happened to have one, quietly dumped as a superuser nobody
+  intended. The role is now `CAIRN_DB_USER`, defaulting to `postgres` so existing
+  deployments are untouched, and the README and `.env.example` now point at each other.
+  Reported and fixed by [jgiffard](https://github.com/jgiffard) —
+  [#55](https://github.com/montytorr/cairn/pull/55).
 - **Vitals called the owner of the instance a silent agent.** `monty.torr@gmail.com has
   written nothing in 24h, against 97 in the week before … verify it was expected to be active
   before investigating hooks or keys` — that is a person, the 97 is a week of his own clicks
