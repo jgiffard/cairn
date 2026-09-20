@@ -55,11 +55,53 @@ const installScripts = () => {
   log(`  scripts -> ${dirname(CONTEXT)}`)
 }
 
+/**
+ * An entry this installer owns.
+ *
+ * The tag alone is not enough. Hooks installed by hand, or by a version of
+ * this script from before the tag existed, carry no tag and are invisible to
+ * a filter that only looks for one -- so re-running appends a second copy
+ * instead of replacing the first. That is not a cosmetic duplicate: the
+ * session recorder makes a model call, and two of them fire per event.
+ *
+ * Found on a machine whose Claude hooks predated the tag, where the install
+ * this comment was written for would have doubled every one of them.
+ *
+ * So recognise the script by NAME. Not by absolute path: an entry written when
+ * the scripts lived somewhere else -- a different home, a checkout, a copy
+ * under /opt -- still invokes the same two files, and matching the full path
+ * would miss exactly the stale entry that most needs replacing. Nothing else
+ * on a machine runs a file called `cairn-session-end.mjs`.
+ */
+const SCRIPT_NAMES = ['cairn-context.mjs', 'cairn-session-end.mjs']
+
+const isMine = (hook) =>
+  Boolean(hook?.[TAG]) ||
+  (typeof hook?.command === 'string' && SCRIPT_NAMES.some((n) => hook.command.includes(n)))
+
 // --- Claude Code ------------------------------------------------------------
 
 /**
- * Claude Code is the only runtime with a real SessionEnd, so it gets the whole
- * design as designed. The others approximate it.
+ * Claude Code has a real SessionEnd, and for a long time that was taken to mean
+ * it needed nothing else. It does.
+ *
+ * A session is written when it ends, and a session that runs for days does not
+ * end. On the machine this was found on, four transcripts had been open since
+ * 2026-09-18 -- one of them 39 MB -- and the last session recorded from that
+ * host was the minute those four began, 54 hours earlier. Nothing was broken:
+ * the hooks fired, the key authenticated, the parser worked. The trigger simply
+ * never came.
+ *
+ * So PreCompact as well. A long session compacts repeatedly, and compaction is
+ * the one event that is guaranteed to happen to a session too long to end --
+ * it is what happens INSTEAD of ending. Recording there costs nothing extra in
+ * correctness, because `cairn session end` upserts on (platform, id): the row
+ * is rewritten in place, progressively richer, and the compaction that finally
+ * precedes a real SessionEnd just writes the same row once more.
+ *
+ * This is also what makes the Codex arrangement below safe, and it has been
+ * running that way all along -- Stop fires every turn and has never duplicated
+ * a row.
  */
 const installClaude = () => {
   const path = join(HOME, '.claude', 'settings.json')
@@ -72,7 +114,7 @@ const installClaude = () => {
 
   const replace = (event, matcher, entry) => {
     const groups = (settings.hooks[event] ?? []).filter(
-      (g) => !(g.hooks ?? []).some((h) => h[TAG]),
+      (g) => !(g.hooks ?? []).some(isMine),
     )
     groups.push(matcher ? { matcher, hooks: [entry] } : { hooks: [entry] })
     settings.hooks[event] = groups
@@ -81,9 +123,12 @@ const installClaude = () => {
   replace('SessionStart', 'startup|resume|clear|compact', mine(`node ${CONTEXT}`, { timeout: 10 }))
   replace('PreToolUse', 'Read', mine(`node ${CONTEXT}`, { timeout: 10, async: true }))
   replace('SessionEnd', null, mine(`node ${SESSION_END}`, { timeout: 120, async: true }))
+  // No matcher: both `manual` and `auto` compactions are the same event to us,
+  // and naming them would only add a spelling to get wrong.
+  replace('PreCompact', null, mine(`node ${SESSION_END}`, { timeout: 120, async: true }))
 
   writeJson(path, settings)
-  log('  claude: SessionStart, PreToolUse(Read), SessionEnd')
+  log('  claude: SessionStart, PreToolUse(Read), SessionEnd, PreCompact')
 }
 
 // --- Codex ------------------------------------------------------------------
@@ -104,7 +149,7 @@ const installCodex = () => {
   const mine = (command, extra = {}) => ({ type: 'command', command, [TAG]: true, ...extra })
 
   const replace = (event, matcher, entry) => {
-    const groups = (config.hooks[event] ?? []).filter((g) => !(g.hooks ?? []).some((h) => h[TAG]))
+    const groups = (config.hooks[event] ?? []).filter((g) => !(g.hooks ?? []).some(isMine))
     groups.push(matcher ? { matcher, hooks: [entry] } : { hooks: [entry] })
     config.hooks[event] = groups
   }
