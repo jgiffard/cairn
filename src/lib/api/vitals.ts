@@ -27,7 +27,18 @@ export type Vitals = {
     baseline: number
     baselineWithFiles: number
   }
-  tasks: { opened: number; closed: number; stalled: number; held: number }
+  tasks: {
+    opened: number
+    closed: number
+    stalled: number
+    held: number
+    /**
+     * Closed in the window having never been claimed, at any point in their
+     * life. Optional because a server older than migration 051 does not send
+     * it, and a check that cannot see the number must not invent one.
+     */
+    closedUnclaimed?: number
+  }
   autoReleased: number
   knowledgeWritten: number
   // actorType is optional because a server that predates migration 050 does
@@ -153,6 +164,32 @@ export const assess = (v: Vitals): Finding[] => {
           `before investigating hooks or keys.`,
       })
     }
+  }
+
+  // Also a habit rather than a breakage, and the one CAIRN-135 measured at 36%
+  // of closed tasks before shipping auto-claim on note and checkpoint. That
+  // number had no reader afterwards: nothing recomputed it, so nobody would
+  // have known if it went back up. This is the reader.
+  //
+  // A ratio here rather than a count, because the thing that matters is what
+  // share of the work nobody said they were doing — and a floor under it,
+  // because one of two proves nothing and crying about it teaches people to
+  // skip the line.
+  //
+  // Deliberately not an alarm and deliberately not auto-claim on close.
+  // CAIRN-146 rejected inferring intent from an ambiguous signal, and closing
+  // is at least as ambiguous as annotating: --kind verified exists precisely
+  // for closing somebody else's fix.
+  const unclaimed = v.tasks.closedUnclaimed
+  if (unclaimed !== undefined && v.tasks.closed >= 5 && unclaimed / v.tasks.closed >= 0.25) {
+    findings.push({
+      code: 'closed-unclaimed',
+      severity: 'warning',
+      message:
+        `${unclaimed} of ${v.tasks.closed} tasks closed in ${hours} were never claimed. ` +
+        `Nothing recorded that anyone was working them, so the board showed them free ` +
+        `while they were being done. \`cairn add --start\`, or claim before you begin.`,
+    })
   }
 
   // Not a breakage — a habit. Worth saying once it is a pattern rather than
