@@ -46,6 +46,29 @@ describe('assess', () => {
     expect(codes(v)).not.toContain('no-sessions')
   })
 
+  it('does not tell a person their hooks may be broken', () => {
+    // The owner of the instance writes through the web UI, so he appears in
+    // this list beside the runtimes. He has no hooks and no keys.
+    const v = healthy({
+      agents: [
+        { agent: 'claude-code', actorType: 'agent', recent: 208, baseline: 1641 },
+        { agent: 'openclaw', actorType: 'agent', recent: 0, baseline: 1045 },
+        { agent: 'monty', actorType: 'human', recent: 0, baseline: 97 },
+      ],
+    })
+    const silent = assess(v).filter((f) => f.code === 'agent-silent')
+    expect(silent).toHaveLength(1)
+    expect(silent[0]?.message).toContain('openclaw')
+  })
+
+  it('still warns when the server is too old to say what an actor is', () => {
+    // A payload from before migration 050 carries no actorType. Everything in
+    // that list was a runtime as far as anyone knew, and dropping the check
+    // there would be worse than the false positive it removes.
+    const v = healthy({ agents: [{ agent: 'openclaw', recent: 0, baseline: 1045 }] })
+    expect(codes(v)).toContain('agent-silent')
+  })
+
   it('catches the jsonb bug, where the total never dropped', () => {
     // Sessions kept being written; only the ones naming a file were rejected,
     // so nothing looked wrong for two days.

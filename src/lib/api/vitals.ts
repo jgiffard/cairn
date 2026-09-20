@@ -30,7 +30,9 @@ export type Vitals = {
   tasks: { opened: number; closed: number; stalled: number; held: number }
   autoReleased: number
   knowledgeWritten: number
-  agents: { agent: string; recent: number; baseline: number }[]
+  // actorType is optional because a server that predates migration 050 does
+  // not send it. Absent means "assume runtime" — see the check below.
+  agents: { agent: string; actorType?: string; recent: number; baseline: number }[]
 }
 
 export type Finding = {
@@ -130,6 +132,17 @@ export const assess = (v: Vitals): Finding[] => {
   // Keep this as a qualified warning, not an alarm: silence is a prompt to
   // verify runtime usage, never proof that hooks or keys are broken.
   for (const agent of v.agents) {
+    // A person is not a runtime that has gone quiet. The owner of an instance
+    // appears in this list because he clicks things in the web UI, and telling
+    // him his hooks may be broken is both wrong and the kind of wrong that
+    // teaches people to skim the whole panel.
+    //
+    // Tested against 'human' rather than for 'agent': a payload from a server
+    // older than migration 050 carries no actorType at all, and on such a
+    // server everything in this list was a runtime as far as anyone knew.
+    // Silently dropping the check there would be worse than the false
+    // positive it removes.
+    if (agent.actorType === 'human') continue
     if (agent.recent === 0 && expected(agent.baseline) >= 3) {
       findings.push({
         code: 'agent-silent',

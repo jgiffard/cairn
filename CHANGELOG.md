@@ -53,6 +53,17 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **Vitals called the owner of the instance a silent agent.** `monty.torr@gmail.com has
+  written nothing in 24h, against 97 in the week before … verify it was expected to be active
+  before investigating hooks or keys` — that is a person, the 97 is a week of his own clicks
+  in the web UI, and he has no hooks or keys to investigate. `agent_stats` selected
+  `actor_id` and grouped by it, never referring to `actor_type`, so everyone who had ever
+  touched a task arrived in the list the silent-runtime check reads. The cost was not the
+  noise: a genuinely silent runtime was sitting in the same list as a false positive about a
+  person, and a warning that is wrong half the time is one nobody finishes reading. Migration
+  050 carries `actor_type` through, and the check skips people. A payload from an older
+  server carries no type and is still checked, because there everything in that list was a
+  runtime as far as anyone knew.
 - **A long session was summarised by its first hour.** `buildDigest` gave the agent's
   narration head *and* tail, with a comment saying why the middle is worthless, but took the
   prompts head-only. That was fine while a session was an afternoon; now that the recorder
