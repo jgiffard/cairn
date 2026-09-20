@@ -2,8 +2,12 @@ What the licence change does and does not do
 ============================================
 
 Cairn was released under the MIT License from its first commit through v0.5.1.
-From the release following that tag it is licensed under the Sustainable Use
-License, in the file LICENSE beside this one.
+From commit 303a9f9, merged 2026-09-19 at 20:18 UTC, it is licensed under the
+Sustainable Use License, in the file LICENSE beside this one.
+
+The boundary is that commit. CONTRIBUTING.md cites the same one, because this
+file used to draw the line at a tag and that one used to draw it at a date, and
+those are not the same line.
 
 A licence change is not retroactive, and nobody should read it as one.
 
@@ -36,5 +40,21 @@ Contributions made before this change were made under MIT and are acknowledged
 as such. Contributions from this point are made under the Sustainable Use
 License; CONTRIBUTING.md says so.
 
+A pull request opened before 303a9f9 was offered under MIT, whenever it merges.
+Its author read the licence that was in the repository at the time, and cannot
+be held to one that arrived while the branch was open. MIT permits
+sublicensing, so such a contribution ships inside this work under the
+Sustainable Use License with its MIT-era authorship acknowledged here; the
+contribution itself also remains available under MIT to anyone who takes it
+from that pull request, and that is the correct outcome rather than a loophole.
+
+  - #43, "Trust the proxy hop when checking a browser mutation's origin",
+    opened 2026-09-19 at 19:57 UTC by Thierry Thiers, twenty-one minutes before
+    303a9f9, and merged after it. Offered under MIT. The author has been asked
+    on that pull request whether he would rather it were under the Sustainable
+    Use License; until he answers, MIT is what he offered and MIT is what this
+    file records.
+
 If you contributed to Cairn under MIT and would rather your work were not
-relicensed, say so in an issue and it will be honoured.
+relicensed, say so in an issue and it will be honoured. If you would rather it
+were relicensed, say so on your pull request and it will be recorded there.
