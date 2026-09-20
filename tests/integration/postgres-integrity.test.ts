@@ -262,6 +262,7 @@ describe('atomic knowledge writes', () => {
           userDisplayName: 'Integration User',
           role: 'admin',
           rateKey: 'test',
+  sessionId: null,
         },
         {
           title: 'Atomic knowledge sentinel',
@@ -288,6 +289,7 @@ describe('atomic knowledge writes', () => {
       userDisplayName: 'Integration User',
       role: 'admin' as const,
       rateKey: 'test',
+  sessionId: null,
     }
     const created = await createKnowledge(actor, {
       title: 'Atomic update sentinel',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { splitHeldByWorked, untouchedCheckpoint, workedCheckpoint } from './sessions'
+import { heldByThisSession, splitHeldByWorked, untouchedCheckpoint, workedCheckpoint } from './sessions'
 
 /**
  * Session end checkpoints every task the agent still holds. It used to write
@@ -64,5 +64,42 @@ describe('checkpointing held tasks', () => {
   it('marks both kinds as automatic, so neither reads as something a human wrote', () => {
     expect(workedCheckpoint('did the thing')).toContain('Recorded automatically')
     expect(untouchedCheckpoint(['AC-37'])).toContain('Recorded automatically')
+  })
+})
+
+/**
+ * A checkpoint belongs to the session that did the work.
+ *
+ * This used to select on `claimed_by` alone, which is an actorLabel shared by
+ * every Claude Code session on the machine. Three knowledge-map tasks ended up
+ * carrying a progress report about merging an unrelated pull request, because
+ * the identity matched and nothing else was consulted. CAIRN-182 fixed the
+ * version of this that stamped tasks the session never touched; this is the
+ * same wrong summary arriving through identity rather than through the file
+ * list.
+ */
+describe('heldByThisSession', () => {
+  const held = [
+    { ref: 'CAIRN-209', claimed_session: 'other-session' },
+    { ref: 'CAIRN-231', claimed_session: 'this-session' },
+    { ref: 'CAIRN-100', claimed_session: null },
+  ]
+
+  it('leaves another session\u2019s held tasks alone', () => {
+    expect(heldByThisSession(held, 'this-session').map((t) => t.ref)).toEqual([
+      'CAIRN-231',
+      'CAIRN-100',
+    ])
+  })
+
+  it('keeps a claim that names no session', () => {
+    // Claimed before the column existed, or by a runtime that cannot name
+    // itself. Excluding it would quietly stop checkpointing work genuinely
+    // held — a silent regression traded for a silent bug.
+    expect(heldByThisSession(held, 'this-session').some((t) => t.ref === 'CAIRN-100')).toBe(true)
+  })
+
+  it('changes nothing for a caller that cannot name its session', () => {
+    expect(heldByThisSession(held, null)).toHaveLength(3)
   })
 })

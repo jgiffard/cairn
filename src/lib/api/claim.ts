@@ -11,6 +11,23 @@ import { CLAIM_LEASE_SECONDS } from '@/lib/utils'
  * attempt counter and the recorded events are the coordination layer, and a
  * second copy of them would be a second answer to "who has this".
  */
+/**
+ * Whether this claim belongs to a different session than the caller's.
+ *
+ * Pure and exported for the same reason splitHeldByWorked is: the failure it
+ * prevents is silent. Releasing somebody else's claim looked exactly like
+ * releasing your own, and the board simply showed the task free afterwards.
+ *
+ * True only when BOTH sides can name a session. A holder of null means the
+ * claim predates this column or came from a runtime with no session to give,
+ * and treating "cannot tell" as "not yours" would start refusing releases
+ * that have always worked.
+ */
+export const isAnotherSessionsClaim = (
+  holder: string | null | undefined,
+  mine: string | null | undefined,
+): boolean => Boolean(holder && mine && holder !== mine)
+
 export const takeTask = async (
   actor: Actor,
   task: { id: string; status?: unknown; attempt?: unknown; project_id?: unknown },
@@ -33,7 +50,29 @@ export const takeTask = async (
   })
 
   if (error) return { row: null, error: error.message }
-  return { row: data, error: null }
+  if (!data) return { row: data, error: null }
+
+  /**
+   * Which session took it, stamped after the fact and on purpose.
+   *
+   * The claim itself is one conditional UPDATE and was never the broken part;
+   * adding a parameter to claim_task_atomic means dropping and recreating the
+   * function every agent depends on, to carry a field that is metadata about
+   * the holder rather than part of the decision. So: the lock stays untouched,
+   * and the name of the holder is written immediately after it.
+   *
+   * The window between the two is real and harmless. Losing it leaves
+   * claimed_session NULL, which every reader already treats as "cannot tell"
+   * and handles exactly as it did before this column existed.
+   */
+  if (actor.sessionId) {
+    await admin()
+      .from('tasks')
+      .update({ claimed_session: actor.sessionId })
+      .eq('id', task.id)
+  }
+
+  return { row: { ...(data as Record<string, unknown>), claimed_session: actor.sessionId }, error: null }
 }
 
 /**

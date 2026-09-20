@@ -65,6 +65,33 @@ const fileEnv = () => {
 const VERSION = '0.5.1'
 
 const FILE_ENV = fileEnv()
+/**
+ * Which session is running this command.
+ *
+ * The API key names a runtime and a human -- `claude-code · cal@example.com`
+ * -- and every Claude Code session on a machine sends the same one. That is an
+ * identity, not a worker, and the difference cost a duplicated implementation
+ * the day this was written: two sessions picked up the same task because
+ * neither could see who held it.
+ *
+ * Claude Code puts the session id in the environment of every command it runs,
+ * and it is the same id as the transcript's, so this costs nothing to obtain.
+ * CAIRN_SESSION_ID is the override for a runtime that knows better, and no
+ * session at all is a perfectly normal answer -- the server treats an absent
+ * session exactly as it behaved before any of this existed.
+ */
+const SESSION = (() => {
+  const raw = (process.env.CAIRN_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || '').trim()
+  return raw && raw.length <= 100 && /^[A-Za-z0-9._:-]+$/.test(raw) ? raw : null
+})()
+
+/** Every request carries it, so no endpoint needs a parameter for it. */
+const authHeaders = (extra = {}) => ({
+  Authorization: `Bearer ${KEY}`,
+  ...(SESSION ? { 'X-Cairn-Session': SESSION } : {}),
+  ...extra,
+})
+
 const BASE = (process.env.CAIRN_BASE_URL || FILE_ENV.CAIRN_BASE_URL || 'http://localhost:3000')
   .replace(/\/+$/, '')
 
@@ -419,12 +446,11 @@ const flushOutbox = async () => {
     try {
       res = await fetch(`${BASE}${item.path}`, {
         method: item.method,
-        headers: {
-          Authorization: `Bearer ${KEY}`,
+        headers: authHeaders({
           'Content-Type': 'application/json',
           'Idempotency-Key': item.id,
           'X-Cairn-Queued-At': item.t,
-        },
+        }),
         body: item.body === undefined ? undefined : JSON.stringify(item.body),
       })
     } catch {
@@ -525,7 +551,7 @@ const request = async (method, path, body, { soft = false } = {}) => {
     try {
       res = await fetch(`${BASE}${path}`, {
         method,
-        headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: body === undefined ? undefined : JSON.stringify(body),
       })
     } catch (error) {
@@ -621,7 +647,7 @@ const upload = async (path, filePath) => {
 
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${KEY}` },
+    headers: authHeaders(),
     body: form,
   }).catch((error) => die(`cannot reach ${BASE}: ${error.message}`))
 
@@ -1078,7 +1104,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn claim <ref>              exits 9 if another agent holds it
     cairn beat <ref>               keep a claim alive
     cairn checkpoint <ref> --summary "<where things stand>"
-    cairn release <ref>
+    cairn release <ref> [--force]   --force only to drop another session's claim
     cairn block <ref> --reason "<why>"   |   cairn unblock <ref>
 
   output
@@ -1616,8 +1642,14 @@ const commands = {
   async beat() {
     emit(await request('POST', `/api/v1/tasks/${need(positional[0], 'usage: cairn beat <ref>')}/beat`, {}))
   },
+  /**
+   * `--force` releases a claim another session holds. The server refuses that
+   * by default, because releasing somebody else's claim used to be silent and
+   * indistinguishable from releasing your own.
+   */
   async release() {
-    emit(await request('POST', `/api/v1/tasks/${need(positional[0], 'usage: cairn release <ref>')}/release`, {}))
+    const ref = need(positional[0], 'usage: cairn release <ref> [--force]')
+    emit(await request('POST', `/api/v1/tasks/${ref}/release`, { force: Boolean(flags.force) }))
   },
   async checkpoint() {
     const ref = need(positional[0], 'usage: cairn checkpoint <ref> --summary "<state>"')
