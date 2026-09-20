@@ -33,13 +33,13 @@ describe('browser mutation origin', () => {
  */
 describe('browser mutation origin, behind a reverse proxy', () => {
   // What the container actually receives once Traefik has terminated TLS.
-  const derriereProxy = (headers: HeadersInit) =>
+  const behindProxy = (headers: HeadersInit) =>
     new Request('http://cairn.example.test/api/v1/users', { method: 'POST', headers })
 
   it('accepts the browser origin when the proxy says the hop was https', () => {
     expect(
       isTrustedMutationOrigin(
-        derriereProxy({ origin: 'https://cairn.example.test', 'x-forwarded-proto': 'https' }),
+        behindProxy({ origin: 'https://cairn.example.test', 'x-forwarded-proto': 'https' }),
       ),
     ).toBe(true)
   })
@@ -60,11 +60,11 @@ describe('browser mutation origin, behind a reverse proxy', () => {
   })
 
   it('still refuses a foreign origin, proxy headers or not', () => {
-    // Le point à ne pas casser : honorer les en-têtes de proxy ne doit pas
-    // transformer le contrôle en formalité.
+    // The point not to break: honouring the proxy headers must not turn the
+    // check into a formality.
     expect(
       isTrustedMutationOrigin(
-        derriereProxy({ origin: 'https://evil.example.test', 'x-forwarded-proto': 'https' }),
+        behindProxy({ origin: 'https://evil.example.test', 'x-forwarded-proto': 'https' }),
       ),
     ).toBe(false)
   })
@@ -73,8 +73,36 @@ describe('browser mutation origin, behind a reverse proxy', () => {
     // X-Forwarded-* is a comma-separated list; the first entry is the client's.
     expect(
       isTrustedMutationOrigin(
-        derriereProxy({ origin: 'https://cairn.example.test', 'x-forwarded-proto': 'https, http' }),
+        behindProxy({ origin: 'https://cairn.example.test', 'x-forwarded-proto': 'https, http' }),
       ),
     ).toBe(true)
+  })
+
+  it('compares normal forms, so an explicit default port still matches', () => {
+    // nginx hands back the Host verbatim. A browser never puts :443 in an
+    // Origin, so comparing the strings as written refuses a correct install.
+    expect(
+      isTrustedMutationOrigin(
+        behindProxy({
+          origin: 'https://cairn.example.test',
+          'x-forwarded-proto': 'HTTPS',
+          'x-forwarded-host': 'Cairn.Example.Test:443',
+        }),
+      ),
+    ).toBe(true)
+  })
+
+  it('falls back to the request when a forwarded header cannot be parsed', () => {
+    // Refuses rather than admits, and never throws: an unparseable header must
+    // not turn a 403 into a 500.
+    expect(
+      isTrustedMutationOrigin(
+        behindProxy({
+          origin: 'https://cairn.example.test',
+          'x-forwarded-proto': 'https',
+          'x-forwarded-host': 'not a host',
+        }),
+      ),
+    ).toBe(false)
   })
 })

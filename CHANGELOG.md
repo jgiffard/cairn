@@ -53,6 +53,16 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **The browser UI could not write behind a TLS-terminating reverse proxy** — the
+  deployment the README documents. The origin check compared the browser's `Origin`
+  against the request's own URL, which reads `http://` once the proxy has terminated TLS,
+  so the two could never match and every browser mutation was refused with 403. A fresh
+  install could not issue its first agent key, which is the step the README sends you to
+  immediately after bootstrapping the administrator. The expected origin now reads
+  `X-Forwarded-Proto` and `X-Forwarded-Host`, takes the first hop of each, compares normal
+  forms so an explicit `:443` still matches, and falls back to the request itself when the
+  headers are absent or unparseable — so a direct deployment and the CLI are unchanged.
+  Reported and fixed by [Thierry Thiers](https://github.com/webcoder31) — [#42](https://github.com/montytorr/cairn/issues/42), [#43](https://github.com/montytorr/cairn/pull/43).
 - **`cairn know --project` was read after the early return**, so it was accepted and
   silently dropped on every search — the same defect as `check --project`, relocated into
   the CLI, on the verb agents use most.

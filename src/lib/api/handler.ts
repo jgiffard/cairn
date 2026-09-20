@@ -13,8 +13,7 @@ type Config<P, B> = {
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 /** X-Forwarded-* is a comma-separated list; the first entry is the client's hop. */
-const premierSaut = (valeur: string | null): string | null =>
-  valeur?.split(',')[0]?.trim() || null
+const firstHop = (value: string | null): string | null => value?.split(',')[0]?.trim() || null
 
 /**
  * The origin this deployment is actually served on.
@@ -30,12 +29,34 @@ const premierSaut = (valeur: string | null): string | null =>
  * proxy — which the architecture already requires, since the container binds no
  * host port and sits on an internal network. A deployment that exposed the app
  * directly would let a client forge them, and would have larger problems.
+ *
+ * That assumption is narrower than it sounds, which is worth writing down
+ * because it is the part a reader will worry about. The attack being kept out
+ * is CSRF, and CSRF needs a browser to attach the victim's cookie. Neither
+ * X-Forwarded header is CORS-safelisted, so a cross-origin page cannot set one
+ * without a preflight, and this app sends no Access-Control-Allow-* header
+ * anywhere, so that preflight is never approved. A client that can forge the
+ * headers is not a browser, and so does not have the cookie the check exists
+ * to protect. login/route.ts already keys its brute-force limiter on
+ * X-Forwarded-For on the same reasoning, undocumented until now.
  */
-const origineServie = (req: Request): string => {
+const servedOrigin = (req: Request): string => {
   const url = new URL(req.url)
-  const proto = premierSaut(req.headers.get('x-forwarded-proto')) ?? url.protocol.replace(':', '')
-  const host = premierSaut(req.headers.get('x-forwarded-host')) ?? url.host
-  return `${proto}://${host}`
+  const proto = firstHop(req.headers.get('x-forwarded-proto')) ?? url.protocol.replace(':', '')
+  const host = firstHop(req.headers.get('x-forwarded-host')) ?? url.host
+  // A browser's Origin is already a normal form: scheme and host lower-cased,
+  // a default port omitted. A proxy's headers are not — nginx hands back the
+  // Host verbatim, port and all — so compose through URL and compare normal
+  // forms. Otherwise a correct deployment is refused over a `:443` nobody
+  // typed, which is the same 403 with a harder cause to find.
+  try {
+    return new URL(`${proto}://${host}`).origin
+  } catch {
+    // A header we cannot parse is a header we do not trust. Fall back to what
+    // the request itself says, which is the behaviour before any of this: it
+    // refuses rather than admits, and that is the right direction to fail.
+    return url.origin
+  }
 }
 
 /**
@@ -46,7 +67,7 @@ export const isTrustedMutationOrigin = (req: Request): boolean => {
   if (SAFE_METHODS.has(req.method)) return true
   if (/^Bearer\s+\S+/i.test(req.headers.get('authorization') ?? '')) return true
   const origin = req.headers.get('origin')
-  return origin !== null && origin === origineServie(req)
+  return origin !== null && origin === servedOrigin(req)
 }
 
 /**
