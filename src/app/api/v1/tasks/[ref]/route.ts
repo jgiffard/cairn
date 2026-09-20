@@ -151,6 +151,9 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
     // agent checks before picking something up untrustworthy.
     if (body.status && isTerminal(body.status) && task.claimed_by) {
       patch.claimed_by = null
+      // The session goes with the claim. Left behind, it answers "which
+      // session holds this" with one that finished the work and moved on.
+      patch.claimed_session = null
       patch.claimed_at = null
       patch.heartbeat_at = null
     }

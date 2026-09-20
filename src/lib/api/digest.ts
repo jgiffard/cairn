@@ -76,6 +76,10 @@ export const buildDigest = async (task: Record<string, unknown>) => {
     priority: task.priority,
     labels: task.labels,
     claimedBy: task.claimed_by,
+    // Which SESSION holds it, not just which human. claimedBy is an actorLabel
+    // shared by every Claude Code session on a machine, so on its own it
+    // cannot answer the question anybody actually asks of a held task.
+    claimedSession: task.claimed_session,
     updatedAt: task.updated_at,
 
     // The answer, never clipped. It is the whole reason to look.
