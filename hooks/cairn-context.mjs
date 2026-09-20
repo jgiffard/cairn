@@ -2,9 +2,9 @@
 /**
  * The inject-without-being-queried half of Cairn's memory.
  *
- * Reads a hook payload on stdin and prints the briefing as `additionalContext`.
- * Claude Code and Codex share this wire format exactly, so one script serves
- * both; the only difference is which file declares it.
+ * Reads a hook payload on stdin and prints the runtime's context response.
+ * Claude Code and Codex share a wire format. Hermes Agent by Nous Research
+ * injects context from `pre_llm_call`, whose response protocol is different.
  *
  * Three rules govern everything here:
  *
@@ -66,6 +66,11 @@ const main = async () => {
   const event = payload.hook_event_name ?? 'SessionStart'
   const cwd = payload.cwd ?? process.cwd()
 
+  // Hermes Agent by Nous Research invokes pre_llm_call for every turn. Its
+  // first turn is the session-start equivalent; later injection would waste
+  // context and break prompt-cache stability.
+  if (event === 'pre_llm_call' && payload.extra?.is_first_turn !== true) return
+
   const args = ['context', '--cwd', cwd]
 
   // PreToolUse on a read: the question is about this file, not the project.
@@ -77,6 +82,11 @@ const main = async () => {
 
   const text = (await run(args)).trim()
   if (!text) return
+
+  if (event === 'pre_llm_call') {
+    process.stdout.write(`${JSON.stringify({ context: text })}\n`)
+    return
+  }
 
   process.stdout.write(
     `${JSON.stringify({
