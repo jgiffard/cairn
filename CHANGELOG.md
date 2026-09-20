@@ -53,6 +53,14 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **The no-sessions alarm asserted a cause it cannot know.** It ended "The session hooks
+  are not running, or cannot write" — and a count of zero cannot distinguish a runtime with
+  nothing to say from one that cannot speak. It named only the second, and was wrong both
+  times it mattered here: once the runtimes were out of tokens and every hook was fine, once
+  the hooks fired and the key authenticated and the sessions had simply never ended. Twice
+  the guess was read as the finding. It now states what was observed, names the three cases
+  that produce it, and points at `cairn-session-end.mjs --dry-run <transcript>`, which was
+  built to separate them and which the alarm had never mentioned.
 - **A session that never ends was never recorded.** The session row is written at
   `SessionEnd`, and a session that runs for days does not end — it compacts. On the machine
   this was found on, four Claude Code transcripts had been open since the same morning, one

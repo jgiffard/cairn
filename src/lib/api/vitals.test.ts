@@ -27,6 +27,19 @@ describe('assess', () => {
     expect(codes(v)).toContain('no-sessions')
   })
 
+  it('reports the outage without claiming to know its cause', () => {
+    // The message used to end "The session hooks are not running, or cannot
+    // write." It was wrong both times it mattered: once the runtimes were out
+    // of tokens, once the hooks fired fine and the sessions had simply never
+    // ended. A count of zero cannot tell a runtime with nothing to say from
+    // one that cannot speak, so the alarm states what it saw and names the
+    // command that separates them.
+    const v = healthy({ sessions: { recent: 0, recentWithFiles: 0, recentSummarised: 0, baseline: 40, baselineWithFiles: 35 } })
+    const message = assess(v).find((f) => f.code === 'no-sessions')?.message ?? ''
+    expect(message).not.toMatch(/hooks are not running/)
+    expect(message).toContain('--dry-run')
+  })
+
   it('does not cry outage when the week before was also quiet', () => {
     // A new install, or a fortnight off. Zero against zero is not a signal.
     const v = healthy({ sessions: { recent: 0, recentWithFiles: 0, recentSummarised: 0, baseline: 0, baselineWithFiles: 0 } })

@@ -58,13 +58,26 @@ export const assess = (v: Vitals): Finding[] => {
 
   // The two-day outage, in one check. Hooks that stop firing produce silence,
   // and silence is indistinguishable from a quiet day unless you look back.
+  //
+  // It used to end "The session hooks are not running, or cannot write," and
+  // that sentence was wrong both times it mattered. Once the runtimes were out
+  // of tokens, so there was nothing to record and every hook was fine. Once the
+  // hooks fired, the key authenticated and the parser worked — but the sessions
+  // had been open for two days and the only trigger was SessionEnd, which had
+  // not come. Both times the guess was read as the diagnosis and cost an hour.
+  //
+  // A count of zero cannot distinguish a runtime with nothing to say from one
+  // that cannot speak. So say what was seen, and name the one command that
+  // tells them apart.
   if (v.sessions.recent === 0 && expected(v.sessions.baseline) >= 1) {
     findings.push({
       code: 'no-sessions',
       severity: 'alarm',
       message:
         `No session recorded in ${hours}, against ${v.sessions.baseline} in the week before. ` +
-        `The session hooks are not running, or cannot write.`,
+        `That is the observation, not the cause: an idle runtime, a hook that never fired ` +
+        `and a hook that could not write all produce it. ` +
+        `cairn-session-end.mjs --dry-run <transcript> separates them.`,
     })
   }
 
