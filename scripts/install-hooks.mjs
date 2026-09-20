@@ -30,11 +30,51 @@ const TAG = 'cairn-memory'
 
 const log = (...a) => console.log(...a)
 
-const writeJson = (path, value) => {
-  if (DRY) return log(`  would write ${path}`)
+/**
+ * The hook set, in a form that compares.
+ *
+ * Two files can hold the same hooks and different bytes: JSON.stringify emits
+ * keys in insertion order, so rebuilding an entry moves `cairn-memory` from
+ * after `timeout` to before it, and a file without a trailing newline gains
+ * one. Nothing about the configuration changed; every byte of it moved.
+ *
+ * That is not cosmetic for Codex. It refuses to run a hook whose entry does
+ * not match a `trusted_hash` under `[hooks.state]` in config.toml, so a
+ * rewrite that changes nothing still takes its memory offline until somebody
+ * re-trusts each entry by hand. CAIRN-167 was that failure, found the slow
+ * way: the key worked, the scripts worked when run directly, and only the host
+ * config was wrong.
+ *
+ * So: canonicalise, and do not write a file that already says this.
+ */
+const canonical = (settings) =>
+  JSON.stringify(
+    Object.entries(settings?.hooks ?? {})
+      .map(([event, groups]) => [
+        event,
+        (groups ?? [])
+          .map((g) => [
+            g.matcher ?? null,
+            (g.hooks ?? []).map((h) => Object.entries(h).sort(([a], [b]) => (a < b ? -1 : 1))),
+          ])
+          .sort(),
+      ])
+      .sort(),
+  )
+
+const writeJson = (path, value, before) => {
+  if (canonical(before) === canonical(value)) {
+    log(`  ${path} — unchanged`)
+    return false
+  }
+  if (DRY) {
+    log(`  would write ${path}`)
+    return true
+  }
   mkdirSync(dirname(path), { recursive: true })
   if (existsSync(path)) copyFileSync(path, `${path}.bak-cairn`)
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
+  return true
 }
 
 const readJson = (path) => {
@@ -107,6 +147,9 @@ const installClaude = () => {
   const path = join(HOME, '.claude', 'settings.json')
   if (!existsSync(path)) return log('  no ~/.claude/settings.json — skipped')
 
+  // Read twice: `settings` is mutated below, so the second copy is the only
+  // record of what the file said before this run.
+  const before = readJson(path)
   const settings = readJson(path)
   settings.hooks ??= {}
 
@@ -127,8 +170,9 @@ const installClaude = () => {
   // and naming them would only add a spelling to get wrong.
   replace('PreCompact', null, mine(`node ${SESSION_END}`, { timeout: 120, async: true }))
 
-  writeJson(path, settings)
-  log('  claude: SessionStart, PreToolUse(Read), SessionEnd, PreCompact')
+  if (writeJson(path, settings, before)) {
+    log('  claude: SessionStart, PreToolUse(Read), SessionEnd, PreCompact')
+  }
 }
 
 // --- Codex ------------------------------------------------------------------
@@ -143,6 +187,7 @@ const installCodex = () => {
   const path = join(HOME, '.codex', 'hooks.json')
   if (!existsSync(join(HOME, '.codex'))) return log('  no ~/.codex — skipped')
 
+  const before = readJson(path)
   const config = readJson(path)
   config.hooks ??= {}
 
@@ -164,11 +209,15 @@ const installCodex = () => {
   replace('PreToolUse', 'Read', mine(`${env} node ${CONTEXT}`, { timeout: 10, async: true }))
   replace('Stop', null, mine(`${env} node ${SESSION_END}`, { timeout: 120, async: true }))
 
-  writeJson(path, config)
-  log('  codex: SessionStart, PreToolUse(Read), Stop')
-  log('  codex: entries must be trusted on next launch — [hooks.state] in config.toml')
-  log('  codex: needs CAIRN_API_KEY_CODEX in ~/.cairn/env, or it writes as whoever')
-  log('         owns the plain CAIRN_API_KEY there')
+  // The trust warning is printed only when the file actually moved. Printed
+  // every run it is wallpaper, and the one run where it matters reads the same
+  // as the twenty where it did not.
+  if (writeJson(path, config, before)) {
+    log('  codex: SessionStart, PreToolUse(Read), Stop')
+    log('  codex: entries must be trusted on next launch — [hooks.state] in config.toml')
+    log('  codex: needs CAIRN_API_KEY_CODEX in ~/.cairn/env, or it writes as whoever')
+    log('         owns the plain CAIRN_API_KEY there')
+  }
 }
 
 // --- OpenClaw ---------------------------------------------------------------

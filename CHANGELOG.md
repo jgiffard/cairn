@@ -62,6 +62,14 @@ out under **Breaking** with what to do about it.
   installs `PreCompact` alongside `SessionEnd`, because compaction is what happens *instead*
   of ending, and `cairn session end` upserts on (platform, id) so the row is rewritten in
   place rather than duplicated.
+- **`install-hooks.mjs` rewrote a hooks file that already said the right thing**, and for
+  Codex that is not cosmetic. `JSON.stringify` emits keys in insertion order, so rebuilding
+  an identical entry moves `cairn-memory` from after `timeout` to before it and the file
+  gains a trailing newline — 1264 bytes become 1265, nothing about the configuration
+  changes, and every `trusted_hash` under `[hooks.state]` in `config.toml` stops matching.
+  Codex then silently runs none of its hooks. It now compares the hook set canonically and
+  writes nothing when it matches, and the warning about re-trusting entries prints only
+  when the file actually moved — printed every run, it was wallpaper.
 - **Re-running `install-hooks.mjs` duplicated hooks it had not installed itself.** It
   recognised its own entries only by the tag it writes, so hooks installed by hand — or by a
   version of the script from before the tag existed — were invisible to it and a second copy
