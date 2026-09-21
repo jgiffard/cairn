@@ -147,9 +147,17 @@ export const PATCH = route({
     const remove = await resolve(body.removeProjects)
 
     if (add.length > 0) {
+      /* `ignoreDuplicates` is required, not a preference: project_entities is a
+       * pure join table, so every column is a conflict column. Without it the
+       * builder emits `do update set` with nothing to set, which is a syntax
+       * error — and re-assigning a project already in the entity is a no-op
+       * anyway, since the row carries nothing but the pair itself. */
       const { error } = await admin()
         .from('project_entities')
-        .upsert(add.map((project_id) => ({ project_id, entity_id: entity.id })))
+        .upsert(
+          add.map((project_id) => ({ project_id, entity_id: entity.id })),
+          { onConflict: 'project_id,entity_id', ignoreDuplicates: true },
+        )
       if (error) return fail('internal_error', error.message)
     }
 

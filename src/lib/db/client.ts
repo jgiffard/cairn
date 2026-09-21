@@ -444,9 +444,14 @@ class DirectQuery<T = DynamicRow[]> implements PromiseLike<Result<T>> {
         if (this.action === 'upsert') {
           if (!this.conflictColumns.length) throw new Error('upsert requires onConflict')
           sql += ` on conflict (${this.conflictColumns.map(identifier).join(', ')}) `
-          sql += this.ignoreDuplicates
+          /* A pure join table carries nothing outside its own key, so there is
+           * nothing left to set when the pair already exists. Emitting
+           * `do update set` with an empty list is a syntax error, and the
+           * caller's intent in that case can only ever be "do nothing". */
+          const updatable = columns.filter((column) => !this.conflictColumns.includes(column))
+          sql += this.ignoreDuplicates || !updatable.length
             ? 'do nothing'
-            : `do update set ${columns.filter((column) => !this.conflictColumns.includes(column)).map((column) => `${identifier(column)} = excluded.${identifier(column)}`).join(', ')}`
+            : `do update set ${updatable.map((column) => `${identifier(column)} = excluded.${identifier(column)}`).join(', ')}`
         }
         sql += returning
       }

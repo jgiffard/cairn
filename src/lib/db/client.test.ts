@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bind, normalizeDatabaseValue } from './client'
+import { admin, bind, normalizeDatabaseValue } from './client'
 
 describe('normalizeDatabaseValue', () => {
   it('preserves the former PostgREST timestamp contract for nested results', () => {
@@ -46,5 +46,97 @@ describe('bind', () => {
     expect(bind('sessions', 'files', null, json)).toBeNull()
     expect(bind('sessions', 'tool_calls', 42, json)).toBe(42)
     expect(bind('sessions', 'started_at', now, json)).toBe(now)
+  })
+})
+
+describe('upsert SQL', () => {
+  /**
+   * CAIRN-238: `cairn entities assign` was dead because the project_entities
+   * upsert passed no options at all. Fixing the call site alone would have left
+   * the trap in place for the next join table, so both levels are covered here.
+   */
+  const capture = async (run: () => PromiseLike<unknown>) => {
+    const statements: string[] = []
+    const scope = globalThis as typeof globalThis & {
+      __cairnPool?: unknown
+      __cairnJsonColumns?: unknown
+    }
+    const priorPool = scope.__cairnPool
+    const priorJson = scope.__cairnJsonColumns
+
+    scope.__cairnJsonColumns = Promise.resolve(new Set<string>())
+    scope.__cairnPool = {
+      connect: async () => ({
+        query: async (sql: string) => {
+          statements.push(sql)
+          return { rows: [], rowCount: 0 }
+        },
+        release: () => {},
+      }),
+    }
+
+    try {
+      await run()
+    } finally {
+      scope.__cairnPool = priorPool
+      scope.__cairnJsonColumns = priorJson
+    }
+    return statements
+  }
+
+  it('says "do nothing" when every column is a conflict column', async () => {
+    // project_entities is nothing but its pair, so there is no column left to
+    // set. `do update set` with an empty list is a syntax error.
+    const [sql] = await capture(() =>
+      admin()
+        .from('project_entities')
+        .upsert([{ project_id: 'p1', entity_id: 'e1' }], {
+          onConflict: 'project_id,entity_id',
+          ignoreDuplicates: true,
+        }),
+    )
+
+    expect(sql).toContain('on conflict ("project_id", "entity_id")')
+    expect(sql).toContain('do nothing')
+    expect(sql).not.toContain('do update set')
+  })
+
+  it('says "do nothing" for an all-key upsert even without ignoreDuplicates', async () => {
+    // The guard that stops the next join table repeating CAIRN-238.
+    const [sql] = await capture(() =>
+      admin()
+        .from('project_entities')
+        .upsert([{ project_id: 'p1', entity_id: 'e1' }], { onConflict: 'project_id,entity_id' }),
+    )
+
+    expect(sql).toContain('do nothing')
+    expect(sql).not.toContain('do update set')
+  })
+
+  it('still updates the columns outside the key', async () => {
+    const [sql] = await capture(() =>
+      admin()
+        .from('project_repos')
+        .upsert([{ project_id: 'p1', remote: 'git@x:y.git', root_commit: 'abc' }], {
+          onConflict: 'project_id,remote',
+        }),
+    )
+
+    expect(sql).toContain('do update set "root_commit" = excluded."root_commit"')
+    expect(sql).not.toContain('"project_id" = excluded."project_id"')
+  })
+
+  it('still refuses an upsert with no conflict columns at all', async () => {
+    // Returned as an error result rather than thrown -- which is why the CLI
+    // printed a bare "upsert requires onConflict" with no stack behind it.
+    let result: { error: { message: string } | null } | undefined
+    const statements = await capture(async () => {
+      result = (await admin()
+        .from('project_entities')
+        .upsert([{ project_id: 'p1' }])) as typeof result
+    })
+
+    expect(result?.error?.message).toBe('upsert requires onConflict')
+    expect(statements).toEqual([])
   })
 })
