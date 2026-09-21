@@ -69,8 +69,20 @@ const main = async () => {
   // Hermes Agent by Nous Research invokes pre_llm_call for every turn. Its
   // first turn is the session-start equivalent; later injection would waste
   // context and break prompt-cache stability.
-  const isFirstTurn = payload.extra?.is_first_turn ?? payload.is_first_turn
-  if (event === 'pre_llm_call' && isFirstTurn !== true) return
+  //
+  // The docs give is_first_turn as a callback parameter and say `extra` carries
+  // the event's kwargs, without showing a payload, so read both. If it is in
+  // neither, we cannot tell "not the first turn" from "this build does not send
+  // it", and staying silent would mean never briefing at all with nothing to
+  // find. Say so on stderr, which Hermes logs and the user message never sees.
+  if (event === 'pre_llm_call') {
+    const isFirstTurn = payload.extra?.is_first_turn ?? payload.is_first_turn
+    if (isFirstTurn === undefined) {
+      process.stderr.write('cairn: pre_llm_call payload carries no is_first_turn, in extra or at top level — no briefing will ever be injected\n')
+      return
+    }
+    if (isFirstTurn !== true) return
+  }
 
   const args = ['context', '--cwd', cwd]
 

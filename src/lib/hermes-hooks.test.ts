@@ -49,7 +49,7 @@ if (group === 'config' && action === 'get' && args[2] === 'hooks') {
   process.exit(0)
 }
 if (group === 'config' && action === 'set' && args[2] === '--force' && args[3] === 'hooks') {
-  fs.writeFileSync(hooks, args[4])
+  if (!process.env.FAKE_HERMES_SET_DISCARDS) fs.writeFileSync(hooks, args[4])
   fs.appendFileSync(process.env.FAKE_HERMES_LOG, 'set\\n')
   process.exit(0)
 }
@@ -83,8 +83,8 @@ process.exit(64)
       ...environment,
       CAIRN_HOOK_CLI: 'router; not-a-command',
     })
-    expect(rejected.code).toBe(0)
-    expect(rejected.stdout).toContain('must be one safe executable path')
+    expect(rejected.code).toBe(1)
+    expect(rejected.stderr).toContain('must be one safe executable path')
     expect((await readFile(commandLog, 'utf8')).trim().split('\n')).toHaveLength(1)
 
     const unavailable = await run('node', ['scripts/install-hooks.mjs'], {
@@ -93,6 +93,18 @@ process.exit(64)
     })
     expect(unavailable.code).toBe(1)
     expect(unavailable.stderr).toContain('requires Hermes Agent by Nous Research v0.21.3 or newer')
+
+    // `config set` exits 0 and writes nothing. Trusting the status would report
+    // a hook that is not there; reading the config back is what catches it.
+    await writeFile(hooks, JSON.stringify({ pre_tool_call: [{ command: '/existing/hook', timeout: 5 }] }))
+    const discarded = await run('node', ['scripts/install-hooks.mjs'], {
+      ...environment,
+      FAKE_HERMES_SET_DISCARDS: '1',
+    })
+    expect(discarded.code).toBe(1)
+    expect(discarded.stderr).toContain('reported success but the hook is not in the config it reads back')
+    expect(discarded.stdout).not.toContain('briefing on first turn')
+    expect(JSON.parse(await readFile(hooks, 'utf8')).pre_llm_call).toBeUndefined()
   })
 
   it('injects the Cairn briefing only for Hermes first turns', async () => {
@@ -126,5 +138,16 @@ process.exit(64)
     }))
     expect(compatibilityFirstTurn.code).toBe(0)
     expect(JSON.parse(compatibilityFirstTurn.stdout)).toEqual({ context: '## Cairn [MES]\nKnown here: affiliate governance' })
+
+    // Neither location carries the key: no briefing is possible, so say so
+    // rather than look like an ordinary later turn.
+    const missing = await run('node', ['hooks/cairn-context.mjs'], environment, JSON.stringify({
+      hook_event_name: 'pre_llm_call',
+      cwd: '/project',
+      extra: {},
+    }))
+    expect(missing.code).toBe(0)
+    expect(missing.stdout).toBe('')
+    expect(missing.stderr).toContain('carries no is_first_turn')
   })
 })

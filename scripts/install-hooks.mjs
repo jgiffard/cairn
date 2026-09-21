@@ -267,7 +267,9 @@ const installHermes = () => {
 
   const hookCli = process.env.CAIRN_HOOK_CLI?.trim() || 'cairn'
   if (!isSafeHookCli(hookCli)) {
-    return log('  Hermes Agent by Nous Research: CAIRN_HOOK_CLI must be one safe executable path — skipped')
+    console.error('  Hermes Agent by Nous Research: CAIRN_HOOK_CLI must be one safe executable path; refusing to write a hook that would not run')
+    process.exitCode = 1
+    return
   }
 
   const hooks = JSON.parse(JSON.stringify(before))
@@ -282,11 +284,33 @@ const installHermes = () => {
 
   try {
     execFileSync('hermes', ['config', 'set', '--force', 'hooks', JSON.stringify(hooks)], { stdio: 'inherit' })
-    log('  Hermes Agent by Nous Research: pre_llm_call (briefing on first turn)')
-    log('  Hermes Agent by Nous Research: approve the hook on first use; the installer never auto-accepts it')
   } catch {
     console.error('  Hermes Agent by Nous Research: could not update hooks configuration; requires Hermes Agent by Nous Research v0.21.3 or newer with `hermes config get/set` support')
     process.exitCode = 1
+    return
+  }
+
+  // A zero exit from `config set` is a claim, not a result. No Hermes runs on
+  // any machine here, so every promise this installer makes about it rests on
+  // reading back what it wrote rather than trusting the status it was handed.
+  if (!hermesHookInstalled()) {
+    console.error('  Hermes Agent by Nous Research: `hermes config set` reported success but the hook is not in the config it reads back — nothing was installed')
+    process.exitCode = 1
+    return
+  }
+
+  log('  Hermes Agent by Nous Research: pre_llm_call (briefing on first turn)')
+  log('  Hermes Agent by Nous Research: approve the hook on first use; the installer never auto-accepts it')
+}
+
+/** Re-read the hooks config and confirm our pre_llm_call entry survived the write. */
+const hermesHookInstalled = () => {
+  try {
+    const raw = execFileSync('hermes', ['config', 'get', 'hooks', '--json'], { encoding: 'utf8' }).trim()
+    const after = raw ? JSON.parse(raw) : {}
+    return Array.isArray(after.pre_llm_call) && after.pre_llm_call.some(isMine)
+  } catch {
+    return false
   }
 }
 
