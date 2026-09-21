@@ -2,7 +2,13 @@ import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { createKnowledge, listKnowledge } from '@/lib/api/knowledge'
-import { knowledgeCreate } from '@/schemas/knowledge'
+import {
+  checkReferences,
+  knownSlugs,
+  referenceRefusal,
+  referenceWarnings,
+} from '@/lib/api/knowledge-graph'
+import { knowledgeCreate, slugify } from '@/schemas/knowledge'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,12 +75,47 @@ export const GET = route({
   },
 })
 
+/**
+ * References are resolved before the entry is written, not audited afterwards.
+ *
+ * This is the one place that did not look. The schema checked the shape of a
+ * slug and the length of a body and inserted; `[[...]]` inside that body was
+ * never parsed, so a reference to something that does not exist became a fact
+ * about the store the moment it was accepted, and was found only by a
+ * diagnostic nobody is obliged to run. 70 of them accumulated that way.
+ *
+ * What the refusal has to carry is the near miss. 44 of those 70 point at a
+ * fact Cairn already holds under a different slug — `capsolver-akamai-bug`
+ * where `capsolver-akamai-script-bug` exists — so the useful half of the
+ * answer is not "that does not exist" but "that exists, spelt this way".
+ */
+const referenceCheck = async (body: string, slug: string) =>
+  checkReferences({ body, slug, known: await knownSlugs() })
+
 export const POST = route({
   schema: knowledgeCreate,
   handler: async ({ actor, body }) => {
+    let warnings: string[] = []
+    if (body.body.includes('[[')) {
+      const report = await referenceCheck(body.body, body.slug ?? slugify(body.title))
+      const refusal = referenceRefusal(report, { allowUnresolved: body.allowUnresolvedRefs })
+      if (refusal) {
+        // The structured half, for a caller that can use it. The CLI prints
+        // `error` and nothing else, which is why the message above says it all
+        // in prose as well.
+        return fail('validation_failed', refusal, {
+          unresolvedReferences: report.unresolved,
+          taskReferences: report.taskShaped.map((ref) => ref.raw),
+        })
+      }
+      warnings = referenceWarnings(report)
+    }
+
     try {
       const row = await createKnowledge(actor, body)
-      return ok(row, { status: 201 })
+      // Accepted, and still said out loud: a reference to something nobody has
+      // written is recorded, never silent.
+      return ok(warnings.length > 0 ? { ...row, warnings } : row, { status: 201 })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not record that.'
       const code = message.includes('already exists') ? 'conflict' : 'validation_failed'
