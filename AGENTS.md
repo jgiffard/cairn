@@ -113,7 +113,7 @@ cairn unlearn <slug> --superseded-by <new-slug>
 ```
 
 Three scopes, narrowest first: `--project ACME`, `--entity acme` (a business, a stack, a
-subsystem — `cairn entities` lists them), and neither, which means everywhere. A project
+subsystem — `cairn entities` lists them), and `--global`, which is everywhere. A project
 belongs to several entities at once, so pick the one the fact is about. The narrower is
 shown first, which is how "true for this business, except here" gets said.
 

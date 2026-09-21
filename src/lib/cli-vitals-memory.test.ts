@@ -30,45 +30,63 @@ const report = (memory: unknown) => ({
   memory,
 })
 
-const serve = (body: unknown) =>
+/**
+ * Every request the CLI made, so `--notify` can be asserted on what it posted
+ * rather than on what it printed. The note is the half an agent actually
+ * reads: it is what lands on the task.
+ */
+type Posted = { path: string; body: Record<string, unknown> }
+
+const serve = (body: unknown, posted: Posted[]) =>
   new Promise<string>((resolve) => {
-    const server = createServer((_req, res) => {
-      res.writeHead(200, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ success: true, data: body }))
+    const server = createServer((req, res) => {
+      let raw = ''
+      req.on('data', (c: Buffer) => { raw += c.toString() })
+      req.on('end', () => {
+        if (req.method === 'POST') {
+          posted.push({ path: req.url ?? '', body: raw ? JSON.parse(raw) : {} })
+        }
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ success: true, data: body }))
+      })
     })
     servers.push(server)
     server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${(server.address() as { port: number }).port}`))
   })
 
-const vitals = async (body: unknown) => {
+const run = async (body: unknown, args: string[]) => {
   const home = await mkdtemp(join(tmpdir(), 'cairn-vitals-'))
   directories.push(home)
-  const base = await serve(body)
-  return new Promise<{ stdout: string; code: number | null }>((resolve, reject) => {
-    const child = spawn('node', ['cli/cairn.mjs', 'vitals', '--all'], {
+  const posted: Posted[] = []
+  const base = await serve(body, posted)
+  return new Promise<{ stdout: string; code: number | null; posted: Posted[] }>((resolve, reject) => {
+    const child = spawn('node', ['cli/cairn.mjs', ...args], {
       env: { ...process.env, HOME: home, CAIRN_BASE_URL: base, CAIRN_API_KEY: 'test-key' },
     })
     let stdout = ''
     child.stdout.on('data', (c: Buffer) => { stdout += c.toString() })
     child.on('error', reject)
-    child.on('close', (code) => resolve({ stdout, code }))
+    child.on('close', (code) => resolve({ stdout, code, posted }))
   })
 }
 
+const vitals = (body: unknown) => run(body, ['vitals', '--all'])
+
+const memory = (extra: Record<string, unknown> = {}) => ({
+  windowHours: 24,
+  searches: 12,
+  widened: 3,
+  zeroResults: 2,
+  byAgent: [],
+  tasksFiled: 5,
+  tasksFiledWithoutChecking: 4,
+  recentMisses: ['postgres generated columns'],
+  ...extra,
+})
+
 describe('cairn vitals', () => {
   it('reports whether the memory was consulted, where an agent can read it', async () => {
-    const { stdout } = await vitals(
-      report({
-        windowHours: 24,
-        searches: 12,
-        widened: 3,
-        zeroResults: 2,
-        byAgent: [],
-        tasksFiled: 5,
-        tasksFiledWithoutChecking: 4,
-        recentMisses: ['postgres generated columns'],
-      }),
-    )
+    const { stdout } = await vitals(report(memory()))
     expect(stdout).toContain('memory 12 searches (3 widened, 2 empty)')
     expect(stdout).toContain('4 of 5 tasks filed without checking first')
     expect(stdout).toContain('asked for, not held: postgres generated columns')
@@ -79,5 +97,74 @@ describe('cairn vitals', () => {
     expect(code).toBe(0)
     expect(stdout).toContain('knowledge written 2')
     expect(stdout).not.toContain('memory ')
+  })
+})
+
+/**
+ * Looking a fact up by name is the half of "do we recall what we know" that
+ * nothing recorded before migration 053 and nothing displayed after it — the
+ * numbers were being collected into a drawer. A miss is the interesting one:
+ * it is a dangling knowledge reference caught in the act of being followed.
+ */
+describe('cairn vitals reports facts looked up by name', () => {
+  it('counts the direct reads and the ones that named nothing we hold', async () => {
+    const { stdout } = await vitals(
+      report(memory({ directReads: 9, directReadMisses: 2, recentSlugMisses: [] })),
+    )
+    expect(stdout).toContain('direct reads 9 by name (2 for a slug we do not hold)')
+  })
+
+  it('names each slug that was asked for and does not exist', async () => {
+    const { stdout } = await vitals(
+      report(
+        memory({
+          directReads: 4,
+          directReadMisses: 2,
+          recentSlugMisses: ['zzz-this-slug-does-not-exist', 'clawdius-sever'],
+        }),
+      ),
+    )
+    expect(stdout).toContain('looked up by name, no such entry: zzz-this-slug-does-not-exist')
+    expect(stdout).toContain('looked up by name, no such entry: clawdius-sever')
+    // Said differently from a search that found nothing, because it means
+    // something different: a name someone believed in, not a phrasing the
+    // index missed. Both are in this output at once.
+    expect(stdout).toContain('asked for, not held: postgres generated columns')
+  })
+
+  it('says nothing extra when nobody looked anything up', async () => {
+    // The common case. The memory block is already long enough to be skimmed,
+    // and a row of zeroes is what teaches the eye to skim it.
+    const { stdout } = await vitals(
+      report(memory({ directReads: 0, directReadMisses: 0, recentSlugMisses: [] })),
+    )
+    expect(stdout).toContain('memory 12 searches')
+    expect(stdout).not.toContain('direct reads')
+    expect(stdout).not.toContain('looked up by name')
+  })
+
+  it('prints no zero for a server too old to have counted', async () => {
+    // Migration 052 sends none of the three keys. `0 direct reads` there is a
+    // confident wrong answer to a question the server cannot answer, which is
+    // exactly why tasks.closedWithoutTrace is optional too.
+    const { stdout } = await vitals(report(memory()))
+    expect(stdout).toContain('memory 12 searches')
+    expect(stdout).not.toContain('direct reads')
+    expect(stdout).not.toContain('NaN')
+    expect(stdout).not.toContain('undefined')
+  })
+
+  it('carries them into the --notify note, which is the copy an agent reads', async () => {
+    const body = report(
+      memory({ directReads: 4, directReadMisses: 1, recentSlugMisses: ['clawdius-sever'] }),
+    )
+    ;(body as { findings: unknown[] }).findings = [
+      { code: 'nothing-closed', severity: 'warning', message: 'something is off' },
+    ]
+    const { posted } = await run(body, ['vitals', '--notify', 'CAIRN-254'])
+    const note = posted.find((p) => p.path.includes('/notes'))
+    expect(note).toBeDefined()
+    expect(String(note?.body.note)).toContain('direct reads 4 by name (1 for a slug we do not hold)')
+    expect(String(note?.body.note)).toContain('looked up by name, no such entry: clawdius-sever')
   })
 })

@@ -11,8 +11,19 @@ import { projectIdForFormerKey } from './project-keys'
  * time — and a zero-result search reads as "this is new", the single most
  * expensive wrong answer this system can give.
  *
- * So: try the precise query first, and widen only when it comes back thin.
- * Precision is preserved where it works, recall is recovered where it does not.
+ * That was answered for years by trying the precise query first and widening
+ * only when it came back thin, which is the shape `search_tasks` still has.
+ * CAIRN-247 measured what it cost in `search_all`: an AND over every content
+ * word of a 9-13 word question matched the expected row 3 times in 22 live
+ * searches, and the rows it DID match — long descriptions that happen to
+ * contain every word somewhere — were enough to switch the widened arm off.
+ * Three irrelevant rows suppressed the arm that answers the question.
+ *
+ * So, since migration 055: both arms always run and are merged. The precise
+ * arm is no longer "every word of the sentence" but at least half of
+ * `distinctiveTerms()`, counted per row, which is a superset of what it used
+ * to match; the wide arm is the same OR it always was; and a row found by both
+ * appears once, in the precise head.
  */
 
 /** Words too common to be worth ORing on; they would match half the corpus. */
@@ -331,7 +342,22 @@ export const searchAll = async (
         ]
       : rows
 
-  // Widened describes the full-text pass. An exact hit is not a loose match and
-  // must not make the caller think the rest were precise.
-  return { rows: withExact.slice(0, limit), widened: rows.some((r) => r.widened) }
+  /**
+   * Widened describes the full-text pass. An exact hit is not a loose match and
+   * must not make the caller think the rest were precise — so it is read off
+   * `rows`, never off the addressed head.
+   *
+   * "Any row was loose" stopped meaning anything the moment 055 made both arms
+   * run: nearly every search returns some loose row, and a flag that is almost
+   * always true would have quietly turned the widening rate on the Vitals page
+   * — whose own caption is "a search that widened is one the precise question
+   * could not answer" — into a constant, and `cairn check`'s "treat this
+   * subject as new" warning into noise printed over correct answers.
+   *
+   * What the flag is for is unchanged, so it is derived from the thing that
+   * still carries that meaning: NOTHING cleared the precise arm. Zero rows is
+   * not widening, it is `zeroResults`, which 024 counts separately.
+   */
+  const anyPrecise = rows.some((r) => !r.widened)
+  return { rows: withExact.slice(0, limit), widened: rows.length > 0 && !anyPrecise }
 }

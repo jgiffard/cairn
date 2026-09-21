@@ -256,7 +256,12 @@ const vitalsReport = {
         'cannot be read** — the rest of the report is still served.',
       properties: {
         windowHours: integer('The window, which is the same one as above.'),
-        searches: integer('Searches and direct reads in the window.'),
+        searches: integer(
+          'Searches in the window. Direct reads by slug are counted separately, in ' +
+            'directReads — pooling them would make widened and zeroResults unreadable, ' +
+            'since a slug lookup has no second pass and its empty result means the ' +
+            'opposite of an empty search.',
+        ),
         widened: integer(
           'Of those, how many fell back from the precise AND pass to OR because the first ' +
             'came back thin. A high share means the phrasing is missing on the first try.',
@@ -278,6 +283,24 @@ const vitalsReport = {
           description:
             'Recent subjects that were searched for and found nothing. Each is either a ' +
             'gap in the memory or a phrasing the index does not match.',
+        },
+        directReads: integer(
+          'Facts looked up by slug rather than searched for — `cairn know <slug>`, the ' +
+            'MCP tool, and every browser read. Absent from a server before migration ' +
+            '053, which is not the same as zero.',
+        ),
+        directReadMisses: integer(
+          'Of those, how many named a slug that does not exist. This is the interesting ' +
+            'one: it is a dangling reference being followed in real time rather than ' +
+            'found later by a diagnostic nobody is obliged to run.',
+        ),
+        recentSlugMisses: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'The slugs behind those misses. Two thirds of the dangling references in the ' +
+            'store point at a fact that exists under another name, so these are usually a ' +
+            'handle spelled wrong rather than knowledge nobody has written.',
         },
       },
     },

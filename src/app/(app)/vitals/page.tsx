@@ -366,6 +366,45 @@ const VitalsPage = async ({
                       </ul>
                     </div>
                   ) : null}
+
+                  {/*
+                    Looking a fact up by name, which migration 053 is the first
+                    release to record. Conditional on there having been one:
+                    the keys are absent on a server older than 053, and a row
+                    reading `0` for a server that cannot count is a wrong
+                    answer rather than a missing one. Zero-on-053 stays quiet
+                    too — this panel is four rows and every permanently-zero
+                    row spent here is one the eye learns to skip.
+                  */}
+                  {(memory.directReads ?? 0) > 0 || (memory.directReadMisses ?? 0) > 0 ? (
+                    <>
+                      <Row label="looked up by name" value={String(memory.directReads ?? 0)} />
+                      <Row
+                        label="naming a fact we do not hold"
+                        value={String(memory.directReadMisses ?? 0)}
+                        hint={
+                          (memory.directReads ?? 0) > 0
+                            ? `(${Math.round(((memory.directReadMisses ?? 0) / (memory.directReads as number)) * 100)}%)`
+                            : undefined
+                        }
+                      />
+                    </>
+                  ) : null}
+
+                  {(memory.recentSlugMisses ?? []).length > 0 ? (
+                    <div className="py-2">
+                      <p className="text-fg-subtle mb-1 text-[0.6875rem]">
+                        Looked up by name, no such entry
+                      </p>
+                      <ul className="flex flex-col gap-0.5">
+                        {(memory.recentSlugMisses ?? []).map((slug) => (
+                          <li key={slug} className="text-fg-muted truncate font-mono text-[0.75rem]">
+                            {slug}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </Panel>
               ) : null}
 

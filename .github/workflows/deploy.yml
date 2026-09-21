@@ -115,6 +115,72 @@ jobs:
           [ "$code" = "200" ] || { echo "health endpoint returned $code"; exit 1; }
           echo "deployed $DEPLOY_SHA"
 
+      - name: refresh the files agents read
+        # TWO CLOCKS, and this is the one that was slow. The code is push-based
+        # — this workflow — while the skill, the CLI and the hooks every agent
+        # reads are pull-based, repaired by an hourly cron on this same box. So
+        # after a merge that touches both there is a window where every agent on
+        # every machine reads instructions that contradict the running code.
+        # Measured 2026-09-21: merge 16:14, previous sync 15:23, 51 minutes, and
+        # up to 59 in the general case. That day the sentence being contradicted
+        # was the one the merge had just fixed (CAIRN-257).
+        #
+        # The deploy runs on a self-hosted runner on the box the files live on,
+        # so closing the window needs no webhook, no secret and no network hop:
+        # run the job that already exists, now.
+        #
+        # THE HOURLY CRON STAYS. It is the fallback for a machine that was
+        # powered off, a host this deploy cannot reach, and a merge that for any
+        # reason never got here. A trigger added, not a schedule replaced — and
+        # a repair reported by the cron now carries a second meaning worth
+        # having: this step did not arrive.
+        #
+        # The command is read back out of the installed crontab rather than
+        # written again here. Which copies this host has (`--also skill=…`) is a
+        # fact about the host, lives in the line the installer wrote, and a
+        # second copy of that list in this file is the next thing to drift —
+        # the same failure as everything else in this batch.
+        #
+        # --source points at the tree that was just deployed, not the cron's
+        # raw.githubusercontent URL: that URL is CDN-cached, so a fetch seconds
+        # after the merge can be handed the previous main and write it back as
+        # current. Drop the flag and the scheduled source is used unchanged.
+        #
+        # --no-notify because a repair is the EXPECTED outcome of this path. The
+        # cron's note means "a runtime was reading a stale copy until now", and
+        # one of those per merge would bury the ones that mean something.
+        if: success()
+        # A sync problem is not a deploy problem. Belt and braces, because the
+        # rollback step below keys off job failure and must never see this one:
+        # no `set -e`, every branch ends in a warning rather than an exit code,
+        # and continue-on-error in case something still escapes.
+        continue-on-error: true
+        # The sync fetches and writes a dozen small files; three minutes is
+        # generous. Without a bound of its own it would run into the job's
+        # 20-minute timeout, and a job that times out is a job that failed —
+        # which is the rollback step, over a file copy.
+        timeout-minutes: 3
+        run: |
+          set -uo pipefail
+          schedule=/opt/cairn-maintenance/install-cron.mjs
+
+          if [ ! -r "$schedule" ]; then
+            echo "::warning::$schedule is not installed here — the hourly cron still covers this"
+          elif ! grep -q -- '--run' "$schedule"; then
+            # An installer predating --run treats an unknown flag as "print the
+            # crontab" and exits 0, which would look exactly like a successful
+            # sync. The hourly job repairs that copy of the installer itself, so
+            # this branch is true at most once, on the deploy that ships it.
+            echo "::warning::installed $schedule predates --run; the hourly cron will refresh it"
+          else
+            # -n rather than a bare sudo: on a box without the sudoers entry for
+            # this exact command, fail immediately instead of waiting on a
+            # password prompt no one is there to answer.
+            sudo -n /usr/bin/node "$schedule" --run agent-files \
+              --source "$GITHUB_WORKSPACE" --no-notify \
+              || echo "::warning::agent file sync did not complete — the hourly cron will repair it"
+          fi
+
       - name: roll back on failure
         if: failure()
         # This used to be `docker compose up -d --no-build` alone, which rolled

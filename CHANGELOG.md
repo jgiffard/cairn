@@ -11,6 +11,40 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **The agent files are repaired on merge, not only on the hour** (CAIRN-257). Cairn's code
+  is push-based — merge to `main`, GitHub Actions deploys — while the skill, CLI and hooks
+  every agent reads are pull-based, repaired by an hourly cron. Two clocks, and the slower
+  one is the one agents read from: merged at 16:14 with the previous sync at 15:23, every
+  agent on every machine spent 51 minutes reading a `SKILL.md` that contradicted the code
+  already live, and up to 59 in the general case. That day the contradicted sentence was
+  the one that merge had just fixed, so the window reproduced CAIRN-250 on an hourly cycle.
+  The deploy now runs the same job the schedule runs, the moment it has finished deploying:
+  `install-cron.mjs --run agent-files` reads the command back out of the installed crontab
+  block (or LaunchAgent) rather than restating it, because which copies a host has —
+  `--also skill=<another account's tree>` — is a fact about that host, and a second copy of it
+  would be the next thing to drift. Two overrides and only two: `--source`, so the deploy
+  syncs from the tree it just deployed rather than the CDN-cached raw URL, which seconds
+  after a merge can still be serving the previous `main`; and `--no-notify`, because a
+  repair is the expected outcome of this path and one note per merge would bury the
+  schedule's notes, which mean a runtime was reading a stale copy until now. **The hourly
+  job stays**, as the fallback for a machine that was powered off or a merge that never got
+  there — and its notes now carry a sharper meaning, namely that the trigger did not
+  arrive. The step cannot fail the deploy: a stale skill is a problem, a failed deploy is a
+  bigger one. It needs one sudoers line on the box, pinned whole rather than by wildcard,
+  and warns rather than failing where that line is absent.
+
+- **The CLI refuses a flag it does not implement, instead of ignoring it.** `cairn know
+  --banana split` returned results and exited 0: any flag was accepted and unknown ones
+  were dropped in silence, so a caller who mistyped a filter — or reached for one that
+  does not exist — got a full unfiltered answer that looked exactly like a filtered one.
+  The case that found it was `--offset`, which is not implemented and not in help, so an
+  agent paginating with it got page one forever. A connector built against this CLI could
+  only ever reach 200 knowledge entries, and noticed only because it counted. Unknown
+  flags now exit 2 naming the flag, with a near-miss suggestion (`--limt` → `did you mean
+  --limit?`). The first version of the list was enumerated by grepping `flags.X`, which
+  misses every flag read dynamically, and it broke `cairn add --priority high` — a flag
+  the CLI's own help documents. The list is now built by hand and guarded by a test.
+
 - **`cairn learn` refuses a `[[reference]]` the store can almost resolve, and says what it
   should have said** (CAIRN-253). 70 of 579 references in the corpus pointed at nothing, and 44
   of those named a fact Cairn already holds under a different slug — `capsolver-akamai-bug`
@@ -218,6 +252,18 @@ out under **Breaking** with what to do about it.
   qualifies legacy task, activity, knowledge, session and search attribution accordingly.
 
 ### Fixed
+
+- **The knowledge map rearranged itself when nothing had changed.** `simulate()` sums
+  forces over the edge list in array order, and floating-point addition is not
+  associative, so the same graph handed over in a different edge order settles somewhere
+  slightly different. The node path was already protected because `components()` sorts;
+  the edge list never was, and `knowledge-graph.ts` builds it by iterating rows with no
+  sort — in a file whose own comment says row order is "not stable across an update or a
+  vacuum", and which sorts defensively in five other places. The symptom was a map that
+  quietly shifted after an unrelated write, which reads as the map being organic rather
+  than as a bug, and is why nobody reported it. The new tests vary EDGE order
+  specifically: the existing determinism test varied node order and could never have
+  caught this.
 
 - **The summariser ran on every Codex turn.** Codex has no `SessionEnd`, so the recorder is
   wired to `Stop`, which fires at the end of each assistant turn — and `record()` summarised

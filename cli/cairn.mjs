@@ -2302,6 +2302,24 @@ const commands = {
           `${m.tasksFiledWithoutChecking} of ${m.tasksFiled} tasks filed without checking first`,
       ]
       for (const miss of m.recentMisses ?? []) out.push(`  asked for, not held: ${miss}`)
+
+      // Looking a fact up by name is the other half of consulting the memory,
+      // and migration 053 is the first release to record it. Conditional, and
+      // not because the number is uninteresting: a server on 052 sends neither
+      // key, so an unconditional line would print `0 direct reads` for a
+      // server that simply cannot count them. `?? 0` would turn that into a
+      // confident wrong answer; absent has to stay absent. Zero-on-053 is
+      // silent for the reason the block above it is skimmed at all — nothing
+      // happened, and a line saying so is a line to learn to skip.
+      const reads = m.directReads
+      const missed = m.directReadMisses
+      if ((reads ?? 0) > 0 || (missed ?? 0) > 0) {
+        out.push(`direct reads ${reads ?? 0} by name (${missed ?? 0} for a slug we do not hold)`)
+      }
+      // One line each, like recentMisses, and said differently: a miss here is
+      // not a subject the index phrased badly, it is a named fact an agent
+      // believed existed. That is a dangling reference being followed live.
+      for (const slug of m.recentSlugMisses ?? []) out.push(`  looked up by name, no such entry: ${slug}`)
       return out
     }
 

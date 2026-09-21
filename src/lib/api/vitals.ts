@@ -296,6 +296,26 @@ export type MemoryUse = {
   tasksFiled: number
   tasksFiledWithoutChecking: number
   recentMisses: string[]
+  /**
+   * Facts fetched by name rather than searched for -- `cairn know <slug>` and
+   * every browser read of an entry. It is the path that best answers "do we
+   * call knowledge when we need it", and until migration 053 it was the one
+   * path with no instrumentation on it at all.
+   *
+   * Optional, like `tasks.closedWithoutTrace` above, because a server older
+   * than 053 does not send it, and a display that cannot see the number must
+   * not print a zero in its place: "nobody looked anything up" and "this
+   * server cannot tell you" are opposite answers.
+   */
+  directReads?: number
+  /**
+   * Of those, how many named a slug nothing holds. A dangling knowledge
+   * reference caught as it is being followed, which is why this is the number
+   * worth reading rather than the total.
+   */
+  directReadMisses?: number
+  /** The most recent of those slugs, newest first. */
+  recentSlugMisses?: string[]
 }
 
 export const readMemoryUseFor = async (userId: string, hours = 24): Promise<MemoryUse> => {

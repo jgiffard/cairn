@@ -770,7 +770,7 @@ machine, and running `vitals` in two places reports the same findings twice.
 |---|---|
 | `reconcile` (30 min) | Releases a claim an agent stopped working on, and moves the task back to todo so `doing` keeps meaning somebody is on it |
 | `vitals` (daily) | Asks whether the memory is still being written and read, and reports **only** when something looks wrong |
-| `agent-files` (hourly) | Repairs the skill, CLI and hooks wherever a runtime is reading a stale copy |
+| `agent-files` (hourly, and on every deploy) | Repairs the skill, CLI and hooks wherever a runtime is reading a stale copy |
 | `openclaw-sessions` (30 min) | OpenClaw has no session-end event, so its transcripts are swept instead of waiting to be handed over |
 
 Host-specific paths come from the environment, because a machine's layout does not belong
@@ -810,6 +810,58 @@ Every other copy is named with `--also <artefact>=<path>`, repeatable — anothe
 home, when the schedule runs as root and the runtimes do not, or a runtime that keeps its
 skills in a tree of its own. `CAIRN_SYNC_ALSO` renders those into the scheduled job, so
 which copies a machine has stays with that machine.
+
+### Running the repair on merge, not only on the hour
+
+An hourly repair against a deploy that happens on merge is two clocks, and the slower one
+is the one agents read from. Measured: merged at 16:14 with the previous sync at 15:23, so
+for 51 minutes every agent on every machine read a `SKILL.md` that contradicted the code
+already live — up to 59 minutes in general, and on the day it was measured the contradicted
+sentence was the one that merge had just fixed.
+
+So the deploy asks for the job the moment it is finished:
+
+```bash
+node scripts/install-cron.mjs --run agent-files                       # exactly as scheduled
+node scripts/install-cron.mjs --run agent-files --source . --no-notify   # as a deploy runs it
+```
+
+`--run` reads the command back out of the installed schedule — the managed crontab block on
+Linux, the LaunchAgent on macOS — rather than rendering it again. Which copies a machine has
+is a fact about that machine and already lives in the line the installer wrote; restating
+that list in a workflow file would be the next thing to drift. If the job is not installed
+`--run` refuses rather than inventing one, because a job invented on a host that was never
+configured reaches none of the copies the real one reaches, and reports success for it.
+
+Two overrides, and deliberately only two. `--source` because a deploy has the tree it just
+deployed sitting on disk, which beats the schedule's `raw.githubusercontent.com` URL: that
+is CDN-cached, so a fetch seconds after a merge can be handed the previous `main` and write
+it back as current. `--no-notify` because a repair is the *expected* outcome of this path —
+the schedule's note means "a runtime was reading a stale copy until now", and one of those
+per merge would bury the notes that mean something.
+
+**The hourly job stays.** It is the fallback for a machine that was powered off, a host the
+deploy cannot reach, and a merge that for any reason never got there. It is a trigger added,
+not a schedule replaced — and its notes now say something sharper than before, because a
+repair on the hourly path means the trigger did not arrive.
+
+Cairn's own deploy runs on a self-hosted runner on the box those copies live on, so the
+trigger is a step in the deploy job rather than a webhook: nothing inbound, no secret in
+transit. The step cannot fail the deploy — a stale skill is a problem, a failed deploy is a
+bigger one — so every outcome is a warning and the run continues. The sync writes into other
+users' homes, so it goes through `sudo`, which needs one sudoers line naming that exact
+command:
+
+```
+<runner-user> ALL=(root) NOPASSWD: /usr/bin/node /opt/cairn-maintenance/install-cron.mjs --run agent-files --source <workspace> --no-notify
+```
+
+`<runner-user>` is the account in `CAIRN_RUNNER_USER`, and `<workspace>` is that runner's
+`$GITHUB_WORKSPACE`, which the deploy log prints and which does not change between runs.
+Pinned whole rather than with a wildcard: `--source` tells root which tree to copy files out
+of, and a wildcard there would grant "write any content you like into every agent's skill".
+Without the entry the step warns and the hourly job covers it — which is also what happens
+on a host that deploys some other way, or does not run the schedule at all.
 
 ## Self-hosted runner — optional
 

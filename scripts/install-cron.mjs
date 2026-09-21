@@ -9,6 +9,7 @@
  *   node scripts/install-cron.mjs            # print what would be installed
  *   node scripts/install-cron.mjs --install  # install it
  *   node scripts/install-cron.mjs --remove   # take it out again
+ *   node scripts/install-cron.mjs --run agent-files   # run that job now
  *
  * Printing is the default on purpose: a script that edits a crontab the moment
  * it is run is a script nobody should run.
@@ -28,7 +29,7 @@
  * present on this machine is skipped rather than installed broken.
  */
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -39,6 +40,12 @@ const END = '# <<< cairn maintenance'
 const HERE = dirname(fileURLToPath(import.meta.url))
 
 const env = (name, fallback) => process.env[name] ?? fallback
+
+/** `--flag value` off the command line, or null if the flag is not there. */
+const flagValue = (name) => {
+  const at = process.argv.indexOf(name)
+  return at === -1 ? null : process.argv[at + 1] ?? null
+}
 
 const MAC = process.platform === 'darwin'
 
@@ -241,6 +248,171 @@ const REMOVE = process.argv.includes('--remove')
 const INSTALL = process.argv.includes('--install')
 const USE_LAUNCHD = process.argv.includes('--launchd') || (MAC && !process.argv.includes('--cron'))
 
+/** `--run <job>`, and the two differences a caller may make to it. See below. */
+const RUN = flagValue('--run')
+const RUN_SOURCE = flagValue('--source')
+const RUN_WITHOUT_NOTIFY = process.argv.includes('--no-notify')
+
+const current = () => {
+  try {
+    return execFileSync('crontab', ['-l'], { encoding: 'utf8' })
+  } catch {
+    return '' // no crontab yet is not an error
+  }
+}
+
+/** Everything that is not ours, with our block cut out wherever it sits. */
+const withoutOurs = (text) => {
+  const lines = text.split('\n')
+  const start = lines.indexOf(BEGIN)
+  const end = lines.indexOf(END)
+  if (start === -1 || end === -1 || end < start) return lines
+  return [...lines.slice(0, start), ...lines.slice(end + 1)]
+}
+
+// ---------------------------------------------------------------------------
+// --run <job>: run an installed job NOW, exactly as the schedule runs it.
+//
+// WHY. Cairn's code is push-based — merge to main, GitHub Actions deploys —
+// while the files agents READ about that code are pull-based, repaired by the
+// hourly `agent-files` job. The two clocks are independent, so after a merge
+// that touches both there is a window in which every agent on every machine
+// reads instructions that contradict the code already live. Measured on
+// 2026-09-21: merge at 16:14, previous sync at 15:23, 51 minutes, and up to 59
+// in the general case (CAIRN-257).
+//
+// So the deploy calls this the moment it has finished deploying. The schedule
+// is NOT replaced and must not be: it is the fallback for a machine that was
+// powered off, one the deploy cannot reach, and a merge that for any reason
+// never got here. A trigger added, not a schedule removed — and a side effect
+// worth having is that a repair reported by the hourly job now means something
+// sharper than it did, namely that the trigger did not arrive.
+//
+// WHY IT READS THE COMMAND BACK OUT instead of rendering it again. The part
+// that matters is host-specific: which copies this machine has (`--also
+// skill=<another account's tree>`) lives in the line the installer wrote, and
+// nowhere else. Rendering it a second time from the environment would work only
+// where that environment is set, which is not where a CI job runs; writing it
+// out a second time in a workflow file is the next thing to drift. The
+// installed schedule is the source of truth, and this runs it early.
+//
+// Splitting the crontab line on whitespace is the exact inverse of how it was
+// written (`job.command.join(' ')`, unquoted): a path containing a space would
+// already have broken the line itself, so this parse is no weaker than that
+// render. The LaunchAgent is read the same way, out of the plist this file
+// wrote, so the two backends still cannot disagree about what a job is.
+// ---------------------------------------------------------------------------
+
+const unxml = (text) =>
+  String(text).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+
+/** The job's line out of our own managed block in the running user's crontab. */
+const scheduledInCron = (name) => {
+  const lines = current().split('\n')
+  const start = lines.indexOf(BEGIN)
+  const end = lines.indexOf(END)
+  if (start === -1 || end === -1 || end < start) return null
+
+  const ours = lines.slice(start + 1, end)
+  const at = ours.findIndex((line) => line.startsWith(`# ${name}:`))
+  if (at === -1) return null
+  const line = ours.slice(at + 1).find((l) => l.trim() !== '' && !l.trim().startsWith('#'))
+  if (!line) return null
+
+  const tokens = line.trim().split(/\s+/).slice(5) // five schedule fields
+  const environment = {}
+  while (tokens.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) {
+    const [key, ...rest] = tokens.shift().split('=')
+    environment[key] = rest.join('=')
+  }
+  // `>> <log> 2>&1` is the crontab's own plumbing; here the output belongs to
+  // whoever asked for the run.
+  const redirect = tokens.findIndex((token) => token.startsWith('>') || token === '2>&1')
+  const command = redirect === -1 ? tokens : tokens.slice(0, redirect)
+  return command.length === 0 ? null : { environment, command }
+}
+
+/** The same job, out of the LaunchAgent this installer wrote. */
+const scheduledInLaunchd = (name) => {
+  const path = plistPath(name)
+  if (!existsSync(path)) return null
+  const text = readFileSync(path, 'utf8')
+
+  const args = /<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(text)
+  const command = [...(args?.[1] ?? '').matchAll(/<string>([\s\S]*?)<\/string>/g)]
+    .map((match) => unxml(match[1]))
+
+  const variables = /<key>EnvironmentVariables<\/key>\s*<dict>([\s\S]*?)<\/dict>/.exec(text)
+  const environment = {}
+  for (const match of (variables?.[1] ?? '').matchAll(/<key>([^<]*)<\/key>\s*<string>([\s\S]*?)<\/string>/g)) {
+    environment[unxml(match[1])] = unxml(match[2])
+  }
+
+  return command.length === 0 ? null : { environment, command }
+}
+
+/**
+ * The only two differences between "on the hour" and "right after a deploy",
+ * and there are deliberately only two — a third would be a second definition of
+ * the job, which is what this whole mechanism exists to avoid.
+ *
+ * `--source` because a deploy has the exact tree it just deployed sitting on
+ * disk, which is strictly better than the schedule's raw.githubusercontent URL:
+ * that URL is served from a CDN with a cache of its own, so a fetch seconds
+ * after the merge can be handed the previous main and write it back as though
+ * it were current. Omit it and the scheduled source is used unchanged.
+ *
+ * `--no-notify` because the schedule's note means "a runtime was reading a
+ * stale copy until now", which is a surprise worth recording. On the deploy
+ * path a repair is the expected outcome of every merge that touches these
+ * files, so a note per merge would bury the notes that mean something.
+ */
+const withRunOverrides = (command) => {
+  const out = [...command]
+  if (RUN_SOURCE) {
+    const at = out.indexOf('--source')
+    if (at === -1) out.push('--source', RUN_SOURCE)
+    else out[at + 1] = RUN_SOURCE
+  }
+  if (RUN_WITHOUT_NOTIFY) {
+    const at = out.indexOf('--notify')
+    if (at !== -1) out.splice(at, 2)
+  }
+  return out
+}
+
+if (RUN) {
+  if (INSTALL || REMOVE) {
+    console.error('--run does one thing: run an installed job now.')
+    console.error('It does not install and does not remove. Pick one.')
+    process.exit(2)
+  }
+
+  const scheduled = USE_LAUNCHD ? scheduledInLaunchd(RUN) : scheduledInCron(RUN)
+  if (!scheduled) {
+    // Deliberately no fallback to rendering the job from JOBS. On a machine
+    // where this is not installed, the environment that describes the machine
+    // is not set either, so the job invented here would reach none of the
+    // copies the real one reaches — and would report success for doing nothing.
+    console.error(`No ${RUN} job is installed for ${MAC && USE_LAUNCHD ? 'this user' : 'this crontab'}.`)
+    console.error('Install it first; there is nothing to fall back to on purpose,')
+    console.error('because a job invented here would not be the job that is scheduled.')
+    process.exit(3)
+  }
+
+  const command = withRunOverrides(scheduled.command)
+  console.log(`# ${RUN}: ${command.join(' ')}`)
+  try {
+    execFileSync(command[0], command.slice(1), {
+      stdio: 'inherit',
+      env: { ...process.env, ...scheduled.environment },
+    })
+  } catch (error) {
+    process.exit(typeof error.status === 'number' ? error.status : 1)
+  }
+  process.exit(0)
+}
+
 /**
  * The repairer has to be somewhere stable before it can be scheduled: a job
  * pointed at a working tree breaks the first time the tree is moved or checked
@@ -273,23 +445,6 @@ const applicable = JOBS.filter((job) => {
 })
 
 const block = [BEGIN, ...applicable.flatMap((job) => [`# ${job.name}: ${job.why}`, cronLine(job)]), END]
-
-const current = () => {
-  try {
-    return execFileSync('crontab', ['-l'], { encoding: 'utf8' })
-  } catch {
-    return '' // no crontab yet is not an error
-  }
-}
-
-/** Everything that is not ours, with our block cut out wherever it sits. */
-const withoutOurs = (text) => {
-  const lines = text.split('\n')
-  const start = lines.indexOf(BEGIN)
-  const end = lines.indexOf(END)
-  if (start === -1 || end === -1 || end < start) return lines
-  return [...lines.slice(0, start), ...lines.slice(end + 1)]
-}
 
 if (!INSTALL && !REMOVE) {
   if (USE_LAUNCHD) {
