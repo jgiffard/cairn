@@ -802,9 +802,18 @@ const updateRememberedOwnership = (path, data) => {
  * everything answers yes to everything, which is the same as knowing nothing.
  *
  * This end knows exactly what it acted on and whether the server accepted it.
- * Keyed on time rather than a session id on purpose: Codex and OpenClaw name
- * sessions in ways this process cannot see, but every runtime agrees on a
- * clock, and the hook already reads the transcript's first and last timestamps.
+ *
+ * It was keyed on time alone, because Codex and OpenClaw name sessions in ways
+ * this process could not see while every runtime agrees on a clock. Time alone
+ * is not enough once several sessions share the clock: the hook filtered the
+ * window by directory and, when nothing matched, fell back to the whole
+ * window -- so one session's writes were attributed to another's transcript.
+ * A session working on a trading bot was told it was holding a knowledge-map
+ * task, and two map tasks were stamped with a checkpoint about HERMES-107.
+ *
+ * So the session id goes in the breadcrumb when there is one, and the hook
+ * filters on it exactly. A runtime that cannot name itself writes no session
+ * and keeps the old behaviour; nothing is lost that was previously correct.
  */
 const ACTED_PATH = join(homedir(), '.cairn', 'acted.jsonl')
 const ACTED_MAX_BYTES = 256 * 1024
@@ -850,6 +859,9 @@ const rememberWrite = (method, path, data) => {
         verb: verbOfWrite(method, path),
         cwd: process.cwd(),
         agent: AGENT,
+        // Absent on a runtime that cannot name its session. The hook treats
+        // absent as "cannot tell", never as "not mine".
+        ...(SESSION ? { session: SESSION } : {}),
       })}\n`,
     )
   } catch {
