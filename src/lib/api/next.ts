@@ -36,6 +36,14 @@ export type Candidate = {
   priority: string
   type?: string | null
   claimedBy?: string | null
+  /**
+   * Which session holds it, when the holder could name one.
+   *
+   * `claimedBy` is an actorLabel — every Claude Code session on a machine
+   * writes the same string — so it cannot answer "is this mine". NULL means
+   * the holder could not say, never that nobody holds it.
+   */
+  claimedSession?: string | null
   heartbeatAt?: string | null
   updatedAt?: string | null
   checkpoint?: string | null
@@ -59,20 +67,53 @@ const priorityRank = (priority: string) => {
  * A stale claim is not a reason to skip a task — that is exactly the abandoned
  * work this is meant to surface — so the heartbeat, not the claim, decides.
  */
-const heldByAnother = (task: Candidate, me: string | null, now: number) => {
-  if (!task.claimedBy || task.claimedBy === me) return false
+/**
+ * This caller holds it — the same worker, not merely the same name.
+ *
+ * The label matching was not enough, and believing it was the whole bug: four
+ * Claude Code sessions share one actorLabel, so a sibling's claim looked like
+ * the caller's own. A live one was then not merely un-skipped but RECOMMENDED
+ * — "you are holding this one" — which sends a second session into a file the
+ * first is editing.
+ *
+ * Either side being unable to name a session means "cannot tell", and cannot
+ * tell falls back to the label. Treating it as "somebody else's" would make
+ * every claim made before this existed disappear from `cairn next` at once.
+ */
+const isMine = (task: Candidate, me: string | null, mySession: string | null) =>
+  Boolean(task.claimedBy) &&
+  task.claimedBy === me &&
+  (!mySession || !task.claimedSession || task.claimedSession === mySession)
+
+const heldByAnother = (
+  task: Candidate,
+  me: string | null,
+  now: number,
+  mySession: string | null,
+) => {
+  if (!task.claimedBy) return false
+  if (isMine(task, me, mySession)) return false
   const beat = task.heartbeatAt ? Date.parse(task.heartbeatAt) : NaN
   if (Number.isNaN(beat)) return true
   return now - beat < QUIET_MS
 }
 
-const tierOf = (task: Candidate, me: string | null, now: number): Tier | null => {
+const tierOf = (
+  task: Candidate,
+  me: string | null,
+  now: number,
+  mySession: string | null = null,
+): Tier | null => {
   if (task.status === 'done' || task.status === 'cancelled') return null
   if (task.blockedAt) return null
   if ((task.unmetDeps ?? 0) > 0) return null
-  if (heldByAnother(task, me, now)) return null
+  if (heldByAnother(task, me, now, mySession)) return null
 
-  if (task.status === 'doing' && task.claimedBy && task.claimedBy === me) return 'holding'
+  // Same test as heldByAnother uses, not a looser one. A STALE claim from
+  // another session reaches here — the heartbeat decides whether it is skipped
+  // — and comparing the label alone here labelled it "you are holding this",
+  // which was the original bug wearing a different hat.
+  if (task.status === 'doing' && isMine(task, me, mySession)) return 'holding'
   if (task.status === 'doing') return task.checkpoint ? 'checkpointed' : 'dropped'
   if (task.status === 'in-review') return 'in-review'
   if (task.status === 'todo') return 'todo'
@@ -95,11 +136,15 @@ const REASONS: Record<Tier, string> = {
  */
 export const rankNext = (
   tasks: Candidate[],
-  { me = null, now = Date.now() }: { me?: string | null; now?: number } = {},
+  {
+    me = null,
+    now = Date.now(),
+    mySession = null,
+  }: { me?: string | null; now?: number; mySession?: string | null } = {},
 ): Ranked[] =>
   tasks
     .flatMap((task) => {
-      const tier = tierOf(task, me, now)
+      const tier = tierOf(task, me, now, mySession)
       return tier ? [{ ...task, tier, reason: REASONS[tier] }] : []
     })
     .sort((a, b) => {

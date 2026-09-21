@@ -11,6 +11,25 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **`cairn next` offered another session's live claim as "you are holding this one".** It
+  compared `claimedBy` alone, and that is an actorLabel every Claude Code session on a
+  machine shares — so a sibling's claim was not merely left unskipped, it was promoted to
+  the top of the list with "finish it or hand it back". A session working on a trading bot
+  was told to finish a knowledge-map task it had never opened. The comparison now includes
+  the session on both the skip and the tier, so a live claim from another session is passed
+  over exactly as any other agent's would be, and a stale one still surfaces as the
+  abandoned work it is.
+- **A session's closing summary could be recorded against tasks it never touched.** The
+  session-end hook filtered its breadcrumbs by time and directory and, when no breadcrumb
+  matched the directory, fell back to *every task any session wrote in that window*. Its
+  last resort was worse: task references regex-matched out of conversation prose, so
+  discussing a task counted as working it. CAIRN-209 — a task about label collision on the
+  knowledge map — is carrying a progress report about three unrelated pull requests, and two
+  more carry a checkpoint about a task in a different product. Breadcrumbs now record the
+  session that wrote them and are filtered on it exactly, with no fallback to the window:
+  a session row with no task links is a small loss, a session row attached to someone
+  else's task is a wrong record that later readers believe. Bare prose mentions no longer
+  count as work at all.
 - **A claim now says which session holds it, not just which human.** `claimed_by` is a label
   like `claude-code · cal@example.com`, and every Claude Code session on a machine writes
   exactly that — four run here at once. The claim itself was never the broken part; the

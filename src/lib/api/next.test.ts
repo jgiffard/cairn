@@ -105,3 +105,71 @@ describe('rankNext', () => {
     ).toEqual([])
   })
 })
+
+/**
+ * Two sessions, one label.
+ *
+ * `claimedBy` is an actorLabel and every Claude Code session on a machine
+ * writes the same one. Comparing it alone did not merely fail to skip a
+ * sibling's live claim — it promoted the task to the `holding` tier and told
+ * the caller "you are holding this one — finish it or hand it back". A session
+ * working on a trading bot was sent to finish a knowledge-map task it had
+ * never opened.
+ */
+describe('rankNext across concurrent sessions', () => {
+  const held = (session: string | null) =>
+    task({
+      ref: 'A-1',
+      status: 'doing',
+      claimedBy: 'claude-code',
+      claimedSession: session,
+      heartbeatAt: hoursAgo(0),
+    })
+
+  it('does not offer a live claim held by another session of the same agent', () => {
+    const out = rankNext([held('other-session')], {
+      me: 'claude-code',
+      now: NOW,
+      mySession: 'my-session',
+    })
+    expect(out).toEqual([])
+  })
+
+  it('still puts this sessions own claim first', () => {
+    const out = rankNext([held('my-session'), task({ ref: 'A-2', status: 'todo', priority: 'urgent' })], {
+      me: 'claude-code',
+      now: NOW,
+      mySession: 'my-session',
+    })
+    expect(out[0]?.ref).toBe('A-1')
+    expect(out[0]?.tier).toBe('holding')
+  })
+
+  it('treats a claim that names no session as the callers own, as before', () => {
+    // Claimed before the column existed, or by a runtime that cannot name
+    // itself. "Cannot tell" must not become "somebody else's", or every
+    // pre-existing claim would vanish from `cairn next` at once.
+    const out = rankNext([held(null)], { me: 'claude-code', now: NOW, mySession: 'my-session' })
+    expect(out[0]?.tier).toBe('holding')
+  })
+
+  it('changes nothing for a caller that cannot name its session', () => {
+    const out = rankNext([held('other-session')], { me: 'claude-code', now: NOW })
+    expect(out[0]?.tier).toBe('holding')
+  })
+
+  it('still surfaces a stale claim from another session as abandoned work', () => {
+    // The heartbeat decides, not the claim. Abandoned work is exactly what
+    // this is meant to surface.
+    const stale = task({
+      ref: 'A-1',
+      status: 'doing',
+      claimedBy: 'claude-code',
+      claimedSession: 'other-session',
+      heartbeatAt: hoursAgo(48),
+      checkpoint: 'got this far',
+    })
+    const out = rankNext([stale], { me: 'claude-code', now: NOW, mySession: 'my-session' })
+    expect(out[0]?.tier).toBe('checkpointed')
+  })
+})

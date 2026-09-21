@@ -23,6 +23,7 @@ type Row = {
   updated_at: string | null
   checkpoint_summary: string | null
   blocked_at: string | null
+  claimed_session: string | null
   project: { key: string } | { key: string }[] | null
 }
 
@@ -49,7 +50,7 @@ export const GET = route({
     const base = admin()
       .from('tasks')
       .select(
-        'id, number, title, status, priority, type, claimed_by, heartbeat_at, updated_at, ' +
+        'id, number, title, status, priority, type, claimed_by, claimed_session, heartbeat_at, updated_at, ' +
           'checkpoint_summary, blocked_at, project:projects!project_id!inner(key)',
       )
       .not('status', 'in', '("done","cancelled")')
@@ -91,6 +92,7 @@ export const GET = route({
       priority: row.priority,
       type: row.type,
       claimedBy: row.claimed_by,
+      claimedSession: row.claimed_session,
       heartbeatAt: row.heartbeat_at,
       updatedAt: row.updated_at,
       checkpoint: row.checkpoint_summary,
@@ -98,7 +100,7 @@ export const GET = route({
       unmetDeps: unmet.get(row.id) ?? 0,
     }))
 
-    const ranked = rankNext(candidates, { me: actor.actorId })
+    const ranked = rankNext(candidates, { me: actor.actorId, mySession: actor.sessionId })
     return ok({
       pick: ranked[0] ?? null,
       then: ranked.slice(1, query.limit ?? 5),

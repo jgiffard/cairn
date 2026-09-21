@@ -343,7 +343,7 @@ const ACTED_PATH = join(homedir(), '.cairn', 'acted.jsonl')
 /** A write can land after the last transcript line, never meaningfully before. */
 const ACTED_SLACK_MS = 2 * 60 * 1000
 
-const actedFromBreadcrumbs = ({ startedAt, endedAt, cwd }) => {
+const actedFromBreadcrumbs = ({ startedAt, endedAt, cwd, sessionId }) => {
   if (!startedAt) return null
   let lines
   try {
@@ -371,32 +371,58 @@ const actedFromBreadcrumbs = ({ startedAt, endedAt, cwd }) => {
   }
   if (inWindow.length === 0) return null
 
-  // Two agents working in parallel share the clock, so the window alone can
-  // pick up a sibling's writes. Its directory separates them when it can, and
-  // when nothing matches the window is still better than a regex over prose.
+  // Several sessions share the clock, so the window alone picks up a sibling's
+  // writes. This used to narrow by directory and, when nothing matched, fall
+  // back to the WHOLE WINDOW -- which is how a knowledge-map task ended up
+  // carrying a progress report about three unrelated pull requests.
+  //
+  // The session id is exact where it exists, so use it and stop. A row with no
+  // session came from a runtime that cannot name itself, and excluding those
+  // would throw away every breadcrumb Codex and OpenClaw write, so they stay
+  // and the directory still separates them.
+  if (sessionId) {
+    const mine = inWindow.filter((row) => row.session === sessionId)
+    const unnamed = inWindow.filter((row) => !row.session)
+    const byDirectory = cwd ? unnamed.filter((row) => row.cwd === cwd) : unnamed
+    // Deliberately no fallback to the whole window. If nothing in it belongs
+    // to this session, this session wrote nothing through the CLI, and saying
+    // so is the honest answer. A session row with no task links is a small
+    // loss; a session row attached to somebody else's task is a wrong record
+    // that later readers believe.
+    return new Set([...mine, ...byDirectory].map((row) => row.ref))
+  }
+
+  // No session to filter on. Directory, then the window, as before -- this is
+  // the path Codex and OpenClaw take and it is no worse than it was.
   const here = cwd ? inWindow.filter((row) => row.cwd === cwd) : []
   const chosen = here.length > 0 ? here : inWindow
   return new Set(chosen.map((row) => row.ref))
 }
 
 /**
- * Breadcrumbs first, then the `cairn`-command heuristic, then bare mentions.
+ * Breadcrumbs first, then refs seen beside a `cairn` command in the transcript.
  *
- * The fallbacks stay because a session can write through the API directly, run
- * an older CLI, or be swept from a rollout long after its breadcrumbs were
- * trimmed — and a guessed link is still better than no link at all.
+ * BARE PROSE MENTIONS USED TO BE THE LAST RESORT AND ARE NOT ANY MORE. The
+ * reasoning was that a guessed link beats no link; the counter-example is a
+ * session that spent an hour discussing four tasks purely to coordinate with
+ * another session, while working on something else entirely. Under the old
+ * rule it would have been recorded as having worked all four, and those links
+ * drive the end-of-session checkpoint -- so the tasks would carry a progress
+ * report about work nobody did to them. CAIRN-209 has one.
+ *
+ * Discussing a task is not working on it. The remaining fallback is refs that
+ * appeared on a line with a `cairn` command, which is observed action rather
+ * than conversation.
  */
-const chooseRefs = (t, cwd) =>
-  actedFromBreadcrumbs({ startedAt: t.startedAt, endedAt: t.endedAt, cwd }) ??
-  (t.actedOn.size > 0 ? t.actedOn : t.refs)
+const chooseRefs = (t, cwd, sessionId) =>
+  actedFromBreadcrumbs({ startedAt: t.startedAt, endedAt: t.endedAt, cwd, sessionId }) ??
+  t.actedOn
 
-/** Which of the three answered, so a dry run says how much to trust it. */
-const refSource = (t, cwd) =>
-  actedFromBreadcrumbs({ startedAt: t.startedAt, endedAt: t.endedAt, cwd })
+/** Which of the two answered, so a dry run says how much to trust it. */
+const refSource = (t, cwd, sessionId) =>
+  actedFromBreadcrumbs({ startedAt: t.startedAt, endedAt: t.endedAt, cwd, sessionId })
     ? 'breadcrumbs'
-    : t.actedOn.size > 0
-      ? 'cairn-commands'
-      : 'mentions'
+    : 'cairn-commands'
 
 const idFromRollout = (path) => {
   const name = path.split('/').pop() ?? ''
@@ -710,8 +736,8 @@ const record = async (payload) => {
           prompts: t.prompts.length,
           toolCalls: t.toolCalls,
           files: keepFiles(t.files, payload.cwd ?? t.cwd).length,
-          refs: [...chooseRefs(t, payload.cwd ?? t.cwd)].slice(0, 12),
-          refsFrom: refSource(t, payload.cwd ?? t.cwd),
+          refs: [...chooseRefs(t, payload.cwd ?? t.cwd, sessionId)].slice(0, 12),
+          refsFrom: refSource(t, payload.cwd ?? t.cwd, sessionId),
           firstPrompt: t.prompts[0]?.slice(0, 120) ?? null,
         },
         null,
@@ -748,7 +774,7 @@ const record = async (payload) => {
 
   if (t.startedAt) args.push('--started', t.startedAt)
   if (files.length) args.push('--files', files.join(','))
-  const refs = chooseRefs(t, cwd ?? process.cwd())
+  const refs = chooseRefs(t, cwd ?? process.cwd(), sessionId)
   if (refs.size) args.push('--tasks', [...refs].slice(0, 400).join(','))
   if (process.env.CAIRN_AGENT) args.push('--agent', process.env.CAIRN_AGENT)
 
