@@ -210,15 +210,25 @@ const positional = []
  * needing a table per verb that would rot the first time one grows an option.
  * A real flag passed to a verb that ignores it still passes here — worth
  * knowing, but a smaller problem than a silent wrong answer.
+ *
+ * BUILT BY HAND AND GUARDED BY A TEST, because the first version was built by
+ * grepping `flags.X` and missed every flag read dynamically — `flags[k]` over
+ * ['type','status','priority'], and the [flag, field] pairs in `run` and
+ * `session end`. That shipped, and `cairn add --priority high` — documented in
+ * this file's own help — started failing. A whitelist is only as good as its
+ * enumeration, so cli-flags.test.ts now asserts that every `--flag` named in
+ * the help text is in this set. Add to both, or the test says so.
  */
 const KNOWN_FLAGS = new Set([
-  'all', 'also-project', 'archived', 'body', 'branch', 'confirm', 'cwd',
-  'dangling', 'description', 'dir', 'dry-run', 'duplicate-of', 'entity',
-  'file', 'files', 'force', 'force-empty', 'full', 'gaps', 'global', 'help',
-  'hours', 'id', 'json', 'key', 'kind', 'kinds', 'label', 'limit', 'message',
-  'mine', 'no-checkpoint', 'no-parent', 'notify', 'older', 'orphans',
-  'output', 'parent', 'platform', 'pretty', 'project', 'reason', 'remote',
-  'repo', 'resolution', 'scheduled', 'slug', 'start', 'status', 'summary',
+  'agent', 'all', 'also-project', 'archived', 'body', 'branch', 'completed',
+  'confirm', 'cwd', 'dangling', 'description', 'dir', 'dry-run',
+  'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'file', 'files',
+  'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'hours', 'id',
+  'json', 'key', 'kind', 'kinds', 'label', 'learned', 'limit', 'max-parents',
+  'message', 'mine', 'next', 'no-checkpoint', 'no-parent', 'notify', 'older',
+  'orphans', 'output', 'parent', 'platform', 'pretty', 'priority', 'project',
+  'reason', 'remote', 'repo', 'request', 'resolution', 'scheduled',
+  'show-toplevel', 'slug', 'start', 'started', 'status', 'summary',
   'superseded', 'superseded-by', 'task', 'tasks', 'title', 'tool-calls',
   'type', 'url', 'verified', 'version',
 ])
