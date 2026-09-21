@@ -278,7 +278,10 @@ problem.
 - **Entries reference each other** as `[[some-slug]]`, resolving in the browser and the
   CLI alike, with underscores read as hyphens so older spellings still work. A reference to
   an entry nobody has written is *marked* rather than quietly linked into nothing — in the
-  rendered body, and on the way out of `cairn know <slug>`.
+  rendered body, and on the way out of `cairn know <slug>`. On the way *in*, a write is
+  refused outright when a reference resolves to nothing and the store already holds a
+  near-named entry, and the refusal names that slug: at that distance it is a misspelling,
+  not an entry nobody has written yet. `--allow-dangling` is for when that reading is wrong.
 - **A map of the corpus** at `/knowledge/graph`, and the same findings without a screen
   through `cairn know --gaps`. It answers the question a list cannot: what is connected to
   *nothing*. Here that was a quarter of the entries, nineteen separate islands, and dozens
@@ -316,8 +319,8 @@ them, so `context`, `next`, `history` and the session verbs stay CLI-only.
 | `SKILL.md` | Claude Code, Codex and OpenClaw; all three read skill folders |
 | MCP server | native tool-calling — a thin facade over the CLI, holding no logic; a subset of its verbs |
 
-[`AGENTS.md`](./AGENTS.md) is the contract every agent should read. It is kept under 8 KB,
-and CI enforces that, because agents read it every session.
+[`AGENTS.md`](./AGENTS.md) is the contract every agent should read. It is kept under 7900
+bytes, and a test enforces that, because agents read it every session.
 
 ### The CLI
 
@@ -349,17 +352,18 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn beat <ref>` · `cairn release <ref>` | Keep a claim alive, or drop it |
 | `cairn checkpoint <ref> --summary "…"` | Where work stopped, for whoever resumes |
 | `cairn block <ref> --reason "…"` · `cairn unblock <ref>` | Stuck on something outside Cairn |
-| `cairn learn "<title>" --body -` | Record what we now know. Global unless `--project` or `--entity` |
+| `cairn learn "<title>" --body -` | Record what we now know. Scoped to this directory's project unless `--project`, `--entity` or `--global`, and refused where there is no project to infer — global is a claim about every project you have, so it is chosen rather than arrived at |
 | `cairn add ... --start` | File it and claim it, for work you are starting now |
 | `cairn verify <slug>` | This fact is still true. Clears the stale mark without rewriting it |
 | `cairn task delete <ref> --confirm <ref>` | For junk that should never have existed. Refused if the task has children, notes, comments or dependencies — cancel keeps the record |
 | `cairn know [<slug>\|<query>]` | Read it back, or list what applies here |
 | `cairn know --gaps` · `--orphans` · `--dangling` | Where the memory has holes: entries joined to nothing, and references pointing at entries nobody wrote |
 | `cairn relearn <slug>` · `cairn unlearn <slug> --superseded-by <slug>` | Correct it, or mark it replaced |
+| `--allow-dangling` (on `learn` and `relearn`) | Keep a `[[reference]]` the store cannot resolve. A write is otherwise refused when a reference names nothing and a near-named entry exists; the refusal names that slug, so retrying with it is the usual answer, and this flag is for when it gets that wrong |
 | `cairn entities` · `cairn entities assign <key> --project A,B` | Groupings a fact can be true of |
 | `cairn session list` · `cairn session end --id <id>` | The episodic record |
 | `cairn reconcile` | Release your own claims that went quiet |
-| `cairn vitals [--all]` | Is the memory still being written — counts against the week before, and what looks wrong |
+| `cairn vitals [--all]` | Is the memory still being written — counts against the week before, and what looks wrong. `--all` adds whether it is being *read*: searches, how many widened or came back empty, tasks filed without checking first, and `asked for, not held: <slug>` for each recent miss |
 | `cairn project rename\|archive\|restore\|delete <KEY>` | Deleting takes every task with it, and demands `--confirm <KEY>` |
 | `cairn replay` | Send writes put aside while the server was unreachable. Rarely needed by hand — any successful write drains the queue |
 | `cairn map <KEY>` | Tell Cairn which project this checkout is. Validates the key, and claims the repository so every other clone and worktree resolves too. `cairn map none` releases both |
@@ -373,7 +377,7 @@ schemas the routes validate against, so it cannot drift. Browsable at `/api-docs
 
 ```
 /health                         unauthenticated probe; reports the commit it was built from
-/vitals?hours=24                whether the memory is still being written, and what looks wrong
+/vitals?hours=24                whether the memory is still being written and read, and what looks wrong
 /search                         the read half of Cairn-as-memory
 /projects  /projects/{id}       list, create, read, rename, delete
 /projects/{id}/tasks            list and create within a project
@@ -408,6 +412,13 @@ sharing one are indistinguishable in every count and every history afterwards.
 
 Every response is enveloped: `{"success":true,"data":…}` or
 `{"success":false,"error":"…","code":"…"}`.
+
+Every response also carries **`x-cairn-version`**, the release that served it, on success
+and failure alike. `cairn --version` already compares the two, but that is the one command
+an agent has no reason to run, so a copied CLI that has drifted goes on working — just not
+the way the docs say. Putting the number on the ordinary path means the CLI notices on the
+next call it makes: it compares once per process and warns on **stderr**, never stdout,
+because callers parse stdout.
 
 ## Keyboard
 
@@ -758,7 +769,7 @@ machine, and running `vitals` in two places reports the same findings twice.
 | Job | What it is for |
 |---|---|
 | `reconcile` (30 min) | Releases a claim an agent stopped working on, and moves the task back to todo so `doing` keeps meaning somebody is on it |
-| `vitals` (daily) | Asks whether the memory is still being written, and reports **only** when something looks wrong |
+| `vitals` (daily) | Asks whether the memory is still being written and read, and reports **only** when something looks wrong |
 | `agent-files` (hourly) | Repairs the skill, CLI and hooks wherever a runtime is reading a stale copy |
 | `openclaw-sessions` (30 min) | OpenClaw has no session-end event, so its transcripts are swept instead of waiting to be handed over |
 
@@ -847,11 +858,16 @@ restarted, and restarting it would interrupt any job in flight.
   administrators alone manage users, roles, passwords and agent keys. PostgreSQL is
   reachable only from the private application network.
 
-**The data model**, in four groups: `projects` / `tasks` / `task_notes` / `task_comments`
+**The data model**, in five groups: `projects` / `tasks` / `task_notes` / `task_comments`
 / `task_attachments` / `task_deps` / `task_activity_events` for the tracker;
 `knowledge` + `knowledge_projects` + `knowledge_entities` for what we know; `sessions` and
 `file_touches` for what happened and where; `entities` + `project_entities` for the
-groupings that sit between one project and everything.
+groupings that sit between one project and everything; and `search_events` +
+`knowledge_reads` for whether any of it is read back. Those last two are the only record of
+*recall* rather than volume: `search_events` keeps the query text, whether the search
+widened, and — since `returned_slugs` — which entries actually came back; `knowledge_reads`
+records every direct read by slug with a `hit` flag, and `false` is the row worth having,
+because it says the memory was asked for a named fact and did not have it.
 
 The migrations are the best description of it — each one is commented with *why*, not
 what. [`001_initial.sql`](./migrations/001_initial.sql) is the tracker;
@@ -905,9 +921,12 @@ it does it that way, and half of them are a bug someone already paid for.
 
 ```bash
 npm run lint && npm run typecheck && npm test && npm run build
+npm run db:migrate && npm run test:integration   # needs a real PostgreSQL
 ```
 
-CI runs all four. The domain vocabulary lives in
+CI runs every one of those, the integration suite in a job of its own because it migrates a
+clean database first — see [`CONTRIBUTING.md`](./CONTRIBUTING.md#before-opening-a-pr). The
+domain vocabulary lives in
 [`src/schemas/task.ts`](./src/schemas/task.ts) — types, statuses, priorities, note kinds
 and resolution kinds are defined there once and flow into the API, the OpenAPI document,
 the CLI and the UI.

@@ -149,6 +149,14 @@ const TOOLS = [
         global: { type: 'boolean', description: 'True everywhere. Say so on purpose.' },
         label: { type: 'string', description: 'Comma-separated labels.' },
         task: { type: 'string', description: 'The task it was learned on, e.g. CAI-42.' },
+        allowDangling: {
+          type: 'boolean',
+          description:
+            'Keep a [[reference]] the store cannot resolve. The write is refused when a ' +
+            'near-named entry already exists, and the refusal names it — retry with that ' +
+            'slug instead. This is for the case it gets wrong: a genuinely new fact whose ' +
+            'name resembles an existing one.',
+        },
       },
       required: ['title', 'body'],
     },
@@ -159,6 +167,7 @@ const TOOLS = [
       ...(a.global ? ['--global'] : []),
       ...(a.label ? ['--label', a.label] : []),
       ...(a.task ? ['--task', a.task] : []),
+      ...(a.allowDangling ? ['--allow-dangling'] : []),
     ],
   },
   {
@@ -173,6 +182,12 @@ const TOOLS = [
         slug: { type: 'string' },
         body: { type: 'string', description: 'The corrected body.' },
         title: { type: 'string', description: 'A corrected title, if the claim itself changed.' },
+        allowDangling: {
+          type: 'boolean',
+          description:
+            'Keep a [[reference]] the store cannot resolve. An edit runs the same check as ' +
+            'a write, so a correction can be refused the same way.',
+        },
       },
       required: ['slug'],
     },
@@ -180,6 +195,7 @@ const TOOLS = [
       'relearn', a.slug,
       ...(a.body ? ['--body', a.body] : []),
       ...(a.title ? ['--title', a.title] : []),
+      ...(a.allowDangling ? ['--allow-dangling'] : []),
     ],
   },
   {

@@ -1,0 +1,222 @@
+{
+  "$schema": "https://cairn.local/search-eval.v1",
+  "title": "cairn check retrieval evaluation set",
+  "filed_under": "CAIRN-247 (spike: cairn check is English-stemmed word overlap, and half the corpus is French)",
+  "created": "2026-09-21",
+  "readme": [
+    "WHAT THIS IS. Twenty real questions an agent would type into `cairn check` before",
+    "starting work, each paired with the rows that are the known-good answers. The refs",
+    "were verified by hand against the live store on 2026-09-21: every expected ref",
+    "exists and genuinely answers the question. The queries are deliberately NOT copies",
+    "of the titles — an agent asking the mandatory first-gate question does not know the",
+    "wording of the row it is hoping to find. That is the whole point: retrieval is only",
+    "worth measuring on paraphrase.",
+    "",
+    "WHY IT EXISTS. CAIRN-247 says: 'Collect twenty such queries with their known-good",
+    "answers and score whatever is built against them, or we will ship embeddings and",
+    "have no idea whether they helped.' This is that set. Score BEFORE and AFTER any",
+    "change to the search configuration (language config, pgvector, ranking) and compare.",
+    "",
+    "HOW TO SCORE. For each case, run the query through search and take the ordered list",
+    "of refs it returns (`cairn check \"<query>\" --json` -> results[].ref, 20 rows max,",
+    "or call search_all directly). Then, per case:",
+    "  hit@k       = 1 if any expectedRefs[] appears in the first k results, else 0",
+    "  rank        = 1-based position of the first expectedRef, or null if absent",
+    "  reciprocal  = 1/rank, or 0 if absent  (MRR is the mean of these)",
+    "  precise     = 1 if that hit came back with loose=false (i.e. it matched the",
+    "                websearch_to_tsquery precise arm, not the widened OR fallback)",
+    "Report four numbers over the twenty cases: recall@20, recall@5, MRR, and the share",
+    "of cases whose hit was precise rather than widened. Report them split by",
+    "`lang` too — the French and cross-lingual subsets are the ones under suspicion, and",
+    "an aggregate that mixes them hides exactly the effect being measured.",
+    "",
+    "WHAT COUNTS AS A REGRESSION. Any change that raises the French numbers while",
+    "dropping recall@20 on the `en` subset is not an improvement, it is a trade. The",
+    "'simple' text-search configuration is the obvious instance: it does no stemming at",
+    "all, so English plurals stop matching singulars and gerunds stop matching stems.",
+    "The `en` subset exists to price that loss, not to pad the count.",
+    "",
+    "MAINTENANCE. Expected refs rot: a task can be merged, a knowledge entry superseded.",
+    "If a case stops being answerable, fix the case, do not delete it — a query with no",
+    "good answer left is a different measurement from a query the engine missed."
+  ],
+  "baseline": {
+    "measured": "2026-09-21",
+    "how": "cairn check \"<query>\" --json against the live store, first expectedRef's 1-based position in results[]",
+    "system": "Postgres FTS, search_all() as of migrations/033, every tsvector and tsquery built with the 'english' configuration, no embeddings",
+    "overall": { "n": 22, "recall@20": 0.73, "recall@5": 0.73, "rank1": 12, "mrr": 0.614, "precise_hits": 3, "queries_widened": 20 },
+    "by_lang": {
+      "fr": { "n": 12, "recall@20": 0.92, "mrr": 0.764, "precise_hits": 1, "queries_widened": 12 },
+      "cross": { "n": 3, "recall@20": 0.67, "mrr": 0.444, "precise_hits": 0, "queries_widened": 3 },
+      "en": { "n": 7, "recall@20": 0.43, "mrr": 0.429, "precise_hits": 2, "queries_widened": 5 }
+    },
+    "ranks": {
+      "fr-01": 2, "fr-02": 1, "fr-03": 3, "fr-04": 1, "fr-05": 1, "fr-06": 1,
+      "fr-07": 1, "fr-08": 1, "fr-09": 3, "fr-10": 1, "fr-11": null, "fr-12": 1,
+      "xl-01": 3, "xl-02": 1, "xl-03": null,
+      "en-01": 1, "en-02": 1, "en-03": null, "en-04": null, "en-05": null, "en-06": 1, "en-07": null
+    },
+    "findings": [
+      "20 of 22 queries widened: the precise websearch_to_tsquery arm is not how this system answers a natural-language question, it is the exception.",
+      "The French subset scores BEST, not worst (recall@20 0.92 vs 0.43 for English). French content words are high-IDF against a mostly-English corpus, and the widening arm already drops words of 3 characters or fewer, which is most French function words.",
+      "Both non-widened queries (en-05, en-07) MISSED. Three or more irrelevant rows satisfied the AND query, so the widened arm was suppressed by p_min_precise. Re-running en-07 with --kinds knowledge drops the precise count below 3, the widening fires, and the correct entry comes back at rank 1 — same corpus, same query.",
+      "Re-measure with this file rather than trusting these numbers; they are a snapshot of a store that keeps growing."
+    ]
+  },
+  "cases": [
+    {
+      "id": "fr-01",
+      "lang": "fr",
+      "query": "erreur de label Langfuse entre staging et production sur les prompts SMS",
+      "expectedRefs": ["HM-708"],
+      "why": "HM-708 'Fix: les prompts SMS de production composaient leurs blocs communs via label=staging' is exactly this bug, already fixed. An agent that misses it re-debugs a solved production incident."
+    },
+    {
+      "id": "fr-02",
+      "lang": "fr",
+      "query": "relancer une seconde chance depuis une session d'entrainement deja terminee",
+      "expectedRefs": ["HERMES-110", "HERMES-105", "HERMES-109"],
+      "why": "HERMES-110 is the audit of precisely this ('depuis une session d'entraînement TERMINÉE : possible, 5 verrous'); 105 and 109 are the adjacent work. Note the query is written without accents, as an agent on a US keyboard would type it — under an accent-sensitive index that alone is a miss."
+    },
+    {
+      "id": "fr-03",
+      "lang": "fr",
+      "query": "le persona parle tout seul et n'entend pas le conseiller",
+      "expectedRefs": ["HERMES-99", "HERMES-104", "HERMES-64"],
+      "why": "Three separate recorded incidents of the V4 persona taking both sides of the call. The most-repeated failure in the HERMES corpus and entirely in French."
+    },
+    {
+      "id": "fr-04",
+      "lang": "fr",
+      "query": "mauvaise version de prompt affichee apres un rejeu",
+      "expectedRefs": ["HM-712", "HM-711"],
+      "why": "HM-712/711 are the 'Versions du prompt' banner ignoring step replays. A paraphrase with no shared content word beyond 'version' and 'rejeu'."
+    },
+    {
+      "id": "fr-05",
+      "lang": "fr",
+      "query": "trop de zones de defilement imbriquees dans le configurateur",
+      "expectedRefs": ["SWV-251"],
+      "why": "SWV-251 'sortir des zones de scroll imbriquées et baisser la densité'. Tests the scroll/défilement synonym and, under any config, the accentless spelling."
+    },
+    {
+      "id": "fr-06",
+      "lang": "fr",
+      "query": "atteindre les offres derriere un ecart dans la vue lot de l'auditeur",
+      "expectedRefs": ["SWV-250"],
+      "why": "SWV-250, a near-restatement of the title with different word order and one synonym. If FTS misses this, it is the function words and the morphology, not the vocabulary."
+    },
+    {
+      "id": "fr-07",
+      "lang": "fr",
+      "query": "claude-mem consomme tout le quota d'abonnement",
+      "expectedRefs": ["CCS-27", "CCS-29"],
+      "why": "CCS-27 'claude-mem brûle le quota d'abonnement'. 'consomme' vs 'brûle' is the kind of substitution no stemmer bridges and an embedding does."
+    },
+    {
+      "id": "fr-08",
+      "lang": "fr",
+      "query": "reduire le gaspillage de lecture de fichiers pendant une session",
+      "expectedRefs": ["CCS-26"],
+      "why": "CCS-26 is the measured read-waste work (DIS-2129). Close paraphrase, French, accentless — the easiest French case in the set, so a miss here is damning."
+    },
+    {
+      "id": "fr-09",
+      "lang": "fr",
+      "query": "quelle est la difference entre replay et rejouer dans la bibliotheque",
+      "expectedRefs": ["replay-et-rejouer-sont-deux-actions-differentes-sur-la-bibliotheque-jarvis-pas-une-traduction-l-une-de-l-autre", "HM-706", "HM-701"],
+      "why": "A knowledge entry written to answer exactly this question. If `cairn know` cannot return it for the question it was written for, the memory is write-only."
+    },
+    {
+      "id": "fr-10",
+      "lang": "fr",
+      "query": "pourquoi un rejeu tourne encore sur l'ancien prompt apres la promotion",
+      "expectedRefs": ["reference-langfuse-prompt-cache-replay"],
+      "why": "'Un rejeu lancé juste après une promotion Langfuse tourne sur l'ANCIEN prompt (cache in-process)'. High-value: getting this wrong sends an agent debugging Langfuse for an hour."
+    },
+    {
+      "id": "fr-11",
+      "lang": "fr",
+      "query": "comment savoir si une analyse a ete rejouee",
+      "expectedRefs": ["un-rejeu-d-analyse-n-ecrit-ni-updatedat-ni-isretry-la-preuve-du-rejeu-est-dans-steps"],
+      "why": "The entry answers the question directly ('la preuve du rejeu est dans steps[]'). Passé composé in the query against infinitive/noun forms in the entry — the French morphology case in its purest form."
+    },
+    {
+      "id": "fr-12",
+      "lang": "fr",
+      "query": "quels prompts SMS ne sont plus utilises et peuvent etre archives",
+      "expectedRefs": ["HM-707", "HM-709", "HM-710"],
+      "why": "Three consecutive tasks that audited, archived and deleted unused SMS prompts. An agent asking this is about to redo an audit that closed last week."
+    },
+    {
+      "id": "xl-01",
+      "lang": "cross",
+      "query": "SMS prompts in production were composing their shared blocks with the staging label",
+      "expectedRefs": ["HM-708"],
+      "why": "Same fact as fr-01, asked in English about work recorded in French. Lexical search cannot answer this at all except through the loan words ('SMS', 'staging', 'production'); an embedding can. This case is the clearest discriminator between option 1 and option 2 in the spike."
+    },
+    {
+      "id": "xl-02",
+      "lang": "cross",
+      "query": "replaying an analysis right after promoting a prompt uses the cached old version",
+      "expectedRefs": ["reference-langfuse-prompt-cache-replay"],
+      "why": "English question, French entry, only 'Langfuse' and 'cache' shared. Second discriminator."
+    },
+    {
+      "id": "xl-03",
+      "lang": "cross",
+      "query": "the training persona answers for the adviser as well as itself",
+      "expectedRefs": ["HERMES-104", "HERMES-99", "HERMES-64"],
+      "why": "English phrasing of fr-03. 'conseiller' -> 'adviser' is a translation, not a stem; measures the ceiling of lexical retrieval over a bilingual corpus."
+    },
+    {
+      "id": "en-01",
+      "lang": "en",
+      "query": "agents finish work without ever claiming the task, and nothing notices",
+      "expectedRefs": ["CAIRN-211", "CAIRN-135"],
+      "why": "The case from the CAIRN-247 session: both refs are the right answers and both ranked below unrelated rows, found only because a human recognised the titles."
+    },
+    {
+      "id": "en-02",
+      "lang": "en",
+      "query": "can we tell whether the memory actually gave an agent the right answer",
+      "expectedRefs": ["CAIRN-254"],
+      "why": "CAIRN-254 is that exact question, filed and partly built. Paraphrase with 'recall'/'telemetry' deliberately absent."
+    },
+    {
+      "id": "en-03",
+      "lang": "en",
+      "query": "links in knowledge entries that point at something nobody ever wrote",
+      "expectedRefs": ["CAIRN-253"],
+      "why": "'Two thirds of dangling knowledge references point at facts Cairn already holds'. The query avoids the words 'dangling' and 'reference' on purpose."
+    },
+    {
+      "id": "en-04",
+      "lang": "en",
+      "query": "detect when the installed CLI is older than the server it talks to",
+      "expectedRefs": ["CAIRN-246"],
+      "why": "'A stale CLI only confesses if you ask it: --version is the one command that checks'. Tests 'stale' <-> 'older'."
+    },
+    {
+      "id": "en-05",
+      "lang": "en",
+      "query": "does clearing the context still record what the session did",
+      "expectedRefs": ["clear-fires-sessionend-so-cairn-records-the-work"],
+      "why": "A knowledge entry written for this question. 'clearing' vs 'clear' is the plain English stemming case — it must keep working under any language-config change."
+    },
+    {
+      "id": "en-06",
+      "lang": "en",
+      "query": "grepping the porcelain output of git blame returns no commits",
+      "expectedRefs": ["git-blame-line-porcelain-has-no-commit-prefix-so-the-obvious-grep-returns-zero"],
+      "why": "Gerund against verb ('grepping'/'grep'), plural against singular ('commits'/'commit'). This case exists to price the loss of English stemming if the config moves to 'simple'."
+    },
+    {
+      "id": "en-07",
+      "lang": "en",
+      "query": "AWS list calls returning partial results without any error",
+      "expectedRefs": ["unpaginated-aws-list-calls-return-plausible-wrong-answers"],
+      "why": "Plural 'calls' against 'call', 'returning' against 'return', and 'partial results' against 'plausible wrong answer'. Second pricing case for English stemming."
+    }
+  ]
+}

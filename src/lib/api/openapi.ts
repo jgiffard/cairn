@@ -57,6 +57,76 @@ const errorResponse = {
   },
 }
 
+/**
+ * What a knowledge write says when its `[[refs]]` do not resolve.
+ *
+ * The ordinary failure envelope plus the half that makes it actionable. 63% of
+ * the dangling references already in the store point at a fact Cairn holds
+ * under a different slug, so "that does not exist" is true and useless; the
+ * names that nearly are it are the answer. `error` repeats all of it in prose,
+ * because the CLI prints that field and drops everything beside it.
+ */
+const referenceRefusalResponse = {
+  description:
+    'A `[[reference]]` in the body points at no entry. `code` is `validation_failed`. ' +
+    'Nothing was written.',
+  content: {
+    'application/json': {
+      schema: {
+        type: 'object',
+        properties: {
+          success: { const: false },
+          error: {
+            type: 'string',
+            description:
+              'The whole refusal, in prose: which reference missed, the slug it probably ' +
+              'meant, and how to record it anyway if it really is new.',
+          },
+          code: { const: 'validation_failed' },
+          unresolvedReferences: {
+            type: 'array',
+            description:
+              'Every reference that resolved to nothing, whether or not it is what caused ' +
+              'the refusal — only the ones with a near-named entry do that.',
+            items: {
+              type: 'object',
+              properties: {
+                slug: {
+                  type: 'string',
+                  description: 'Normalised: lowercased, underscores read as hyphens.',
+                },
+                raw: { type: 'string', description: 'As the author spelled it.' },
+                suggestions: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description:
+                    'Existing slugs that are close, closest first, at most three. Often empty.',
+                },
+                certain: {
+                  type: 'boolean',
+                  description:
+                    'A suggestion is close enough to call this a misspelt name rather than a ' +
+                    'fact nobody has written yet. This is what the refusal is for; send ' +
+                    '`allowUnresolvedRefs` to record it anyway.',
+                },
+              },
+            },
+          },
+          taskReferences: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Task refs somebody put in wiki brackets — `[[CAI-42]]`. Refused outright and ' +
+              'not covered by `allowUnresolvedRefs`: inside `[[...]]` it reads as a knowledge ' +
+              'slug and points at an entry that will never exist. Write it bare.',
+          },
+        },
+        required: ['success', 'error', 'code'],
+      },
+    },
+  },
+}
+
 const refParam = {
   name: 'ref',
   in: 'path',
@@ -88,6 +158,141 @@ const taskSummary = {
     labels: { type: 'array', items: { type: 'string' } },
     claimed_by: { type: ['string', 'null'] },
     resolution: { type: ['string', 'null'] },
+  },
+}
+
+/**
+ * The stored entry, and the one thing about it that is not a column.
+ *
+ * A reference resolving to nothing with nothing close to it is accepted rather
+ * than refused — two entries that cite each other cannot both be written first
+ * — so the write succeeds and says so anyway. Absent when there is nothing to
+ * say, which is the usual case.
+ */
+const knowledgeEntry = {
+  type: 'object',
+  description: 'The stored row.',
+  properties: {
+    slug: { type: 'string' },
+    title: { type: 'string' },
+    body: { type: 'string' },
+    warnings: {
+      type: 'array',
+      items: { type: 'string' },
+      description:
+        'Accepted, and still worth saying: one line per `[[reference]]` that points at no ' +
+        'entry, naming any close matches. Silence is what let 70 of these accumulate.',
+    },
+  },
+}
+
+const counts = (properties: Record<string, unknown>) => ({ type: 'object', properties })
+
+const integer = (description: string) => ({ type: 'integer', description })
+
+/**
+ * The vital signs, spelled out rather than left as "an object".
+ *
+ * Worth the space because two of these have already been read wrong from the
+ * outside. `tasks.closedWithoutTrace` was `closedUnclaimed` until migration
+ * 054 and counts something different now, so a consumer reading the old key
+ * gets `undefined` rather than a wrong number — deliberately. And `memory` is
+ * nullable, not optional-shaped-like-a-zero: this endpoint is the monitor, and
+ * a monitor that fails outright because one of its two questions is
+ * unanswerable has stopped answering the other one too.
+ */
+const vitalsReport = {
+  type: 'object',
+  properties: {
+    windowHours: integer('The window these counts cover.'),
+    sessions: counts({
+      recent: integer('Sessions recorded in the window.'),
+      recentWithFiles: integer('Of those, how many name a file.'),
+      recentSummarised: integer(
+        'Of those, how many have the prose half. The summariser costs a model call and ' +
+          'the hook keeps the row when it cannot reach one, so this is where it shows.',
+      ),
+      baseline: integer('The same count over the week before, unscaled.'),
+      baselineWithFiles: integer('The same, for sessions naming a file.'),
+    }),
+    tasks: counts({
+      opened: integer('Filed in the window.'),
+      closed: integer('Moved to done or cancelled in the window.'),
+      stalled: integer('Open, and nothing has happened on them.'),
+      held: integer('Under a live claim.'),
+      closedWithoutTrace: {
+        type: 'integer',
+        description:
+          'Closed by a runtime with nothing recorded between filing and close that anyone ' +
+          'was on it: no claim, no checkpoint, no status move off the status it was filed ' +
+          'in, no commit, no push, no test run. **Renamed from `closedUnclaimed`**, which ' +
+          'asked a narrower question and answered it wrongly — nine of ten tasks it flagged ' +
+          'had moved to in-review hours earlier, several with commits against them. Absent ' +
+          'from a server older than migration 054; treat absent as unknown rather than zero, ' +
+          'because one on 051 sends the old key under the old meaning.',
+      },
+    }),
+    autoReleased: integer('Claims released by the backstop rather than by their holder.'),
+    knowledgeWritten: integer('Entries learned or corrected in the window.'),
+    agents: {
+      type: 'array',
+      description: 'Who wrote anything, against the week before. Not a leaderboard.',
+      items: counts({
+        agent: { type: 'string' },
+        actorType: {
+          type: 'string',
+          description: 'Absent on a server older than migration 050. A person is not a runtime that has gone quiet.',
+        },
+        recent: { type: 'integer' },
+        baseline: { type: 'integer' },
+      }),
+    },
+    memory: {
+      type: ['object', 'null'],
+      description:
+        'Whether anybody consults what is already known. Every other number here describes ' +
+        'what was written; none described whether any of it was read, and a store nobody ' +
+        'queries is an expensive way to write into a drawer. **Null when the aggregate ' +
+        'cannot be read** — the rest of the report is still served.',
+      properties: {
+        windowHours: integer('The window, which is the same one as above.'),
+        searches: integer('Searches and direct reads in the window.'),
+        widened: integer(
+          'Of those, how many fell back from the precise AND pass to OR because the first ' +
+            'came back thin. A high share means the phrasing is missing on the first try.',
+        ),
+        zeroResults: integer('Of those, how many returned nothing at all.'),
+        byAgent: {
+          type: 'array',
+          description: 'Who is doing the searching. An agent absent here is one not checking.',
+          items: counts({ agent: { type: 'string' }, searches: { type: 'integer' } }),
+        },
+        tasksFiled: integer('Tasks filed in the window.'),
+        tasksFiledWithoutChecking: integer(
+          'Of those, how many were filed with no search beforehand — work begun without ' +
+            'asking whether it had already been done.',
+        ),
+        recentMisses: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Recent subjects that were searched for and found nothing. Each is either a ' +
+            'gap in the memory or a phrasing the index does not match.',
+        },
+      },
+    },
+    findings: {
+      type: 'array',
+      description:
+        'The counts that should not be what they are, already judged against the week ' +
+        'before. Empty is the healthy answer, and the reason this can drive a job that ' +
+        'speaks only when there is something to say.',
+      items: counts({
+        code: { type: 'string', example: 'no-sessions' },
+        severity: { type: 'string', enum: ['alarm', 'warning'] },
+        message: { type: 'string', description: 'What was seen, in full. Not a template to fill in.' },
+      }),
+    },
   },
 }
 
@@ -584,9 +789,18 @@ export const openapiSpec = () => ({
         summary: 'Record what we now know',
         description:
           'Omit `projects` and `entities` for a fact that is true everywhere. The slug is ' +
-          'derived from the title when not given, and must be unique.',
+          'derived from the title when not given, and must be unique.\n\n' +
+          '`[[refs]]` in the body are resolved before the row is written, not audited ' +
+          'afterwards. One naming an entry that does not exist while a near-named one does ' +
+          'is refused with the slug it probably meant; one naming nothing close is recorded ' +
+          'with a `warning`. `allowUnresolvedRefs` records the refused case anyway, for the ' +
+          'fact that genuinely has not been written yet.',
         requestBody: body(json(knowledgeCreate)),
-        responses: { '201': okResponse('Recorded.'), '409': errorResponse },
+        responses: {
+          '201': okResponse('Recorded.', knowledgeEntry),
+          '400': referenceRefusalResponse,
+          '409': errorResponse,
+        },
       },
     },
     '/knowledge/gaps': {
@@ -612,9 +826,18 @@ export const openapiSpec = () => ({
           'Correcting knowledge is the point: two contradictory claims, equally findable, ' +
           'with no way to tell which is current, is how a memory store stops being worth ' +
           'reading. `supersededBy` points at what replaced this; the row stays findable ' +
-          'and is marked.',
+          'and is marked.\n\n' +
+          'A changed `body` runs the same reference check as the write, and refuses or warns ' +
+          'the same way — otherwise the check is reachable in one hop: write a clean entry, ' +
+          'then edit a dangling `[[ref]]` into it with nothing looking. A body that is not ' +
+          'being changed is not re-checked, so a rename or a `verified` does not fail on a ' +
+          'reference the entry has carried for weeks.',
         requestBody: body(json(knowledgeUpdate)),
-        responses: { '200': okResponse('Updated.'), '404': errorResponse },
+        responses: {
+          '200': okResponse('Updated.', knowledgeEntry),
+          '400': referenceRefusalResponse,
+          '404': errorResponse,
+        },
       },
       delete: { summary: 'Forget it', responses: { '200': okResponse('Deleted.'), '404': errorResponse } },
     },
@@ -721,7 +944,13 @@ export const openapiSpec = () => ({
           'Counts for the last `hours` (default 24, max 720) against the week before, plus ' +
           '`findings` — the ones worth acting on. Separate from `/health`, which reports on ' +
           'the process: that probe stayed green through two days of recording no sessions ' +
-          'at all. Intended for a scheduled job that speaks only when findings are present.',
+          'at all. Intended for a scheduled job that speaks only when findings are present.\n\n' +
+          'Two things here will break a consumer written against an older server. ' +
+          '`tasks.closedWithoutTrace` replaces `closedUnclaimed` and answers a different ' +
+          'question, so a reader of the old key now gets nothing rather than a number that ' +
+          'means something else. And `memory` is new: whether agents *read* the store, ' +
+          'which until now reached only a person with the Vitals page open — and the things ' +
+          'that write knowledge here cannot open a browser. It is nullable by design.',
         parameters: [
           {
             name: 'hours',
@@ -729,7 +958,7 @@ export const openapiSpec = () => ({
             schema: { type: 'integer', minimum: 1, maximum: 720, default: 24 },
           },
         ],
-        responses: { '200': okResponse('Vital signs and findings.') },
+        responses: { '200': okResponse('Vital signs, memory use, and findings.', vitalsReport) },
       },
     },
     '/labels': {

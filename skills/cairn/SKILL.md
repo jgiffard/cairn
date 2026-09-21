@@ -335,13 +335,34 @@ back — the same reference works in the browser and the terminal, and underscor
 read as hyphens so an older spelling still resolves. Use it the way you would use
 `ACME-42` for a task: a reference that stays followable long after the conversation.
 
-`cairn know "<phrase>"` finds the slug when you do not know it. Guessing one and
-writing it down unchecked is how a body ends up pointing at nothing — and a reference
-that resolves to nothing still *looks* like a trail, so whoever follows it lands in a
-search that quietly misses rather than being told it was never written.
+`learn` and `relearn` resolve every reference before they write anything, so a guessed
+slug does not get recorded and found later. **A reference that misses while a
+near-named entry exists is refused, and the refusal names the slug you probably meant.**
+Take it at face value and re-run with that slug: 63% of the dangling references already
+in the store point at a fact Cairn holds under a different name, so almost every time
+this fires you have not found a gap in the memory — you have spelled the handle wrong.
 
-Reading an entry says so: `cairn know <slug>` names any of its references that point at
-something nobody has written.
+`cairn know "<phrase>"` finds the slug when you do not know it, and is cheaper than
+being refused.
+
+Two cases behave differently:
+
+- **Nothing close exists.** The write is accepted and says so in a warning, because two
+  entries that cite each other cannot both be written first and refusing would make that
+  pair unwritable. It is still a promise the store cannot yet keep, so write the other
+  entry or correct the reference while you are here.
+- **A task ref in wiki brackets — `[[ACME-42]]`.** Refused, with no way past it. Inside
+  `[[...]]` it reads as a knowledge slug and points at an entry that will never exist.
+  Write the ref bare, in prose.
+
+`--allow-dangling` on `learn` or `relearn` records the refused case anyway. It is for
+the time the refusal is wrong — a genuinely new fact whose name happens to resemble one
+already there — and not for getting past a slug you could have looked up in one
+command. It does not cover a task ref in brackets, because that is never what the
+author meant.
+
+Reading an entry says so too: `cairn know <slug>` names any of its references that point
+at something nobody has written.
 
 ### What is not connected
 

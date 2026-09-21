@@ -11,6 +11,88 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **`cairn learn` refuses a `[[reference]]` the store can almost resolve, and says what it
+  should have said** (CAIRN-253). 70 of 579 references in the corpus pointed at nothing, and 44
+  of those named a fact Cairn already holds under a different slug — `capsolver-akamai-bug`
+  where `capsolver-akamai-script-bug` exists — so two thirds of the "missing knowledge" was a
+  recall miss rather than a gap. Nothing checked `[[...]]` at write time; dangling links
+  surfaced only in a diagnostic nobody is obliged to run, which is how 70 accumulated. A write
+  is now refused when a close slug exists — the same name modulo a type prefix, or one name
+  containing the other whole — and the refusal names the candidate, because there is nothing to
+  override in that case. It is accepted with a warning when nothing close exists: that is the
+  genuinely unwritten fact, and the structural case that two entries citing each other cannot
+  both be written first. A task ref in wiki brackets (`[[dis-2129]]`) is refused by shape with
+  "write it bare", since it names an entry that will never exist. `--allow-dangling` on the CLI,
+  `"allowUnresolvedRefs": true` on the API, is the deliberate way past, so recording a reference
+  as it stands is a claim somebody made rather than a default nobody noticed. The CLI now prints
+  the unresolved list and its suggestions — `request()` printed `error` alone, so the
+  suggestions were computed and thrown away. Prefix tolerance deliberately does not live in
+  `normalizeSlugRef`: folding `project-` in there would make `project-x` and `x` the same
+  identifier, and the store holds both. A `[[ref]]` quoted inside an inline code span no longer
+  counts as an edge, so the diagnostic and the rendered page agree. This stops new ones; the
+  existing 44 are untouched.
+- **The same check runs on `PATCH /api/v1/knowledge/{slug}`.** Without it the whole thing was
+  reachable in one hop: write a clean entry, then edit a dangling reference into it with nothing
+  looking. A request that does not change the body is not re-checked, so a rename or a
+  `--verified` does not fail on a reference the entry has carried for weeks.
+- **Every API response carries `x-cairn-version`, and a CLI that has drifted says so**
+  (CAIRN-246). `cairn --version` could always answer this, but it is the one command an agent
+  has no reason to run, so a stale copy goes on working — just not the way the docs say. One
+  install here was found only because `cairn vitals` happened to come back "unknown command",
+  after a day of writes recorded under the wrong identity. The header is set at `ok()` and
+  `fail()`, and the CLI compares once per process and writes the mismatch to stderr, never
+  stdout: callers parse stdout, and a warning in it is a bug. Silent when the header is absent,
+  so it degrades quietly against an older server.
+- **`GET /api/v1/vitals` returns a `memory` block, and `cairn vitals --all` prints it**
+  (CAIRN-254). Whether agents consult the memory was already measured and was visible only on a
+  page in a browser — the one place the population it measures cannot look, which is the same
+  failure the knowledge-gaps route names in its own header, one panel over. The block rides
+  along on the same window as the counts: searches, how many widened, how many came back empty,
+  how many tasks were filed without checking first, and the recent misses. It degrades to `null`
+  rather than taking the monitor down when the aggregate cannot be read.
+- **Knowledge recall is recorded, not just knowledge volume** (CAIRN-254, migration `053`).
+  `search_events` has answered "was the memory consulted" since migration `024`, and nothing
+  answered "did it give back the right thing": results were counted and never identified, and
+  `cairn know <slug>` — the single path that most directly means an agent called knowledge when
+  it needed it — recorded nothing at all, because `recordSearch` only ever fired from
+  `/api/v1/search`. A `knowledge_reads` table now records actor, slug and hit on every read of
+  `GET /api/v1/knowledge/{slug}`, and the miss is written as a row *before* the not-found
+  return, because a miss on a guessed slug is a dangling reference followed live and an absence
+  cannot be counted. `search_events.returned_slugs` records which entries a search actually
+  returned; it is nullable with no default on purpose, so `NULL` means the row predates the
+  column and `{}` means the search returned nothing — defaulting to `{}` would have rewritten
+  every historical row into a claim nobody made. A separate table rather than a reused one,
+  because pooling would corrupt the three numbers `search_events` exists to produce: `widened`
+  is meaningless for a slug lookup, `zeroResults` means the opposite on the two paths, and
+  `result_count` is only ever 0 or 1. `cairn_memory_use` reports both, and
+  `tasksFiledWithoutChecking` unions them — looking a fact up by name is checking.
+- **`scripts/release.mjs` cuts a release** (CAIRN-248). The process lived in whoever remembered
+  it, and it has two version strings to keep in step by hand: `package.json`, which the server
+  reports, and the constant in `cli/cairn.mjs`, which a copied CLI reports. Forgetting the
+  second fails in the direction that reassures — every stale install then agrees with a server
+  that has moved on, disarming the header above. The script bumps both, closes `[Unreleased]`
+  into a dated section, commits and tags, and refuses to start if the two strings are already
+  out of step. It does not push: pushing a tag is a release, and that stays a decision. A test
+  asserts the two versions match.
+- **One mark across both Cairn sites, and a social card** (CAIRN-249). The two properties
+  carried different artwork, and this one had no opengraph image or metadata at all, so every
+  link pasted as a bare URL. `icon`, `apple-icon` and `opengraph-image` now share the cloud's
+  palette and geometry with the stones solidified — at a true 16px the outlined version fills in
+  and the three stones fuse into one shape — and `openGraph`/`twitter` metadata is set.
+  `metadataBase` reads `CAIRN_BASE_URL` rather than hardcoding a domain, because this repo is
+  meant to be self-hosted.
+- **The skill says when *not* to reach for Cairn, and no longer tells agents a note claims a
+  task.** `skills/cairn/SKILL.md` carried one line of negative guidance and a frontmatter
+  description of eleven positive triggers with no boundary, so it fired on anything task-shaped
+  (CAIRN-245); the new section sits before the lifecycle rather than after it, and its test is
+  durability rather than size — a one-line fix that lands in the repo gets a task, an afternoon
+  of reading that changes nothing does not. The file also contradicted itself 123 lines apart
+  (CAIRN-250): the sweep section said a note does not claim, and a bolded "You do not have to
+  remember" said it does. The second is pre-CAIRN-146 wording, and it is the half that wins,
+  because it is written to reassure and therefore to be believed — an agent trusting it
+  concludes that noting is enough and never claims, which is the behaviour the surrounding
+  paragraph complains about. `claim.ts` and `AGENTS.md` have had it right since CAIRN-146; the
+  skill never caught up. A checkpoint still claims an unheld task; a note still does not.
 - **`--mine` answered "this human's agents" while reading like "this session".** The CLI
   guessed the caller from a `CAIRN_AGENT` environment variable and sent
   `claimed_by=$CAIRN_AGENT` — and when that variable was unset it sent an empty string,
@@ -50,14 +132,23 @@ out under **Breaking** with what to do about it.
   Code already exports), releasing another session's claim requires `--force`, and a claim
   that names no session behaves exactly as before — because "cannot tell" must not become
   "not yours".
-- **Vitals counts the work nobody said they were doing.** CAIRN-135 measured that 36% of
-  closed tasks had never been claimed, shipped auto-claim on note and checkpoint, and that
-  number then had no reader — nothing recomputed it, so nobody would have known if it went
-  back up. `cairn vitals` now reports when a quarter or more of the tasks closed in the
-  window never held a claim at any point in their life, with a floor of five closed so a
-  small week is not mistaken for a pattern. Not an alarm, and deliberately not auto-claim on
-  close: CAIRN-146 rejected inferring intent from an ambiguous signal, and closing is at
-  least as ambiguous as annotating — `--kind verified` exists precisely for closing somebody
+- **Vitals counts the work nobody could see was happening.** CAIRN-135 measured that 36% of
+  closed tasks had never been claimed, shipped auto-claim on checkpoint, and that number then
+  had no reader — nothing recomputed it, so nobody would have known if it went back up. `cairn
+  vitals` now reports when a quarter or more of the tasks closed in the window went from filed
+  to closed with *nothing at all* recorded in between: no claim, no checkpoint, no commit, no
+  push, no run result, and no status move off the status the task was filed in — and with the
+  close itself made by a runtime, because a person is documented as never claiming and
+  `claim.ts` refuses to claim on their behalf, so counting their closes measures the design
+  rather than a lapse. The transition that closes the task is not evidence, since every close
+  writes one; without that carve-out the count would be permanently zero and look like a fix.
+  That is a strictly narrower question than *was this ever claimed*, which is what this check
+  asked in its first, unreleased form: a task that moved to in-review hours earlier with commits
+  and test runs against it was not invisible while it was being worked, whatever the claim log
+  says, and a claim is one way of being visible rather than the only one. A floor of five closed
+  tasks, so a small week is not mistaken for a pattern. Not an alarm, and deliberately not auto-
+  claim on close: CAIRN-146 rejected inferring intent from an ambiguous signal, and closing is
+  at least as ambiguous as annotating — `--kind verified` exists precisely for closing somebody
   else's fix.
 - **A map of the knowledge corpus** at `/knowledge/graph`, and the same findings without a
   screen through `cairn know --gaps` / `--orphans` / `--dangling`, a `GET
@@ -89,6 +180,33 @@ out under **Breaking** with what to do about it.
 
 ### Changed
 
+- **The `closed-unclaimed` finding is now `closed-without-trace`, and counts a different
+  population** (CAIRN-251, migration `054`). It was firing on the wrong tasks and its own
+  sentence was false of them. Of the ten flagged in a 24h window, classified by hand against the
+  activity feed, *zero* were the bare filed-to-closed shape it was built for: nine had moved to
+  in-review hours earlier, several with commits and test runs recorded against them. Two defects
+  behind that. Human closes were counted, although a person is documented as never claiming and
+  `claim.ts` returns false for them by design — while the agent-silent finding twenty lines
+  above it in the same report does skip people. And the backlog sweep the skill explicitly
+  instructs — file one task, claim that, work the rest unclaimed — was indistinguishable from
+  the failure the check exists to catch. So the question became "was there any evidence of work
+  by anyone at any point" rather than "was this claimed". Renamed rather than redefined in
+  place, because the name is the safety mechanism: a server still on migration `051` sends the
+  old key, the new check does not find the new one, and it says nothing — which is correct,
+  where printing the new sentence over the old number would not be. Measured here after the
+  migration landed, 12 of 64 closes were untraced, under the quarter threshold, so the finding
+  no longer fires; the old predicate read 26% at the same moment. Known and intended: `051`'s
+  own motivating case is no longer counted, because a commit and a push were recorded against
+  it. There is no grace window, because any threshold there would be arbitrary.
+- **The CLI's known-flag list is checked from the code's side.** The parser exits 2 on a flag it
+  does not know, and the test meant to stop the list going stale compared it against the help
+  text and the dynamic lookup loops — neither of which sees a flag the code reads directly and
+  the help never names. Adding `flags.zzzProbeFlag` to the CLI left all three tests green while
+  the parser would have refused it with exit 2: the same failure, one door over. The list is now
+  also diffed against every `flags.x` and `flags['x']` read in the file, with comments stripped
+  so prose about a flag is not mistaken for a read. A second test asserts that no
+  `flags.camelCase` read exists at all — the parser keys on the literal flag name, so such a
+  read is not a style choice but permanently `undefined` and silent about it (CAIRN-255).
 - **A slug is cut at a whole word.** Twelve entries ended mid-word — `...cannot-sha`,
   `...dernier-passag` — which cannot be typed and read as corrupt.
 - **`cairn learn` scopes to this directory's project** instead of defaulting to global.
@@ -187,6 +305,17 @@ out under **Breaking** with what to do about it.
   running as root got `MODULE_NOT_FOUND` from a correctly registered server.
 - **`install-cron.mjs` was the one file the repairer never repaired**, and so the only
   deployed copy on a busy host that had drifted.
+
+### Breaking
+
+- `cairn vitals` reports `tasks.closedWithoutTrace`; `tasks.closedUnclaimed` is gone. Anything
+  parsing the vitals payload must read the new key — the old one is simply absent, so a reader
+  that does not will see `undefined` rather than an error, and a dashboard built on it will show
+  a blank where a number was. The count is not the same measurement renamed: it excludes closes
+  made by a person, and it excludes any task with a checkpoint, commit, push, run result, or a
+  status move that is not terminal, recorded before the close — so it reads lower than
+  `closedUnclaimed` did on the same window. Apply migration `054`; until it is applied the server sends the old
+  key and the finding stays silent, which is deliberate.
 
 ## [0.5.1] — 2026-09-16
 

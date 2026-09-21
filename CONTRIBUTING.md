@@ -20,12 +20,22 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+
+# needs a real PostgreSQL — point DATABASE_URL at a throwaway database
+npm run db:migrate
+npm run test:integration
 ```
 
-CI runs all four, plus a check that `AGENTS.md` stays under 7900 bytes — agents read that
-file every session, so its size is a real cost. It currently sits within a hundred bytes of
-that, so adding a line there means cutting one: guidance with room to grow belongs in
-[`skills/cairn/SKILL.md`](./skills/cairn/SKILL.md) instead.
+CI runs every one of those, plus a check that `AGENTS.md` stays under 7900 bytes — agents
+read that file every session, so its size is a real cost. It currently sits a couple of
+bytes under, so adding a line there means cutting one: guidance with room to grow belongs
+in [`skills/cairn/SKILL.md`](./skills/cairn/SKILL.md) instead.
+
+The integration suite runs in a job of its own because it migrates a clean PostgreSQL
+first, which is the point of it: `tests/integration/` is the only execution-level proof
+that the SQL does what the rest of the suite mocks. `vitals-closure.test.ts` in particular
+checks queries no unit test can reach. It is easy to skip locally and easy to break, so run
+it before a PR that touches `migrations/` or anything that queries them.
 
 ## Things worth knowing before you change them
 
@@ -110,22 +120,37 @@ Semantic versioning, and pre-1.0: the schema, API and CLI are stable in practice
 minor bump may still change them. Anything that breaks an existing install is called out
 under **Breaking** in [`CHANGELOG.md`](./CHANGELOG.md), with what to do about it.
 
-Cutting a release:
+Cutting a release is [`scripts/release.mjs`](./scripts/release.mjs):
 
 ```bash
-# 1. version in package.json AND in cli/cairn.mjs — a test fails if they disagree
-# 2. move Unreleased into a dated section in CHANGELOG.md
-npm test && git commit -am "release: v0.2.0" && git tag v0.2.0 && git push --follow-tags
+node scripts/release.mjs 0.6.0            # shows what it would do, writes nothing
+node scripts/release.mjs 0.6.0 --confirm  # bumps both versions, closes the changelog,
+                                          # commits and tags
 ```
+
+It exists because the procedure lived in whoever remembered it, and it has two version
+strings to keep in step — `package.json`, which the server reports, and the constant in
+`cli/cairn.mjs`, which a copied CLI reports. It refuses to start if those two already
+disagree, or if `[Unreleased]` is empty.
+
+**It does not push.** Pushing a tag is a release, and that stays a decision: review the
+commit, then push it and the tag yourself.
 
 The CLI carries its own version number because it is copied onto machines rather than
 installed from a registry — there is no package.json beside the copy in `/usr/local/bin`.
 That makes it exactly the kind of constant that goes stale silently, so a test pins it,
 and `cairn --version` asks the server as well and says when the two disagree.
 
-`/api/v1/health` reports both: `version` is the release, `build` the commit it was built
-from. The first tells a CLI whether it is out of step, the second tells you whether your
-fix is actually live.
+`cairn --version` is also the one command an agent has no reason to run, so every API
+response carries the release as an **`x-cairn-version`** header — `src/lib/api/response.ts`
+sets it on `ok()` and `fail()` alike. The CLI compares it against its own constant once per
+process and warns on **stderr**, never stdout, because callers parse stdout. That turns a
+stale copy from something found by accident into something that announces itself on the
+next ordinary call.
+
+`/api/v1/health` reports both numbers: `version` is the release, `build` the commit it was
+built from. The first tells a CLI whether it is out of step, the second tells you whether
+your fix is actually live.
 
 ## Secrets
 

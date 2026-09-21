@@ -1195,7 +1195,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn know --dangling          references pointing at entries nobody wrote
     cairn verify <slug>            it is still true — clears the stale mark
     cairn replay                   send writes put aside while the server was down
-    cairn relearn <slug> --body -  correct it
+    cairn relearn <slug> --body -  correct it  [--allow-dangling]
     cairn unlearn <slug> [--superseded-by <slug>]
     cairn session list             recent sessions
     cairn session end --id <id>    write the episodic record, checkpoint what is held
@@ -2087,7 +2087,18 @@ const commands = {
     if (flags.project) patch.projects = splitList(flags.project)
     if (flags.entity !== undefined) patch.entities = splitList(flags.entity)
     if (flags.verified) patch.verified = true
-    emit(await request('PATCH', `/api/v1/knowledge/${slug}`, patch))
+    // PATCH runs the same [[reference]] check as the write, so relearn needs
+    // the same way past it. Without this the flag parses — it is in the global
+    // KNOWN_FLAGS — and is silently dropped, which is the exact thing that set
+    // refuses to do: an answer that looks like it took your argument and did
+    // not.
+    if (flags['allow-dangling']) patch.allowUnresolvedRefs = true
+
+    const result = await request('PATCH', `/api/v1/knowledge/${slug}`, patch)
+    emit(result)
+    for (const warning of result?.warnings ?? []) {
+      process.stderr.write(`cairn: ${warning}\n`)
+    }
   },
 
   async entities() {
