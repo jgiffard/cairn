@@ -1,11 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- A cairn: stones stacked to mark a path for whoever comes next. Drawn as
-       three solid slabs rather than outlines, because an outline at 16px in a
-       browser tab is a smudge. -->
-  <rect width="32" height="32" rx="7" fill="#5e6ad2"/>
-  <g fill="#f7f8f8">
-    <rect x="6"    y="21"  width="20" height="5.5" rx="2.75"/>
-    <rect x="8.5"  y="13.5" width="15" height="5.5" rx="2.75"/>
-    <rect x="11"   y="6.5"  width="10" height="5"   rx="2.5"/>
+  <!-- A cairn: stones stacked to mark a path for whoever comes next. Ground
+       and stones are the app's own dark tokens (bg and accent), and the stack
+       is the cloud's: three stones, middle widest, so both Cairn sites carry
+       the one mark.
+
+       Drawn as solid stones rather than the cloud's 2.4/32 outlines. A stroke
+       that thin is well under half a pixel once the tile is 16px in a browser
+       tab, and it collapses into a smudge. Same silhouette, filled, so one
+       mark survives both a favicon and a 180px home-screen tile. -->
+  <rect width="32" height="32" rx="7" fill="#08090a"/>
+  <g fill="#7b86e8">
+    <rect x="10" y="5.75"  width="12" height="5.5" rx="2.75"/>
+    <rect x="6"  y="13.25" width="20" height="5.5" rx="2.75"/>
+    <rect x="9"  y="20.75" width="14" height="5.5" rx="2.75"/>
   </g>
 </svg>
