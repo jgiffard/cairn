@@ -298,6 +298,35 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **A flag the verb you ran never reads is now reported, and `relearn` re-scopes**
+  (CAIRN-262). `KNOWN_FLAGS` is one list for every verb, which is what makes it cheap and
+  what makes it blind: it catches a flag *nothing* reads, never a flag one verb reads and
+  another does not. `cairn relearn <slug> --global` parsed, printed the entry with its old
+  scope still on it and exited 0 — three lines below the comment explaining why a silently
+  dropped flag is unacceptable. Found on a real write, not by reading the code, and the
+  command's own output *showed* the unchanged scope: there was no lie to catch, only a line
+  nobody rereads because the exit code already said it worked.
+
+  Not fixed with a per-verb table. The argument against one still stands — it rots the
+  first time a verb grows an option, and a wrong entry makes a working command start
+  exiting 2 on every machine at once, which is worse than the bug. Instead `flags` is a
+  proxy that records every key the running command looks at, so **the reads are the
+  registry**: nothing to enumerate, nothing to keep in step, and exact about this
+  invocation rather than approximate about the code. A read that ignored a flag exits 2 —
+  nothing has happened yet and the answer looks filtered when it is not. A write warns and
+  exits 0, because it already went through and an exit code saying otherwise is how a
+  caller ends up making it twice; whether anything was written is read off the HTTP method,
+  not off a list of verbs.
+
+  Swept across every read verb before shipping: exactly one thing changed behaviour, and it
+  was a true positive — `cairn know <slug> --limit 5` now says `--limit` did nothing, which
+  it did not.
+
+  `relearn` also grows the scope flags it was missing: `--project`, `--entity` and
+  `--global`, the last clearing both and refusing to be combined with either, since a fact
+  true everywhere is one with no project *and* no entity. Exposed through the MCP
+  `cairn_relearn` tool too, which had no way to re-scope at all.
+
 - **`font-display` was not a class, so two headings quietly rendered as sans** (CAIRN-258).
   `fonts.ts` loaded Instrument Serif and `layout.tsx` put `--font-display` on `<html>`, but
   `globals.css` never registered the key in its `@theme` block, and Tailwind v4 generates a

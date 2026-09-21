@@ -193,8 +193,42 @@ const die = (msg, code = 1) => {
 // arg parsing
 // ---------------------------------------------------------------------------
 const argv = process.argv.slice(2)
-const flags = {}
 const positional = []
+
+/**
+ * What the caller typed, and what the command actually looked at.
+ *
+ * KNOWN_FLAGS below catches a flag NOTHING in this file reads. It cannot catch
+ * a flag one verb reads and another does not, because it is one list for every
+ * verb — and that is a real failure, not a theoretical one: `cairn relearn
+ * <slug> --global` parsed, printed the updated entry, exited 0, and left the
+ * scope exactly as it was, three lines below the comment explaining why a
+ * silently dropped flag is unacceptable (CAIRN-262).
+ *
+ * The obvious fix is a table of which flags each verb takes. This is not that,
+ * because the argument against a table is right — it rots the first time a
+ * verb grows an option, and a wrong entry makes a legitimate command start
+ * exiting 2 on every machine at once, which is a worse failure than the one it
+ * prevents.
+ *
+ * So the reads ARE the registry. `flags` is a proxy that records every key
+ * looked at while the command runs; afterwards, anything the caller passed and
+ * nobody read is reported. Nothing to enumerate, nothing to keep in step, and
+ * it is exact rather than approximate — it reports what this invocation did,
+ * not what some static analysis believes the code would do.
+ */
+const typedFlags = {}
+const readFlags = new Set()
+const flags = new Proxy(typedFlags, {
+  get(target, key) {
+    if (typeof key === 'string') readFlags.add(key)
+    return target[key]
+  },
+  has(target, key) {
+    if (typeof key === 'string') readFlags.add(key)
+    return key in target
+  },
+})
 
 /**
  * Every flag this CLI reads, anywhere.
@@ -206,10 +240,16 @@ const positional = []
  * audience is agents.
  *
  * The list is global rather than per-command on purpose: it catches the typo
- * and the flag that does not exist, which is the whole failure, without
+ * and the flag that does not exist, which is the whole failure here, without
  * needing a table per verb that would rot the first time one grows an option.
- * A real flag passed to a verb that ignores it still passes here — worth
- * knowing, but a smaller problem than a silent wrong answer.
+ *
+ * "A real flag passed to a verb that ignores it still passes here — worth
+ * knowing, but a smaller problem than a silent wrong answer" is what this
+ * comment used to say next, and it was wrong. `relearn --global` was exactly
+ * that case, and it WAS a silent wrong answer: the scope did not change and
+ * the command printed the entry and exited 0 (CAIRN-262). The per-verb half
+ * is handled above, by the proxy on `flags` — not by a table, because the
+ * objection to a table still stands.
  *
  * BUILT BY HAND AND GUARDED BY A TEST, because the first version was built by
  * grepping `flags.X` and missed every flag read dynamically — `flags[k]` over
@@ -645,8 +685,18 @@ const flushOutbox = async () => {
   return { sent, rejected, left }
 }
 
+/**
+ * Set by the first non-GET request. Read only by the ignored-flag report,
+ * which has to know whether failing is safe: a read that ignored a filter
+ * returned an answer nobody should trust and has done nothing, so exiting
+ * non-zero is free. A write that ignored a flag has already happened, and
+ * exiting non-zero would invite a caller to retry it.
+ */
+let mutated = false
+
 const request = async (method, path, body, { soft = false } = {}) => {
   if (!KEY) die('CAIRN_API_KEY is not set (env, or ~/.cairn/env).')
+  if (method !== 'GET') mutated = true
   const isCheckpoint = path.split('?')[0].endsWith('/checkpoint')
   // A fresh checkpoint must not jump ahead of older durable checkpoints. Drain
   // first so the remembered sequence advances before this request is formed.
@@ -1248,6 +1298,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn verify <slug>            it is still true — clears the stale mark
     cairn replay                   send writes put aside while the server was down
     cairn relearn <slug> --body -  correct it  [--allow-dangling]
+                                   --project K | --entity E | --global  re-scope it
     cairn unlearn <slug> [--superseded-by <slug>]
     cairn session list             recent sessions
     cairn session end --id <id>    write the episodic record, checkpoint what is held
@@ -2138,6 +2189,21 @@ const commands = {
     if (flags.label) patch.labels = splitList(flags.label)
     if (flags.project) patch.projects = splitList(flags.project)
     if (flags.entity !== undefined) patch.entities = splitList(flags.entity)
+    // `--global` on a PATCH has to CLEAR, where on `learn` it only means "do
+    // not infer from this directory". Both scopes go: a fact true everywhere
+    // is one with no project and no entity, and clearing only projects would
+    // leave `relearn --global` producing a state `learn --global` cannot.
+    //
+    // It was missing entirely and, because KNOWN_FLAGS is one list for every
+    // verb, `cairn relearn <slug> --global` parsed, printed the entry with its
+    // old scope still on it, and exited 0 (CAIRN-262).
+    if (flags.global) {
+      if (flags.project || flags.entity !== undefined) {
+        die('--global means no project and no entity; do not pass it with --project or --entity')
+      }
+      patch.projects = []
+      patch.entities = []
+    }
     if (flags.verified) patch.verified = true
     // PATCH runs the same [[reference]] check as the write, so relearn needs
     // the same way past it. Without this the flag parses — it is in the global
@@ -2537,3 +2603,28 @@ if (!commands[command]) {
   die(`unknown command "${command}"\n\nvalid: ${Object.keys(commands).sort().join(' ')}`)
 }
 await commands[command]()
+
+/**
+ * Anything the caller typed that the command never looked at.
+ *
+ * `--json` and `--pretty` are read at module load, `--help` and `--version`
+ * exit before this line, so the only thing left here is a flag that belongs to
+ * a different verb, or to no verb at all — and in either case the caller
+ * believes it took effect.
+ *
+ * Read verbs exit 2, because the answer looks filtered and is not and nothing
+ * has happened yet. Write verbs do not: the write already went through, and an
+ * exit code that says otherwise is how a caller ends up making it twice.
+ */
+const ignored = Object.keys(typedFlags).filter((flag) => !readFlags.has(flag))
+if (ignored.length > 0) {
+  const list = ignored.map((flag) => `--${flag}`).join(', ')
+  process.stderr.write(
+    `cairn: \`${command}\` does not take ${list} — ` +
+      `it was accepted by the parser and then read by nothing.\n` +
+      (mutated
+        ? `The write went through WITHOUT it; re-run with the right flag if that was not what you meant.\n`
+        : `Refused rather than answered: a filter that is dropped returns an answer that looks filtered and is not.\n`),
+  )
+  if (!mutated) process.exit(2)
+}

@@ -408,9 +408,14 @@ tell which one is current.
 
 ```bash
 cairn relearn <slug> --body -                        # it changed
+cairn relearn <slug> --global                        # it is true more widely than filed
 cairn unlearn <old-slug> --superseded-by <new-slug>  # it was wrong
 cairn verify <slug>                                  # still true; you checked
 ```
+
+`relearn` takes the scope flags too — `--project`, `--entity`, `--global` — so a fact filed
+against this directory's project can be widened once you find it is true elsewhere.
+`--global` clears both scopes, and refuses to be combined with either.
 
 A superseded row stays findable, is marked as superseded, and now ranks below its
 replacement — so a correction beats the claim it corrects wherever both match.

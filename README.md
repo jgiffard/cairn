@@ -338,6 +338,19 @@ them, so `context`, `next`, `history` and the session verbs stay CLI-only.
 [`AGENTS.md`](./AGENTS.md) is the contract every agent should read. It is kept under 7900
 bytes, and a test enforces that, because agents read it every session.
 
+**A flag that does nothing says so.** An unknown flag is refused outright — a parser that
+ignores what it does not understand cannot be trusted by anything automated, and this
+CLI's whole audience is automated. A *known* flag that the verb you ran never looks at is
+reported too, which is the harder half: `cairn relearn <slug> --global` once parsed
+cleanly, printed the entry, exited 0 and changed nothing. There is no per-verb table
+behind this — a table rots the first time a verb grows an option, and a wrong entry breaks
+a working command on every machine at once. `flags` is a proxy that records what the
+running command actually read, so the reads are the registry, and the report is about this
+invocation rather than about what some analysis believes the code would do. A read that
+ignored a flag exits 2, because nothing has happened yet and the answer looks filtered
+when it is not; a write warns and exits 0, because it already went through and an exit
+code saying otherwise is how a caller ends up making it twice.
+
 ### The CLI
 
 Output is TSV by default — a `#count` line, a header row, then rows — with `--json` to
@@ -375,6 +388,7 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn know [<slug>\|<query>]` | Read it back, or list what applies here |
 | `cairn know --gaps` · `--orphans` · `--dangling` | Where the memory has holes: entries joined to nothing, and references pointing at entries nobody wrote |
 | `cairn relearn <slug>` · `cairn unlearn <slug> --superseded-by <slug>` | Correct it, or mark it replaced |
+| `cairn relearn <slug> --project K` · `--entity E` · `--global` | Re-scope a fact filed too narrowly. `--global` clears both and refuses to be combined with either |
 | `--allow-dangling` (on `learn` and `relearn`) | Keep a `[[reference]]` the store cannot resolve. A write is otherwise refused when a reference names nothing and a near-named entry exists; the refusal names that slug, so retrying with it is the usual answer, and this flag is for when it gets that wrong |
 | `cairn entities` · `cairn entities assign <key> --project A,B` | Groupings a fact can be true of |
 | `cairn session list` · `cairn session end --id <id>` | The episodic record |

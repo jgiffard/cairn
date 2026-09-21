@@ -182,6 +182,14 @@ const TOOLS = [
         slug: { type: 'string' },
         body: { type: 'string', description: 'The corrected body.' },
         title: { type: 'string', description: 'A corrected title, if the claim itself changed.' },
+        project: { type: 'string', description: 'Re-scope it to this project only.' },
+        entity: { type: 'string', description: 'Re-scope it to this grouping — see cairn_entities.' },
+        global: {
+          type: 'boolean',
+          description:
+            'Re-scope it to true everywhere, clearing both project and entity. Not combinable ' +
+            'with project or entity.',
+        },
         allowDangling: {
           type: 'boolean',
           description:
@@ -195,6 +203,9 @@ const TOOLS = [
       'relearn', a.slug,
       ...(a.body ? ['--body', a.body] : []),
       ...(a.title ? ['--title', a.title] : []),
+      ...(a.project ? ['--project', a.project] : []),
+      ...(a.entity ? ['--entity', a.entity] : []),
+      ...(a.global ? ['--global'] : []),
       ...(a.allowDangling ? ['--allow-dangling'] : []),
     ],
   },
