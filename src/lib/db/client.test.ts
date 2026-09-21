@@ -88,6 +88,26 @@ describe('upsert SQL', () => {
     expect(sql).not.toContain('do update set')
   })
 
+  it('returns only the rows a do-nothing upsert really inserted', async () => {
+    // CAIRN-240: `added` counted the ids it asked for, so a re-assign that
+    // wrote nothing still reported 1. RETURNING after `do nothing` yields only
+    // the genuinely inserted rows, which is the honest count.
+    const { statements, result } = await withFakePool(
+      () =>
+        admin()
+          .from('project_entities')
+          .upsert([{ project_id: 'p1', entity_id: 'e1' }], {
+            onConflict: 'project_id,entity_id',
+            ignoreDuplicates: true,
+          })
+          .select('project_id'),
+      [],
+    )
+
+    expect(statements[0]).toContain('do nothing returning "project_id"')
+    expect((result as { data: unknown[] }).data).toEqual([])
+  })
+
   it('still updates the columns outside the key', async () => {
     const [sql] = await capture(() =>
       admin()

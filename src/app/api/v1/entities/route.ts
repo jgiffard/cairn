@@ -141,31 +141,40 @@ export const PATCH = route({
     const missing = [...new Set([...add.missing, ...remove.missing])]
     if (missing.length > 0) return fail('not_found', `No such project: ${missing.join(', ')}`)
 
+    /* Both counts are what actually moved, not what was asked for: `do nothing`
+     * returns only the rows it really inserted and delete returns only the rows
+     * that were really there, so a re-assign reports 0 rather than 1. */
+    let added = 0
     if (add.ids.length > 0) {
       /* `ignoreDuplicates` is required, not a preference: project_entities is a
        * pure join table, so every column is a conflict column. Without it the
        * builder emits `do update set` with nothing to set, which is a syntax
        * error — and re-assigning a project already in the entity is a no-op
        * anyway, since the row carries nothing but the pair itself. */
-      const { error } = await admin()
+      const { data: linked, error } = await admin()
         .from('project_entities')
         .upsert(
           add.ids.map((project_id) => ({ project_id, entity_id: entity.id })),
           { onConflict: 'project_id,entity_id', ignoreDuplicates: true },
         )
+        .select('project_id')
       if (error) return fail('internal_error', error.message)
+      added = (linked ?? []).length
     }
 
+    let removed = 0
     if (remove.ids.length > 0) {
-      const { error } = await admin()
+      const { data: unlinked, error } = await admin()
         .from('project_entities')
         .delete()
         .eq('entity_id', entity.id)
         .in('project_id', remove.ids)
+        .select('project_id')
       if (error) return fail('internal_error', error.message)
+      removed = (unlinked ?? []).length
     }
 
-    return ok({ key: body.key, added: add.ids.length, removed: remove.ids.length })
+    return ok({ key: body.key, added, removed })
   },
 })
 
