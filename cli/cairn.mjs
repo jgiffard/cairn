@@ -259,14 +259,54 @@ for (let i = 0; i < argv.length; i += 1) {
 const FORMAT = flags.json ? 'json' : flags.pretty ? 'pretty' : 'tsv'
 
 /**
- * Every API response carries the version that served it. Compare it once, so a
- * stale copy says so on the ordinary path.
+ * What this file actually is, as a 16-hex sha256 — the same digest
+ * scripts/sync-agent-files.mjs prints, so the installer's log line and the
+ * server's header are the same string for the same file.
+ *
+ * This is the only identifier a copied CLI can compute about itself. There is
+ * no repository behind ~/.local/bin/cairn and no commit recorded in it; there
+ * is a file, and a file can be read. Computed at most once per process and
+ * only when a server has offered something to compare against — measured at
+ * 0.049 ms for the 100KB this file weighs, which is well under the cost of
+ * the request that triggered it, but there is no reason to pay it twice.
+ */
+let ownHash
+const fingerprint = () => {
+  if (ownHash !== undefined) return ownHash
+  try {
+    const path = process.argv[1] && existsSync(process.argv[1]) ? process.argv[1] : null
+    ownHash = path
+      ? createHash('sha256').update(readFileSync(path)).digest('hex').slice(0, 16)
+      : null
+  } catch {
+    // Unreadable — running from a bundle, a pipe, or somewhere with no read
+    // permission on itself. Nothing to compare, so nothing is said.
+    ownHash = null
+  }
+  return ownHash
+}
+
+/**
+ * Every API response says which release served it and which CLI it shipped.
+ * Compare once, so a stale copy says so on the ordinary path.
  *
  * `cairn --version` has always been able to answer this, but it is the one
  * command an agent has no reason to run: a drifted CLI goes on working, just
  * not the way the docs say. The Mac's copy was found only because `cairn
  * vitals` happened to come back "unknown command", after a day of writes under
  * the wrong identity.
+ *
+ * WHY TWO COMPARISONS. The version alone almost never fires. Releases are cut
+ * by hand and 133 commits fitted inside v0.5.1, so a copy months of work
+ * behind still agrees on the number — which is exactly the state the Mac was
+ * in when this was written, both sides saying 0.5.1 while `--allow-dangling`
+ * and the vitals memory block were missing (CAIRN-261). The version is still
+ * the better thing to say when the two belong to different releases, because
+ * it is what a human reads and what the docs are written against; the hash
+ * catches everything finer, which is nearly everything.
+ *
+ * Silence when the server offers neither. A check that cannot run must leave
+ * the CLI working, not warn on a guess.
  *
  * stderr, never stdout — callers parse stdout, and a warning in it is a bug.
  * Once per process, because the point is to be noticed, and a line repeated on
@@ -275,12 +315,24 @@ const FORMAT = flags.json ? 'json' : flags.pretty ? 'pretty' : 'tsv'
 let warnedStale = false
 const warnIfStale = (res) => {
   if (warnedStale) return
-  const served = res?.headers?.get?.('x-cairn-version')
-  if (!served || served === VERSION) return
+  const version = res?.headers?.get?.('x-cairn-version')
+  const servedHash = res?.headers?.get?.('x-cairn-cli')
+
+  let drift = null
+  if (version && version !== VERSION) {
+    drift = `this CLI is ${VERSION}, ${BASE} is ${version}`
+  } else if (servedHash) {
+    const mine = fingerprint()
+    // Same release, different file: the case the version can never see.
+    if (mine && mine !== servedHash) {
+      drift = `this CLI is ${VERSION} ${mine}, ${BASE} ships ${VERSION} ${servedHash}`
+    }
+  }
+  if (!drift) return
+
   warnedStale = true
   process.stderr.write(
-    `cairn: this CLI is ${VERSION}, ${BASE} is ${served} — ` +
-      `run scripts/sync-agent-files.mjs, or copy cli/cairn.mjs over\n`,
+    `cairn: ${drift} — run scripts/sync-agent-files.mjs, or copy cli/cairn.mjs over\n`,
   )
 }
 
@@ -2446,19 +2498,31 @@ if (flags.version || command === 'version') {
   // Asks the server too, and says when they disagree. A stale copy is
   // invisible otherwise: it goes on working, just not the way the docs say.
   let server = null
+  let theirs = null
   try {
     const res = await fetch(`${BASE}/api/v1/health`)
+    theirs = res.headers.get('x-cairn-cli')
     server = (await res.json())?.data ?? null
   } catch {
     // Offline, or not pointed at a server yet. The local version still answers.
   }
-  process.stdout.write(`cairn ${VERSION}\n`)
+  const mine = fingerprint()
+  process.stdout.write(`cairn ${VERSION}${mine ? ` ${mine}` : ''}\n`)
   if (server) {
     process.stdout.write(`server ${server.version ?? '?'} (${server.build ?? '?'}) ${BASE}\n`)
     if (server.version && server.version !== VERSION) {
       process.stderr.write(
         `\nthis CLI is ${VERSION}, the server is ${server.version} — ` +
           `run scripts/sync-agent-files.mjs, or copy cli/cairn.mjs over\n`,
+      )
+    } else if (theirs && mine && theirs !== mine) {
+      // Same release on both sides, different file — the case the version
+      // number can never see. Read off the response header rather than the
+      // body, because the fingerprint describes the deployment, not the
+      // payload, and every route carries it.
+      process.stderr.write(
+        `\nthis CLI is ${mine}, the server ships ${theirs} — same release, different file. ` +
+          `Run scripts/sync-agent-files.mjs, or copy cli/cairn.mjs over\n`,
       )
     }
   }

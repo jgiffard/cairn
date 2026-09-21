@@ -236,20 +236,36 @@ problem.
 
 **Memory**
 
-- Postgres full-text search across all four stores in one pass, ranked inside the database
-  by `ts_rank`. Closed work is included on purpose, and a row carrying a recorded answer
-  outranks one that merely mentions the subject.
-- A precise `websearch_to_tsquery` pass first; it widens to OR only when the precise pass
-  comes back thin, and says so per row, because twenty loose word-overlaps silently read
-  as prior work. Widening plus ranking in the database took measured recall on the real
-  corpus from **75% to 93%**, with 12 of 15 hits at rank 1. Both rules came out of
-  measurement rather than taste, and so did two rejections: ranking by term coverage first
-  tested worse (87% → 81%) and was reverted, and re-sorting in the application dropped
-  recall from 75% to 6%. The reasoning is written into
+- Postgres full-text search across all four stores in one pass.
+- Two arms, both always run, merged. The precise arm returns rows carrying at least half
+  the distinctive terms of the question; the wide arm returns everything matching any of
+  them; a row found by both appears once, in the precise head. Each row says which arm
+  found it, because twenty loose word-overlaps silently read as prior work.
+- That is not how it started. For years the wide arm ran *only when the precise one came
+  back thin* — and the precise arm ANDed every content word of the question, so three long
+  descriptions that happened to contain all of them switched off the arm that answers it.
+  Demonstrated on a live store: a question missed its answer entirely, and appending one
+  nonsense word — which emptied the precise arm — brought the answer back at rank 7. Same
+  corpus, same question. Across a 22-query evaluation set English recall@20 went from
+  **0.43 to 0.86** and the share of answers found by the precise arm from 3 to 15 — the
+  second figure is all this change, the first is partly a store that grew between the two
+  measurements, which is why the baseline now records what it was measured against. See [`055`](./migrations/055_search_stop_suppressing_the_fallback.sql) for
+  `search_all` and [`056`](./migrations/056_search_tasks_stop_suppressing_the_fallback.sql)
+  for `search_tasks`, the task-only path the web UI and `cairn check --tasks` take.
+- Ranking happens in the database, by `ts_rank`. Closed work is included on purpose, and a
+  row carrying a recorded answer outranks one that merely mentions the subject. Every rule
+  here came out of measurement rather than taste, and so did the rejections: ranking by
+  term coverage first tested worse (87% → 81%) and was reverted, and re-sorting in the
+  application dropped recall from 75% to 6%. The reasoning is written into
   [`004_search_ranked.sql`](./migrations/004_search_ranked.sql) and
-  [`016_search_all.sql`](./migrations/016_search_all.sql); the measurements
-  themselves are in Cairn, on the tasks that produced them — which is the product's own
-  argument, made about itself.
+  [`016_search_all.sql`](./migrations/016_search_all.sql).
+- The evaluation set is [`tests/fixtures/search-eval.json`](./tests/fixtures/search-eval.json):
+  22 paraphrased questions with their known-good answers, each pinning the invocation it is
+  scored under, because `--project` and `--kinds` reorder the same store and a case that
+  does not say which it used has several correct answers. `node scripts/score-search-eval.mjs`
+  scores it and records what the numbers were measured against — the server build, the CLI
+  version, the size of the store — since the same file once recorded 0.73 and gave 0.82 on
+  a re-run the same day, with no code change, because the store had grown.
 - Results are an **index**, never bodies: each row advertises a `~tokens` cost, so an agent
   budgets what it opens instead of pulling text it will never read.
 - **Knowledge is scoped narrowest-first**, to one of three widths:
@@ -413,12 +429,23 @@ sharing one are indistinguishable in every count and every history afterwards.
 Every response is enveloped: `{"success":true,"data":…}` or
 `{"success":false,"error":"…","code":"…"}`.
 
-Every response also carries **`x-cairn-version`**, the release that served it, on success
-and failure alike. `cairn --version` already compares the two, but that is the one command
-an agent has no reason to run, so a copied CLI that has drifted goes on working — just not
-the way the docs say. Putting the number on the ordinary path means the CLI notices on the
-next call it makes: it compares once per process and warns on **stderr**, never stdout,
-because callers parse stdout.
+Every response also carries **`x-cairn-version`**, the release that served it, and
+**`x-cairn-cli`**, a 16-hex content hash of the `cli/cairn.mjs` that deployment was built
+from — on success and failure alike. `cairn --version` already compared the versions, but
+that is the one command an agent has no reason to run, so a copied CLI that has drifted
+goes on working, just not the way the docs say. Putting both on the ordinary path means
+the CLI notices on the next call it makes: it compares once per process and warns on
+**stderr**, never stdout, because callers parse stdout.
+
+The hash is there because the version is a coarse clock. Releases are cut by hand and 133
+commits fitted inside v0.5.1, so nearly all real drift is *intra*-version and a check
+comparing release numbers cannot see it — which is exactly the state a laptop copy was
+found in, two features behind while both sides reported 0.5.1. A content hash is also the
+only identifier a copied CLI can compute about itself: there is no repository behind
+`~/.local/bin/cairn`, but a file can always read itself. It is the same digest
+`scripts/sync-agent-files.mjs` prints, so the installer's log line and the server's header
+are the same string for the same file. If the server sends neither header, the CLI says
+nothing: the check is an improvement on silence, never a dependency.
 
 ## Keyboard
 

@@ -184,6 +184,14 @@
 
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+  /* Registered, because Tailwind v4 generates a utility only for a key it
+     knows. fonts.ts loaded Instrument Serif and layout.tsx put --font-display
+     on <html>, but this block never named it — so `font-display` was not a
+     class, the two headings that ask for it fell back to Plex Sans, and the
+     family was downloaded on every page for nothing. Nothing errored and
+     nothing looked broken, which is why it survived: a sans heading is a
+     perfectly reasonable thing for a heading to be (CAIRN-258). */
+  --font-display: var(--font-display), ui-serif, Georgia, serif;
 }
 
 @layer base {

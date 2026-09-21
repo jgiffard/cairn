@@ -70,11 +70,18 @@ const main = async () => {
   // first turn is the session-start equivalent; later injection would waste
   // context and break prompt-cache stability.
   //
-  // The docs give is_first_turn as a callback parameter and say `extra` carries
-  // the event's kwargs, without showing a payload, so read both. If it is in
-  // neither, we cannot tell "not the first turn" from "this build does not send
-  // it", and staying silent would mean never briefing at all with nothing to
-  // find. Say so on stderr, which Hermes logs and the user message never sees.
+  // `extra.is_first_turn` is where v0.21.3 actually puts it. Confirmed against
+  // a live install, not the docs: jgiffard read the payload out of that build's
+  // `agent.shell_hooks._serialize_payload` and posted it on GitHub #64, which
+  // is the only way this could be settled — every test here writes a fake
+  // `hermes` binary, so it can prove the installer matches OUR MODEL of Hermes
+  // and never that the model matches Hermes (CAIRN-243).
+  //
+  // The top-level read stays as a fallback. It is not the layout this build
+  // emits, and it costs one `??`. If it is in neither, we cannot tell "not the
+  // first turn" from "this build does not send it", and staying silent would
+  // mean never briefing at all with nothing to find. Say so on stderr, which
+  // Hermes logs and the user message never sees.
   if (event === 'pre_llm_call') {
     const isFirstTurn = payload.extra?.is_first_turn ?? payload.is_first_turn
     if (isFirstTurn === undefined) {

@@ -11,6 +11,51 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **A CLI can tell whether it is the current file, not just the current release**
+  (CAIRN-261). CAIRN-246 put `x-cairn-version` on every response so a drifted copy would
+  say so, and it worked exactly as designed — which turned out to be almost never.
+  Releases are cut by hand and 133 commits fitted inside v0.5.1, so nearly all real drift
+  is *intra*-version: a laptop copy was two features behind, missing `--allow-dangling` on
+  `relearn` and the whole vitals memory block, while both sides reported 0.5.1 and no
+  warning was possible. Every response now also carries **`x-cairn-cli`**, a 16-hex sha256
+  of the `cli/cairn.mjs` the deployment was built from, and the CLI hashes its own file
+  once per process — 0.049 ms, measured, for the 100KB it weighs — and compares. A content
+  hash is the only identifier a copied CLI can work out about itself: there is no
+  repository behind `~/.local/bin/cairn`, which is the constraint that made a version
+  constant the easy choice in the first place. It is the same digest
+  `scripts/sync-agent-files.mjs` prints, so the installer's log line and the header are
+  one string for one file. `/api/v1/health` now goes through `ok()` so that it carries the
+  headers too — it is the endpoint `cairn --version` calls, and it was the one route whose
+  whole job was answering "am I current?" that could not. If the server sends no
+  fingerprint the CLI says nothing; the check is an improvement on silence, never a
+  dependency.
+
+- **`search_tasks` stops suppressing its own fallback** (CAIRN-260, migration 056). 055
+  fixed `search_all` and deliberately left this one alone, because extending an unscored
+  change to a second function is how you ship something and never learn whether it helped.
+  It has now been scored both ways, on the same store in the same instant, by applying the
+  migration inside a transaction and rolling it back (`scripts/ab-search.mjs`). The
+  evaluation set says the change costs almost nothing and buys almost nothing: recall@20
+  0.933 either way, MRR 0.717 → 0.706, one case down three places and two up one. Real
+  traffic says the opposite, because the suppression never fires on any case in the set. Of
+  23 natural-language task searches in 90 days, 3 did not widen — and all three are
+  transformed: *"claim on note annotation vs work"* returned a Queue-it pause, an algorithm
+  port, an incident and a Flashbuy crash, and now returns *"Auto-claim on note cannot tell
+  annotating a task from working on it"* at rank 1. So: one answered question loses three
+  places, in exchange for the questions that were not answered at all, and `cairn check
+  "x"` and `cairn check "x" --tasks` stop ranking by different rules.
+
+- **The retrieval evaluation set records the invocation it was scored under** (CAIRN-259).
+  `tests/fixtures/search-eval.json` recorded the query and the expected rows but not the
+  scope, and the scope decides the answer — the same question returns a different ordering
+  under `--project` and `--kinds`, so two people re-scoring the file got different numbers
+  and neither was wrong. Every case now carries a `scope`, `scripts/score-search-eval.mjs`
+  reads it rather than a human re-deriving it, and the recorded baseline carries a
+  timestamp, the server build, the CLI version and the size of the store. The last part is
+  not bookkeeping: the previous baseline recorded 0.73 and gave 0.82 on a re-run the same
+  day, with no code change, because the store had grown — a number with no provenance
+  cannot tell a retrieval change from a Tuesday.
+
 - **The agent files are repaired on merge, not only on the hour** (CAIRN-257). Cairn's code
   is push-based — merge to `main`, GitHub Actions deploys — while the skill, CLI and hooks
   every agent reads are pull-based, repaired by an hourly cron. Two clocks, and the slower
@@ -252,6 +297,16 @@ out under **Breaking** with what to do about it.
   qualifies legacy task, activity, knowledge, session and search attribution accordingly.
 
 ### Fixed
+
+- **`font-display` was not a class, so two headings quietly rendered as sans** (CAIRN-258).
+  `fonts.ts` loaded Instrument Serif and `layout.tsx` put `--font-display` on `<html>`, but
+  `globals.css` never registered the key in its `@theme` block, and Tailwind v4 generates a
+  utility only for a registered key. Settings and Users fell back to IBM Plex Sans and the
+  family was downloaded on every page for nothing. Nothing errored and nothing looked
+  broken — which is why it survived, since a sans heading is a perfectly reasonable thing
+  for a heading to be. The key is registered, and a test now asserts that every font family
+  named in a `className` anywhere in `src/` has one behind it, because the instance is less
+  interesting than the failure mode.
 
 - **The knowledge map rearranged itself when nothing had changed.** `simulate()` sums
   forces over the edge list in array order, and floating-point addition is not

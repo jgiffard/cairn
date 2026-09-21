@@ -1,5 +1,9 @@
 # dependencies
-node_modules/
+# No trailing slash: with one this matches directories only, so a worktree
+# that reaches the dependencies by symlink leaves `node_modules` untracked
+# and one `git add -A` away from committing an absolute developer path into
+# a public repository.
+node_modules
 .pnp
 .pnp.js
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { version as RELEASE } from '../../../package.json'
+import { CLI_FINGERPRINT, CLI_HEADER } from './cli-fingerprint'
 
 /**
  * Every response says which version served it, so a stale CLI can notice
@@ -10,12 +11,22 @@ import { version as RELEASE } from '../../../package.json'
  * just not the way the docs say, until something it needs is missing. Putting
  * the number on the ordinary path costs a header and turns discovery-by-
  * accident into discovery.
+ *
+ * TWO HEADERS, BECAUSE THE VERSION ANSWERS A NARROWER QUESTION THAN IT LOOKS.
+ * Releases are cut by hand and 133 commits fitted inside v0.5.1, so a copy
+ * that is months of work behind still agrees on the number (CAIRN-261). The
+ * version stays — it is the right thing to say when the two sides belong to
+ * different releases, and it is what a human reads — and the content hash
+ * sits beside it for everything finer than that.
  */
 export const VERSION_HEADER = 'x-cairn-version'
 
 const withVersion = (init?: ResponseInit): ResponseInit => {
   const headers = new Headers(init?.headers)
   headers.set(VERSION_HEADER, RELEASE)
+  // Absent rather than empty when the deployment cannot work out its own CLI:
+  // a client comparing against nothing must stay quiet, not guess.
+  if (CLI_FINGERPRINT) headers.set(CLI_HEADER, CLI_FINGERPRINT)
   return { ...init, headers }
 }
 

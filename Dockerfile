@@ -18,6 +18,13 @@ COPY --from=deps /app/node_modules ./node_modules
 ARG GIT_SHA=unknown
 COPY . .
 RUN echo "$GIT_SHA" > public/build-version.txt || (mkdir -p public && echo "$GIT_SHA" > public/build-version.txt)
+# The fingerprint of the CLI this image was built beside, so a copied
+# ~/.local/bin/cairn can tell whether it is the current file rather than
+# whether it belongs to the current release — 133 commits fitted inside
+# v0.5.1, so the version answers almost nothing (CAIRN-261). Written here
+# because the standalone build does not trace `cli/`, and into public/ because
+# that directory is already carried into the runtime image.
+RUN node -e "const{createHash}=require('node:crypto'),{readFileSync,writeFileSync}=require('node:fs');writeFileSync('public/cli-hash.txt',createHash('sha256').update(readFileSync('cli/cairn.mjs')).digest('hex').slice(0,16))"
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
