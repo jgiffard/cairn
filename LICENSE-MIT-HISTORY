@@ -55,6 +55,30 @@ from that pull request, and that is the correct outcome rather than a loophole.
     Use License; until he answers, MIT is what he offered and MIT is what this
     file records.
 
+One MIT contribution was asked, and answered
+--------------------------------------------
+
+`e09b1cd`, "fix: make messages inbox readable at a glance", contributed
+2026-04-03 by jgiffard. Checking rather than assuming before the licence moved
+showed it is not dead code: 160 of its lines are still live —
+`src/lib/message-preview.ts` untouched at 80 of 80, plus most of its test and
+part of `src/components/compact-markdown-preview.tsx`. Not de minimis, so it was
+the one earlier contribution the relicence genuinely turned on.
+
+We had been told he would be fine with it and proceeded on that. Nobody had
+asked him. He was asked on #55 and #61, and answered on
+[#61](https://github.com/montytorr/cairn/pull/61) on 2026-09-21:
+
+    I also confirm that my past and future contributions to Cairn may be
+    licensed under the Sustainable Use Licence.
+
+It is written down here rather than left in the thread, because the point of
+asking was to replace an assumption with a record, and a record that exists only
+inside a merged pull request is not one. This does not withdraw the MIT grant
+already made in that commit, which cannot be withdrawn; it means the Sustainable
+Use License version of those lines rests on their author's word rather than on
+someone else's account of it.
+
 If you contributed to Cairn under MIT and would rather your work were not
 relicensed, say so in an issue and it will be honoured. If you would rather it
 were relicensed, say so on your pull request and it will be recorded there.
