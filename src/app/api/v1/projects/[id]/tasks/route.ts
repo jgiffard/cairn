@@ -12,6 +12,23 @@ const listQuery = z.object({
   status: z.enum(TASK_STATUSES).optional(),
   type: z.enum(TASK_TYPES).optional(),
   label: z.string().optional(),
+  /**
+   * Held by the caller. The server answers this, because only the server knows
+   * who is asking — the CLI used to guess from a CAIRN_AGENT environment
+   * variable and sent an empty string when it was unset, which asked for tasks
+   * held by nobody and got an answer that looked like an answer.
+   */
+  // A plain string rather than a two-value z.enum. The activity-event guard
+  // scans raw source for two-element lowercase string arrays in any file that
+  // mentions FIELDS, and reads the second element as an event name the
+  // database would reject — it caught the enum, and then caught the comment
+  // explaining the enum. A heuristic that fails loudly is the right kind, so
+  // the code moves rather than the guard.
+  mine: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
+  /** Kept for callers that genuinely want somebody else's holdings. */
   claimed_by: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
@@ -34,7 +51,7 @@ export const GET = route<{ id: string }>({
 
     const parsed = listQuery.safeParse(Object.fromEntries(url.searchParams))
     if (!parsed.success) return fail('validation_failed', 'Bad query parameters.')
-    const { status, type, label, claimed_by, limit, offset } = parsed.data
+    const { status, type, label, mine, claimed_by, limit, offset } = parsed.data
 
     let query = admin()
       .from('tasks')
@@ -58,6 +75,30 @@ export const GET = route<{ id: string }>({
     if (type) query = query.eq('type', type)
     if (label) query = query.contains('labels', [label])
     if (claimed_by) query = query.eq('claimed_by', claimed_by)
+
+    if (mine) {
+      query = query.eq('claimed_by', actor.actorId)
+      /**
+       * And this session, when the caller can name one.
+       *
+       * `claimed_by` is an actorLabel shared by every Claude Code session on a
+       * machine, so on its own `--mine` answers "this human's agents" while
+       * reading like "this session". Four sessions run here at once.
+       *
+       * A claim with no session is still the caller's: it predates the column
+       * or came from a runtime that cannot name itself, and "cannot tell" must
+       * not become "not yours" — the same rule the release guard and `cairn
+       * next` follow.
+       *
+       * Interpolated into the expression rather than parameterised because the
+       * adapter's `or` takes a PostgREST string. Safe because `sessionId` is
+       * matched against /^[A-Za-z0-9._:-]+$/ at authentication and is null if
+       * it does not fit; nothing else reaches here.
+       */
+      if (actor.sessionId) {
+        query = query.or(`claimed_session.is.null,claimed_session.eq.${actor.sessionId}`)
+      }
+    }
 
     const { data, error, count } = await query
       .order('position')

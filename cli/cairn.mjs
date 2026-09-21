@@ -1208,7 +1208,11 @@ const commands = {
     for (const k of ['status', 'type', 'label', 'limit', 'offset']) {
       if (flags[k]) params.set(k, flags[k])
     }
-    if (flags.mine) params.set('claimed_by', process.env.CAIRN_AGENT ?? '')
+    // The server resolves who "mine" is. This used to send
+    // `claimed_by=$CAIRN_AGENT`, which guessed the caller from an environment
+    // variable and, when it was unset, asked for tasks held by the empty
+    // string -- an answer that looked like an answer.
+    if (flags.mine) params.set('mine', 'true')
     const data = await request('GET', `/api/v1/projects/${project}/tasks?${params}`)
     emit(data, {
       rows: (d) =>

@@ -11,6 +11,14 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **`--mine` answered "this human's agents" while reading like "this session".** The CLI
+  guessed the caller from a `CAIRN_AGENT` environment variable and sent
+  `claimed_by=$CAIRN_AGENT` — and when that variable was unset it sent an empty string,
+  asking for tasks held by nobody and getting back an answer that looked like an answer. The
+  server resolves it now, because only the server knows who is asking, and narrows to the
+  caller's session when there is one. A claim that names no session is still yours, on the
+  same rule the release guard and `cairn next` follow: cannot tell must not become not
+  yours.
 - **`cairn next` offered another session's live claim as "you are holding this one".** It
   compared `claimedBy` alone, and that is an actorLabel every Claude Code session on a
   machine shares — so a sibling's claim was not merely left unskipped, it was promoted to
