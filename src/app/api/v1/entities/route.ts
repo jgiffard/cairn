@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
+import { resolveProjectKeys } from '@/lib/api/entity-projects'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,20 +69,15 @@ export const POST = route({
     }
 
     if (body.projects.length > 0) {
-      const keys = body.projects.map((k) => k.toUpperCase())
-      const { data: projects, error: lookupError } = await admin()
-        .from('projects')
-        .select('id, key')
-        .in('key', keys)
-      if (lookupError) return fail('internal_error', lookupError.message)
-
-      const found = new Map((projects ?? []).map((p) => [p.key as string, p.id as string]))
-      const missing = keys.filter((k) => !found.has(k))
-      if (missing.length > 0) return fail('not_found', `No such project: ${missing.join(', ')}`)
+      const projects = await resolveProjectKeys(body.projects)
+      if (projects.error) return fail('internal_error', projects.error)
+      if (projects.missing.length > 0) {
+        return fail('not_found', `No such project: ${projects.missing.join(', ')}`)
+      }
 
       const { error: linkError } = await admin()
         .from('project_entities')
-        .insert([...found.values()].map((project_id) => ({ project_id, entity_id: data.id })))
+        .insert(projects.ids.map((project_id) => ({ project_id, entity_id: data.id })))
       if (linkError) return fail('internal_error', linkError.message)
     }
 
@@ -120,15 +116,6 @@ export const PATCH = route({
       .maybeSingle()
     if (!entity) return fail('not_found', `No entity "${body.key}".`)
 
-    const resolve = async (keys: string[]) => {
-      if (keys.length === 0) return []
-      const { data } = await admin()
-        .from('projects')
-        .select('id, key')
-        .in('key', keys.map((k) => k.toUpperCase()))
-      return (data ?? []).map((p) => p.id as string)
-    }
-
     if (
       body.title !== undefined ||
       body.description !== undefined ||
@@ -143,10 +130,18 @@ export const PATCH = route({
       if (error) return fail('internal_error', error.message)
     }
 
-    const add = await resolve(body.addProjects)
-    const remove = await resolve(body.removeProjects)
+    const add = await resolveProjectKeys(body.addProjects)
+    const remove = await resolveProjectKeys(body.removeProjects)
 
-    if (add.length > 0) {
+    /* A key naming no project is a typo, and it used to read as success: it
+     * vanished from the resolved ids and the response still said added: 0.
+     * Refuse the whole request naming the strays, as create already does. */
+    const failure = add.error ?? remove.error
+    if (failure) return fail('internal_error', failure)
+    const missing = [...new Set([...add.missing, ...remove.missing])]
+    if (missing.length > 0) return fail('not_found', `No such project: ${missing.join(', ')}`)
+
+    if (add.ids.length > 0) {
       /* `ignoreDuplicates` is required, not a preference: project_entities is a
        * pure join table, so every column is a conflict column. Without it the
        * builder emits `do update set` with nothing to set, which is a syntax
@@ -155,22 +150,22 @@ export const PATCH = route({
       const { error } = await admin()
         .from('project_entities')
         .upsert(
-          add.map((project_id) => ({ project_id, entity_id: entity.id })),
+          add.ids.map((project_id) => ({ project_id, entity_id: entity.id })),
           { onConflict: 'project_id,entity_id', ignoreDuplicates: true },
         )
       if (error) return fail('internal_error', error.message)
     }
 
-    if (remove.length > 0) {
+    if (remove.ids.length > 0) {
       const { error } = await admin()
         .from('project_entities')
         .delete()
         .eq('entity_id', entity.id)
-        .in('project_id', remove)
+        .in('project_id', remove.ids)
       if (error) return fail('internal_error', error.message)
     }
 
-    return ok({ key: body.key, added: add.length, removed: remove.length })
+    return ok({ key: body.key, added: add.ids.length, removed: remove.ids.length })
   },
 })
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { admin, bind, normalizeDatabaseValue } from './client'
+import { withFakePool } from './fake-pool'
 
 describe('normalizeDatabaseValue', () => {
   it('preserves the former PostgREST timestamp contract for nested results', () => {
@@ -55,34 +56,8 @@ describe('upsert SQL', () => {
    * upsert passed no options at all. Fixing the call site alone would have left
    * the trap in place for the next join table, so both levels are covered here.
    */
-  const capture = async (run: () => PromiseLike<unknown>) => {
-    const statements: string[] = []
-    const scope = globalThis as typeof globalThis & {
-      __cairnPool?: unknown
-      __cairnJsonColumns?: unknown
-    }
-    const priorPool = scope.__cairnPool
-    const priorJson = scope.__cairnJsonColumns
-
-    scope.__cairnJsonColumns = Promise.resolve(new Set<string>())
-    scope.__cairnPool = {
-      connect: async () => ({
-        query: async (sql: string) => {
-          statements.push(sql)
-          return { rows: [], rowCount: 0 }
-        },
-        release: () => {},
-      }),
-    }
-
-    try {
-      await run()
-    } finally {
-      scope.__cairnPool = priorPool
-      scope.__cairnJsonColumns = priorJson
-    }
-    return statements
-  }
+  const capture = async (run: () => PromiseLike<unknown>) =>
+    (await withFakePool(run)).statements
 
   it('says "do nothing" when every column is a conflict column', async () => {
     // project_entities is nothing but its pair, so there is no column left to
