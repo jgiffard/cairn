@@ -21,6 +21,21 @@ import { spawn } from 'node:child_process'
 const TIMEOUT_MS = Number(process.env.CAIRN_HOOK_TIMEOUT_MS ?? 4000)
 const CLI = process.env.CAIRN_CLI ?? 'cairn'
 
+/**
+ * Trig, if this machine has it, gets ONE line.
+ *
+ * Trig is the sibling product: Cairn is what we did, Trig is what exists. It
+ * deliberately has no session hook of its own, because two briefings competing
+ * for the top of every session is how both get skimmed. But an agent that
+ * never hears the map exists will never ask it anything, so Cairn — which owns
+ * the opening — names it once and gets out of the way.
+ *
+ * Silent when Trig is absent, unconfigured or unreachable. Rule 2 above:
+ * never speak when there is nothing to say.
+ */
+const TRIG_CLI = process.env.TRIG_CLI ?? 'trig'
+const TRIG_TIMEOUT_MS = Number(process.env.CAIRN_TRIG_TIMEOUT_MS ?? 1500)
+
 const readStdin = async () => {
   let raw = ''
   for await (const chunk of process.stdin) raw += chunk
@@ -31,8 +46,8 @@ const readStdin = async () => {
   }
 }
 
-/** Runs the CLI with a hard deadline, and treats every failure as "say nothing". */
-const run = (args) =>
+/** Runs a CLI with a hard deadline, and treats every failure as "say nothing". */
+const runTool = (bin, args, timeoutMs) =>
   new Promise((resolve) => {
     let out = ''
     let settled = false
@@ -42,11 +57,11 @@ const run = (args) =>
       resolve(value)
     }
 
-    const child = spawn(CLI, args, { stdio: ['ignore', 'pipe', 'ignore'] })
+    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'ignore'] })
     const timer = setTimeout(() => {
       child.kill('SIGKILL')
       done('')
-    }, TIMEOUT_MS)
+    }, timeoutMs)
 
     child.stdout.on('data', (d) => {
       out += d
@@ -60,6 +75,25 @@ const run = (args) =>
       done(code === 0 ? out : '')
     })
   })
+
+const run = (args) => runTool(CLI, args, TIMEOUT_MS)
+
+/** One line about the map, or nothing at all. Never throws, never blocks. */
+const trigLine = async () => {
+  const out = await runTool(TRIG_CLI, ['scans', '--limit', '1', '--json'], TRIG_TIMEOUT_MS)
+  if (!out.trim()) return ''
+  try {
+    const rows = JSON.parse(out)
+    const last = Array.isArray(rows) ? rows[0] : (rows?.data ?? rows?.results ?? [])[0]
+    if (!last) return ''
+    const when = last.finishedAt ?? last.finished_at ?? last.startedAt ?? last.started_at
+    const age = when ? Math.round((Date.now() - new Date(when).getTime()) / 3_600_000) : null
+    const scanned = age === null ? 'scanned at an unknown time' : age < 1 ? 'scanned within the hour' : `scanned ${age}h ago`
+    return `\nTrig — the map of what exists (${scanned}):\n  trig what-is <thing> · trig impact <thing> · trig inbox\n`
+  } catch {
+    return ''
+  }
+}
 
 const main = async () => {
   const payload = await readStdin()
@@ -100,7 +134,8 @@ const main = async () => {
     args.push('--file', path)
   }
 
-  const text = (await run(args)).trim()
+  const [cairnText, trig] = await Promise.all([run(args), trigLine()])
+  const text = `${cairnText.trim()}${trig}`.trim()
   if (!text) return
 
   if (event === 'pre_llm_call') {

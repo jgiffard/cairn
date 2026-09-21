@@ -378,6 +378,26 @@ and a reference to something unwritten is a promise the store cannot keep. Both 
 a minute when you are already in the area — link the orphan to whatever it belongs beside,
 or write the entry that was referenced.
 
+### If this machine also has Trig
+
+Trig is the sibling product: Cairn holds what we **did** and what we **concluded**; Trig
+holds what the company **is** — its repositories, services, databases and what depends on
+what, scanned from the real sources.
+
+**If you are unsure which one a fact belongs in, write it here.** Trig ingests Cairn
+knowledge on every scan, so a fact filed in Cairn reaches the map by itself. Nothing
+carries facts the other way, and a fact written into Trig by hand becomes a
+`contributed` aspect that no scan may ever supersede. The two mistakes cost different
+amounts: one is a delay, the other is forever.
+
+When it is not a close call, the test is one question:
+
+> **Could a re-scan rediscover this?**
+> **yes → Trig (`trig learn`).  no → Cairn (`cairn learn`).**
+
+"dispofi-api writes to the `quotes` collection" is Trig — a scanner finds it every time.
+"we raised the pool size and it made no difference" is Cairn — nothing rediscovers that.
+
 ### Where does it apply?
 
 Three scopes, narrowest first:
