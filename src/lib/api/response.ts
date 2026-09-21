@@ -1,4 +1,23 @@
 import { NextResponse } from 'next/server'
+import { version as RELEASE } from '../../../package.json'
+
+/**
+ * Every response says which version served it, so a stale CLI can notice
+ * without being asked.
+ *
+ * `cairn --version` already compares the two, but that is the one command an
+ * agent has no reason to run — so a copy that has drifted goes on working,
+ * just not the way the docs say, until something it needs is missing. Putting
+ * the number on the ordinary path costs a header and turns discovery-by-
+ * accident into discovery.
+ */
+export const VERSION_HEADER = 'x-cairn-version'
+
+const withVersion = (init?: ResponseInit): ResponseInit => {
+  const headers = new Headers(init?.headers)
+  headers.set(VERSION_HEADER, RELEASE)
+  return { ...init, headers }
+}
 
 export type ApiError =
   | 'unauthorized'
@@ -24,7 +43,7 @@ const STATUS: Record<ApiError, number> = {
 }
 
 export const ok = <T>(data: T, init?: ResponseInit) =>
-  NextResponse.json({ success: true, data }, init)
+  NextResponse.json({ success: true, data }, withVersion(init))
 
 /**
  * Errors carry a machine-readable `code` and, where the failure is a bad
@@ -32,10 +51,13 @@ export const ok = <T>(data: T, init?: ResponseInit) =>
  * acceptable can retry correctly; one that just gets "400" cannot.
  */
 export const fail = (code: ApiError, error: string, extra?: Record<string, unknown>) =>
-  NextResponse.json({ success: false, error, code, ...extra }, { status: STATUS[code] })
+  NextResponse.json(
+    { success: false, error, code, ...extra },
+    withVersion({ status: STATUS[code] }),
+  )
 
 export const failValidation = (issues: unknown) =>
   NextResponse.json(
     { success: false, error: 'Validation failed', code: 'validation_failed', issues },
-    { status: 400 },
+    withVersion({ status: 400 }),
   )

@@ -16,6 +16,10 @@ import { join } from 'node:path'
  */
 const source = readFileSync(join(process.cwd(), 'cli/cairn.mjs'), 'utf8')
 
+/** JSDoc in this file discusses `flags.X` in prose; prose is not a read. */
+const withoutComments = (): string =>
+  source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
 const knownFlags = (): Set<string> => {
   const block = /const KNOWN_FLAGS = new Set\(\[([\s\S]*?)\]\)/.exec(source)
   if (!block) throw new Error('KNOWN_FLAGS not found in cli/cairn.mjs')
@@ -53,5 +57,34 @@ describe('KNOWN_FLAGS', () => {
 
   it('still knows the flag whose absence caused the regression', () => {
     expect(knownFlags().has('priority')).toBe(true)
+  })
+
+  /**
+   * The two tests above compare the list against the help text and against the
+   * dynamic loops. Neither sees a flag the code reads directly and the help
+   * never mentions — `flags.somethingNew` — which the parser would refuse with
+   * exit 2 while every test stayed green. That is the same failure as the
+   * regression, one door over, so close it from the code's side too.
+   */
+  it('contains every flag the code reads directly', () => {
+    const known = knownFlags()
+    const read = [
+      ...withoutComments().matchAll(/flags\.([a-z][a-z0-9]*)\b/g),
+      ...withoutComments().matchAll(/flags\['([^']+)'\]/g),
+    ].map((m) => m[1]!)
+
+    expect(read.length).toBeGreaterThan(30)
+    const missing = [...new Set(read)].filter((flag) => !known.has(flag))
+    expect(missing, `read by the code but the parser would reject: ${missing.join(', ')}`).toEqual([])
+  })
+
+  /**
+   * The parser keys by the flag exactly as typed — `flags[name]` where name is
+   * `dry-run`, not `dryRun`. So a camelCase read is not a style choice, it is
+   * dead code: permanently undefined, and silent about it.
+   */
+  it('has no camelCase reads, which could never match a parsed flag', () => {
+    const camel = [...new Set([...withoutComments().matchAll(/flags\.([a-z]+[A-Z][A-Za-z0-9]*)/g)].map((m) => m[1]!))]
+    expect(camel, `flags.${camel.join(', flags.')} can never be set: the parser keys on the literal flag name`).toEqual([])
   })
 })
