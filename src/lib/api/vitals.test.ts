@@ -5,7 +5,7 @@ import { assess, type Vitals } from './vitals'
 const healthy = (over: Partial<Vitals> = {}): Vitals => ({
   windowHours: 24,
   sessions: { recent: 6, recentWithFiles: 5, recentSummarised: 6, baseline: 40, baselineWithFiles: 35 },
-  tasks: { opened: 4, closed: 5, stalled: 1, held: 2, closedUnclaimed: 0 },
+  tasks: { opened: 4, closed: 5, stalled: 1, held: 2, closedWithoutTrace: 0 },
   autoReleased: 0,
   knowledgeWritten: 2,
   agents: [
@@ -69,10 +69,10 @@ describe('assess', () => {
     expect(codes(v)).toContain('agent-silent')
   })
 
-  it('counts work that was closed without anyone claiming it', () => {
+  it('counts work that was closed with no trace that anyone was on it', () => {
     // CAIRN-135 measured 36% and nothing has recomputed it since.
-    const v = healthy({ tasks: { opened: 4, closed: 8, stalled: 1, held: 2, closedUnclaimed: 3 } })
-    const f = assess(v).find((x) => x.code === 'closed-unclaimed')
+    const v = healthy({ tasks: { opened: 4, closed: 8, stalled: 1, held: 2, closedWithoutTrace: 3 } })
+    const f = assess(v).find((x) => x.code === 'closed-without-trace')
     expect(f?.severity).toBe('warning')
     expect(f?.message).toContain('3 of 8')
   })
@@ -80,15 +80,33 @@ describe('assess', () => {
   it('does not cry about one of two', () => {
     // A floor under the ratio, because a small week is not a pattern and a
     // warning that fires on noise teaches people to skip the line.
-    const v = healthy({ tasks: { opened: 1, closed: 2, stalled: 1, held: 2, closedUnclaimed: 1 } })
-    expect(codes(v)).not.toContain('closed-unclaimed')
+    const v = healthy({ tasks: { opened: 1, closed: 2, stalled: 1, held: 2, closedWithoutTrace: 1 } })
+    expect(codes(v)).not.toContain('closed-without-trace')
   })
 
   it('says nothing when the server is too old to send the number', () => {
     // Absent is not zero and is not a problem either; a check that cannot see
-    // the number must not invent one.
+    // the number must not invent one. A server on 051 sends closedUnclaimed,
+    // which counted a different population under a different question, so the
+    // rename is what stops the new sentence being printed over the old number.
     const v = healthy({ tasks: { opened: 4, closed: 8, stalled: 1, held: 2 } })
-    expect(codes(v)).not.toContain('closed-unclaimed')
+    expect(codes(v)).not.toContain('closed-without-trace')
+    const stale = healthy({
+      tasks: { opened: 4, closed: 8, stalled: 1, held: 2, closedUnclaimed: 8 },
+    } as unknown as Partial<Vitals>)
+    expect(assess(stale)).toEqual([])
+  })
+
+  it('no longer says the tasks it counts were never claimed', () => {
+    // The wording is the bug CAIRN-251 filed: "Nothing recorded that anyone was
+    // working them" was false of nine of the ten tasks it was printed about,
+    // which had moved to in-review hours earlier with commits against them.
+    const v = healthy({ tasks: { opened: 4, closed: 8, stalled: 1, held: 2, closedWithoutTrace: 3 } })
+    const message = assess(v).find((f) => f.code === 'closed-without-trace')?.message ?? ''
+    expect(message).not.toMatch(/never claimed/)
+    expect(message).toContain('nothing recorded in between')
+    expect(message).toContain('no status move')
+    expect(message).toContain('no commit')
   })
 
   it('catches the jsonb bug, where the total never dropped', () => {

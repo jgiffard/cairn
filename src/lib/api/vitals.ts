@@ -33,11 +33,20 @@ export type Vitals = {
     stalled: number
     held: number
     /**
-     * Closed in the window having never been claimed, at any point in their
-     * life. Optional because a server older than migration 051 does not send
-     * it, and a check that cannot see the number must not invent one.
+     * Closed in the window by a runtime, with nothing recorded between filing
+     * and close that anyone was on it: no claim, no checkpoint, no status move
+     * off the status it was filed in, no commit, no push, no test run.
+     *
+     * Not "never claimed", which is what this counted until migration 054 and
+     * what made it wrong — nine of ten it flagged had moved to in-review hours
+     * earlier, several with commits against them. A claim is one way of being
+     * visible, not the only one. See CAIRN-251.
+     *
+     * Optional because a server older than migration 054 does not send it —
+     * one on 051 sends the old key under the old meaning — and a check that
+     * cannot see the number must not invent one.
      */
-    closedUnclaimed?: number
+    closedWithoutTrace?: number
   }
   autoReleased: number
   knowledgeWritten: number
@@ -171,24 +180,44 @@ export const assess = (v: Vitals): Finding[] => {
   // number had no reader afterwards: nothing recomputed it, so nobody would
   // have known if it went back up. This is the reader.
   //
-  // A ratio here rather than a count, because the thing that matters is what
-  // share of the work nobody said they were doing — and a floor under it,
-  // because one of two proves nothing and crying about it teaches people to
-  // skip the line.
+  // It read the wrong thing until migration 054. CAIRN-251 classified all ten
+  // tasks it flagged in a 24h window: none was the bare created->done shape it
+  // was filed for, nine had moved to in-review hours earlier, several carried
+  // commits and test runs. So it counted two things it should not have — a
+  // person closing their own work, who is documented as never claiming and
+  // whom claim.ts refuses to claim for, the same exclusion agent-silent makes
+  // twenty lines above; and the backlog sweep the skill explicitly instructs,
+  // one task filed and claimed for the sweep and the rest worked without
+  // claiming them.
   //
-  // Deliberately not an alarm and deliberately not auto-claim on close.
-  // CAIRN-146 rejected inferring intent from an ambiguous signal, and closing
-  // is at least as ambiguous as annotating: --kind verified exists precisely
-  // for closing somebody else's fix.
-  const unclaimed = v.tasks.closedUnclaimed
-  if (unclaimed !== undefined && v.tasks.closed >= 5 && unclaimed / v.tasks.closed >= 0.25) {
+  // So the question is no longer "was this claimed" but "could anyone see it
+  // being worked": no claim, no checkpoint, no status move off the status it
+  // was filed in, no commit, no push, no test run, between filing and close.
+  // The message says that, because a corrected predicate under the old prose
+  // is the same bug with better numbers.
+  //
+  // A ratio rather than a count, because what matters is the share of the work
+  // nobody could see — and a floor under it, because one of two proves nothing
+  // and crying about it teaches people to skip the line.
+  //
+  // Deliberately not an alarm, deliberately not auto-claim on close, and
+  // deliberately not a hint on `cairn done`. CAIRN-146 rejected inferring
+  // intent from an ambiguous signal, and closing is at least as ambiguous as
+  // annotating: --kind verified exists precisely for closing somebody else's
+  // fix. CAIRN-211 refused the per-call nag — it "is not actionable, and
+  // trains people to ignore the line" — and CAIRN-135 called restating the
+  // rule "the third version of the same non-fix".
+  const untraced = v.tasks.closedWithoutTrace
+  if (untraced !== undefined && v.tasks.closed >= 5 && untraced / v.tasks.closed >= 0.25) {
     findings.push({
-      code: 'closed-unclaimed',
+      code: 'closed-without-trace',
       severity: 'warning',
       message:
-        `${unclaimed} of ${v.tasks.closed} tasks closed in ${hours} were never claimed. ` +
-        `Nothing recorded that anyone was working them, so the board showed them free ` +
-        `while they were being done. \`cairn add --start\`, or claim before you begin.`,
+        `${untraced} of ${v.tasks.closed} tasks closed in ${hours} went from filed to closed with ` +
+        `nothing recorded in between — no claim, no status move, no commit, no test run. ` +
+        `Nothing said the work was happening while it happened, so the board showed them free, ` +
+        `and had one crashed halfway it would have looked untouched rather than abandoned. ` +
+        `\`cairn add --start\`, or claim before you begin.`,
     })
   }
 
@@ -281,7 +310,40 @@ export const readVitalsFor = async (userId: string, hours = 24): Promise<Vitals>
   return data as unknown as Vitals
 }
 
-export const readVitals = (actor: Actor, hours = 24) => readVitalsFor(actor.userId, hours)
+/**
+ * The vital signs as an agent gets them, which is the whole of the report and
+ * not the half that happens to live in one aggregate.
+ *
+ * `readMemoryUseFor` had exactly one call site — the Vitals page — so every
+ * number about whether AGENTS consult the memory was visible only to a person
+ * with a browser open. The things that write knowledge here cannot open one.
+ * That is the failure knowledge/gaps/route.ts names in its own header, "the
+ * findings were visible only to a person who happened to click Map", repeated
+ * one panel over; it is why this read carries the memory block. See CAIRN-254.
+ *
+ * Two round trips rather than one. The page already pays for both separately,
+ * and folding memory into cairn_vitals would mean rewriting a function five
+ * migrations have transformed in order to move a number that is already there.
+ *
+ * `memory` is null rather than fatal when the aggregate cannot be read: this
+ * endpoint is the monitor, and a monitor that returns 500 because one of its
+ * two questions is unanswerable has stopped answering the other one too.
+ */
+export type VitalsReport = Vitals & { memory: MemoryUse | null }
+
+export const readVitals = async (actor: Actor, hours = 24): Promise<VitalsReport> => {
+  const [vitals, memory] = await Promise.all([
+    readVitalsFor(actor.userId, hours),
+    readMemoryUseFor(actor.userId, hours).catch((error: unknown) => {
+      console.error(
+        '[vitals] could not read memory use',
+        error instanceof Error ? error.message : error,
+      )
+      return null
+    }),
+  ])
+  return { ...vitals, memory }
+}
 
 /**
  * The same read, cached, for the pages that show it.
