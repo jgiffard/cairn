@@ -195,10 +195,50 @@ const die = (msg, code = 1) => {
 const argv = process.argv.slice(2)
 const flags = {}
 const positional = []
+
+/**
+ * Every flag this CLI reads, anywhere.
+ *
+ * The parser used to accept whatever it was given, so `cairn know --banana
+ * split` returned results and exited 0, and `--offset 3` — which nothing
+ * implements — returned page one forever with no way to discover it. An agent
+ * paginating that way cannot tell success from silence, and this CLI's entire
+ * audience is agents.
+ *
+ * The list is global rather than per-command on purpose: it catches the typo
+ * and the flag that does not exist, which is the whole failure, without
+ * needing a table per verb that would rot the first time one grows an option.
+ * A real flag passed to a verb that ignores it still passes here — worth
+ * knowing, but a smaller problem than a silent wrong answer.
+ */
+const KNOWN_FLAGS = new Set([
+  'all', 'also-project', 'archived', 'body', 'branch', 'confirm', 'cwd',
+  'dangling', 'description', 'dir', 'dry-run', 'duplicate-of', 'entity',
+  'file', 'files', 'force', 'force-empty', 'full', 'gaps', 'global', 'help',
+  'hours', 'id', 'json', 'key', 'kind', 'kinds', 'label', 'limit', 'message',
+  'mine', 'no-checkpoint', 'no-parent', 'notify', 'older', 'orphans',
+  'output', 'parent', 'platform', 'pretty', 'project', 'reason', 'remote',
+  'repo', 'resolution', 'scheduled', 'slug', 'start', 'status', 'summary',
+  'superseded', 'superseded-by', 'task', 'tasks', 'title', 'tool-calls',
+  'type', 'url', 'verified', 'version',
+])
+
 for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i]
   if (arg.startsWith('--')) {
     const [name, inline] = arg.slice(2).split('=')
+    if (!KNOWN_FLAGS.has(name)) {
+      const near = [...KNOWN_FLAGS]
+        .filter((known) => known.startsWith(name.slice(0, 3)) || name.startsWith(known.slice(0, 3)))
+        .slice(0, 3)
+      process.stderr.write(
+        `unknown flag --${name}\n` +
+          (near.length ? `did you mean ${near.map((n) => `--${n}`).join(', ')}?\n` : '') +
+          `this is refused rather than ignored: a flag that is silently dropped ` +
+          `returns an answer that looks filtered and is not.\n`,
+      )
+      process.exit(2)
+    }
     if (inline !== undefined) flags[name] = inline
     else if (argv[i + 1] && !argv[i + 1].startsWith('--')) flags[name] = argv[++i]
     else flags[name] = true
