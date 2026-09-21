@@ -147,3 +147,44 @@ describe('layoutGraph', () => {
     expect(Number.isFinite(height)).toBe(true)
   })
 })
+
+describe('layoutGraph determinism (CAIRN-252)', () => {
+  /**
+   * The existing tests vary NODE order, which is why this survived: the node
+   * path was already protected by components() sorting, and the LINK list
+   * never was. simulate() sums forces over that array and float addition is
+   * not associative, so the same graph in a different edge order settled
+   * somewhere slightly different — a map that rearranges after an unrelated
+   * write, which reads as the map being organic rather than as a bug.
+   */
+  const ids = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf']
+  const edges: Edge[] = [
+    { source: 'alpha', target: 'bravo' },
+    { source: 'bravo', target: 'charlie' },
+    { source: 'charlie', target: 'delta' },
+    { source: 'alpha', target: 'delta' },
+    { source: 'echo', target: 'foxtrot' },
+    { source: 'foxtrot', target: 'golf' },
+    { source: 'echo', target: 'golf' },
+  ]
+
+  const positions = (e: Edge[]) =>
+    layoutGraph(ids, e).placed.map((p) => `${p.id}:${p.x.toFixed(9)},${p.y.toFixed(9)}`)
+
+  it('places nodes identically however the edges are ordered', () => {
+    const forward = positions(edges)
+    const reversed = positions([...edges].reverse())
+    const shuffled = positions([edges[4]!, edges[0]!, edges[6]!, edges[2]!, edges[1]!, edges[5]!, edges[3]!])
+
+    expect(reversed).toEqual(forward)
+    expect(shuffled).toEqual(forward)
+  })
+
+  it('is unaffected by a duplicated edge arriving in a different place', () => {
+    // Postgres can return the same row set in any order after a vacuum; the
+    // layout must not care.
+    const a = positions([...edges, { source: 'alpha', target: 'bravo' }])
+    const b = positions([{ source: 'alpha', target: 'bravo' }, ...edges])
+    expect(b).toEqual(a)
+  })
+})

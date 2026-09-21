@@ -134,6 +134,17 @@ export const layout3D = (graph: KnowledgeGraph): Layout3D => {
     eb.push(b)
   }
 
+  /* Same reason as the 2D layout: the relaxation sums over these pairs and
+   * float addition is not associative, so an unstable edge order moves the
+   * scene when nothing changed. */
+  const order = ea.map((_, i) => i).sort((i, j) => ea[i]! - ea[j]! || eb[i]! - eb[j]!)
+  const sortedA = order.map((i) => ea[i]!)
+  const sortedB = order.map((i) => eb[i]!)
+  ea.length = 0
+  eb.length = 0
+  ea.push(...sortedA)
+  eb.push(...sortedB)
+
   const repulsion = SPREAD * SPREAD * 0.9
   const rest = SPREAD * 0.22
 

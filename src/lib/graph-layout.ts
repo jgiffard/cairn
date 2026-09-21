@@ -98,6 +98,18 @@ const simulate = (ids: readonly string[], edges: readonly Edge[], size: number):
     if (a !== undefined && b !== undefined && a !== b) links.push([a, b])
   }
 
+  /* Sorted because the force loop below SUMS over this array, and floating
+   * point addition is not associative: the same graph handed over in a
+   * different edge order settles somewhere slightly different. The node path
+   * is already protected — components() sorts — but the link list never was,
+   * and knowledge-graph.ts builds `edges` by iterating rows whose order its
+   * own comment calls "not stable across an update or a vacuum". The symptom
+   * is a map that quietly rearranges after an unrelated write, which reads as
+   * the map being organic rather than as a bug, which is why it survived.
+   * Found porting this layout into Trig, where the edges come from Postgres
+   * and the drift was obvious. */
+  links.sort((p, q) => p[0] - q[0] || p[1] - q[1])
+
   const passes = Math.min(400, Math.max(120, Math.round(3000 / Math.sqrt(n))))
   const dx = new Float64Array(n)
   const dy = new Float64Array(n)
