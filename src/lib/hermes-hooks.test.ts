@@ -41,6 +41,10 @@ const args = process.argv.slice(2)
 const [group, action] = args
 const hooks = process.env.FAKE_HOOKS
 if (group === 'config' && action === 'get' && args[2] === 'hooks') {
+  if (process.env.FAKE_HERMES_GET_FAILURE) {
+    process.stderr.write('unsupported config command\\n')
+    process.exit(64)
+  }
   process.stdout.write(fs.readFileSync(hooks, 'utf8'))
   process.exit(0)
 }
@@ -82,6 +86,13 @@ process.exit(64)
     expect(rejected.code).toBe(0)
     expect(rejected.stdout).toContain('must be one safe executable path')
     expect((await readFile(commandLog, 'utf8')).trim().split('\n')).toHaveLength(1)
+
+    const unavailable = await run('node', ['scripts/install-hooks.mjs'], {
+      ...environment,
+      FAKE_HERMES_GET_FAILURE: '1',
+    })
+    expect(unavailable.code).toBe(1)
+    expect(unavailable.stderr).toContain('requires Hermes Agent by Nous Research v0.21.3 or newer')
   })
 
   it('injects the Cairn briefing only for Hermes first turns', async () => {
@@ -107,5 +118,13 @@ process.exit(64)
     }))
     expect(later.code).toBe(0)
     expect(later.stdout).toBe('')
+
+    const compatibilityFirstTurn = await run('node', ['hooks/cairn-context.mjs'], environment, JSON.stringify({
+      hook_event_name: 'pre_llm_call',
+      cwd: '/project',
+      is_first_turn: true,
+    }))
+    expect(compatibilityFirstTurn.code).toBe(0)
+    expect(JSON.parse(compatibilityFirstTurn.stdout)).toEqual({ context: '## Cairn [MES]\nKnown here: affiliate governance' })
   })
 })

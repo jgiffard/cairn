@@ -69,7 +69,8 @@ const main = async () => {
   // Hermes Agent by Nous Research invokes pre_llm_call for every turn. Its
   // first turn is the session-start equivalent; later injection would waste
   // context and break prompt-cache stability.
-  if (event === 'pre_llm_call' && payload.extra?.is_first_turn !== true) return
+  const isFirstTurn = payload.extra?.is_first_turn ?? payload.is_first_turn
+  if (event === 'pre_llm_call' && isFirstTurn !== true) return
 
   const args = ['context', '--cwd', cwd]
 

@@ -119,6 +119,8 @@ const isMine = (hook) =>
   Boolean(hook?.[TAG]) ||
   (typeof hook?.command === 'string' && SCRIPT_NAMES.some((n) => hook.command.includes(n)))
 
+const isSafeHookCli = (value) => /^[A-Za-z0-9_./:+-]+$/.test(value)
+
 const canonicalHermesHooks = (hooks) =>
   JSON.stringify(
     Object.entries(hooks ?? {})
@@ -249,15 +251,22 @@ const installHermes = () => {
   try {
     const raw = execFileSync('hermes', ['config', 'get', 'hooks', '--json'], { encoding: 'utf8' }).trim()
     before = raw ? JSON.parse(raw) : {}
-  } catch {
-    return log('  Hermes Agent by Nous Research: not installed or hooks config unavailable — skipped')
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return log('  Hermes Agent by Nous Research: not installed — skipped')
+    }
+    console.error('  Hermes Agent by Nous Research: hooks configuration is unavailable; requires Hermes Agent by Nous Research v0.21.3 or newer with `hermes config get/set` support')
+    process.exitCode = 1
+    return
   }
   if (!before || Array.isArray(before) || typeof before !== 'object') {
-    return log('  Hermes Agent by Nous Research: hooks config is not a mapping — skipped')
+    console.error('  Hermes Agent by Nous Research: hooks configuration is not a mapping; requires Hermes Agent by Nous Research v0.21.3 or newer')
+    process.exitCode = 1
+    return
   }
 
   const hookCli = process.env.CAIRN_HOOK_CLI?.trim() || 'cairn'
-  if (!/^[A-Za-z0-9_./:+-]+$/.test(hookCli)) {
+  if (!isSafeHookCli(hookCli)) {
     return log('  Hermes Agent by Nous Research: CAIRN_HOOK_CLI must be one safe executable path — skipped')
   }
 
@@ -276,7 +285,8 @@ const installHermes = () => {
     log('  Hermes Agent by Nous Research: pre_llm_call (briefing on first turn)')
     log('  Hermes Agent by Nous Research: approve the hook on first use; the installer never auto-accepts it')
   } catch {
-    log('  Hermes Agent by Nous Research: could not update hooks config — skipped')
+    console.error('  Hermes Agent by Nous Research: could not update hooks configuration; requires Hermes Agent by Nous Research v0.21.3 or newer with `hermes config get/set` support')
+    process.exitCode = 1
   }
 }
 
@@ -301,6 +311,7 @@ const openclawNotes = () => {
 
 const version = () => {
   const cli = process.env.CAIRN_HOOK_CLI?.trim() || 'cairn'
+  if (!isSafeHookCli(cli)) return 'CAIRN_HOOK_CLI must be one safe executable path'
   try {
     return execFileSync(cli, ['--help'], { encoding: 'utf8' }).split('\n')[0]
   } catch {

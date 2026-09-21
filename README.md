@@ -548,11 +548,14 @@ its own and touches nobody else's. Coverage differs by runtime:
 | Hermes Agent by Nous Research | `pre_llm_call` on the first turn only | — | — — session recording is deliberately not installed |
 | OpenClaw | manual — push `cairn context` output into the existing `agent:bootstrap` hook | — | swept from disk on a schedule — it has no session event of any kind |
 
-Hermes Agent by Nous Research requires hook consent on first use. The installer uses `hermes config`
-to preserve existing hooks and **never** auto-approves one; unattended environments must explicitly
-opt in through Hermes's own hook policy. Its `on_session_start` event cannot inject context, so the
-installer uses `pre_llm_call` and the Cairn hook emits a briefing only when `extra.is_first_turn` is
-true. It intentionally does not record transcripts or sessions.
+Hermes Agent by Nous Research **v0.21.3 or newer** requires hook consent on first use. The installer
+uses `hermes config get hooks --json` and `hermes config set --force hooks <json>` to preserve existing
+hooks and **never** auto-approves one; unattended environments must explicitly opt in through Hermes's
+own hook policy. If an installed Hermes Agent cannot provide those commands, the installer exits with
+an actionable error instead of claiming the runtime was merely skipped. Its `on_session_start` event
+cannot inject context, so the installer uses `pre_llm_call` and the Cairn hook emits a briefing only
+when `extra.is_first_turn` (or the compatible top-level `is_first_turn`) is true. It intentionally does
+not record transcripts or sessions.
 
 **Why Claude Code needs `PreCompact` as well as `SessionEnd`.** A session is recorded when
 it ends, and a session that runs for days does not end — it compacts. On the machine this
