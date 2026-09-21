@@ -50,13 +50,15 @@ from that pull request, and that is the correct outcome rather than a loophole.
 
   - #43, "Trust the proxy hop when checking a browser mutation's origin",
     opened 2026-09-19 at 19:57 UTC by Thierry Thiers, twenty-one minutes before
-    303a9f9, and merged after it. Offered under MIT. The author has been asked
-    on that pull request whether he would rather it were under the Sustainable
-    Use License; until he answers, MIT is what he offered and MIT is what this
-    file records.
+    303a9f9, and merged after it. Offered under MIT. He was asked on that pull
+    request whether he would rather it were under the Sustainable Use License,
+    and he answered yes — recorded below.
 
-One MIT contribution was asked, and answered
---------------------------------------------
+The MIT contributions were asked about, and answered
+----------------------------------------------------
+
+Two people other than the maintainer hold copyright in code that is still live
+in this tree. Both were asked rather than assumed about, and both answered.
 
 `e09b1cd`, "fix: make messages inbox readable at a glance", contributed
 2026-04-03 by jgiffard. Checking rather than assuming before the licence moved
@@ -78,6 +80,35 @@ inside a merged pull request is not one. This does not withdraw the MIT grant
 already made in that commit, which cannot be withdrawn; it means the Sustainable
 Use License version of those lines rests on their author's word rather than on
 someone else's account of it.
+
+Thierry Thiers holds three commits, all offered under MIT: `154549b` and
+`a9e99a8` from 2026-09-13, and `92aa720` — #43 — opened at 19:57 UTC on
+2026-09-19, twenty-one minutes before `303a9f9`, and merged after it.
+
+Measured against HEAD with git blame, this is the larger of the two holdings:
+roughly 400 live lines, most of them `154549b` — the project-repos feature, its
+route, its tests, and `migrations/030_project_repos.sql`, which is the same file
+renumbered when the migrations moved out of `supabase/`.
+
+He was asked on #43, in terms that named all three commits, and answered there
+on 2026-09-21:
+
+    Answering the outstanding question in LICENSE-MIT-HISTORY: yes — I am happy
+    for this contribution to be under the project's licence, the Sustainable Use
+    License, alongside everything else in Cairn. Please record it as settled
+    rather than outstanding.
+
+    [...] I consent to #43 being used and distributed under the Sustainable Use
+    License as part of Cairn. I make no attempt to withdraw the MIT offer
+    already made — it was made, and anyone who took it from the pull request
+    keeps it.
+
+Both sentences are quoted because their scope is not identical. The question he
+answered "yes" to named all three commits; the belt-and-braces sentence after it
+names #43. This file reads the yes as covering all three, and states that
+reading here rather than making it quietly, so that he can correct it if he
+meant the narrower thing. His MIT offer stands in either case and nothing here
+withdraws it.
 
 If you contributed to Cairn under MIT and would rather your work were not
 relicensed, say so in an issue and it will be honoured. If you would rather it
