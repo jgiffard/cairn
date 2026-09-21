@@ -79,6 +79,18 @@ export const knowledgeCreate = z.object({
   sourceTaskRef: z.string().max(40).optional(),
   sourceSessionId: z.string().uuid().optional(),
   verified: z.boolean().optional(),
+  /**
+   * Record the entry even though one of its `[[refs]]` names an entry that
+   * does not exist and one that nearly does.
+   *
+   * The write path refuses that case, because 63% of the store's dangling
+   * references point at a fact it already holds under another name. This is
+   * the way out for the other case — two entries that cite each other cannot
+   * both be written first — and it is deliberately something the caller has to
+   * say, so "the reference is fine as it is" is a claim somebody made rather
+   * than a default nobody noticed.
+   */
+  allowUnresolvedRefs: z.boolean().optional(),
 })
 
 /**
@@ -94,6 +106,7 @@ export const knowledgeUpdate = z.object({
   entities: z.array(z.string().min(1).max(40)).max(20).optional(),
   supersededBy: z.string().max(120).nullable().optional(),
   verified: z.boolean().optional(),
+  allowUnresolvedRefs: z.boolean().optional(),
 })
 
 export const actorType = z.enum(ACTOR_TYPES)

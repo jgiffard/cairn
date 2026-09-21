@@ -61,14 +61,18 @@ export const GET = route({
     try {
       if (taskPath) {
         const { rows, widened } = await searchTasks(actor.userId, q, { project, type, status }, limit)
-        await recordSearch(actor, q, ['task'], rows.length, widened)
-        return ok({ count: rows.length, query: q, widened, results: rows.map(taskResult) })
+        const results = rows.map(taskResult)
+        await recordSearch(actor, q, ['task'], rows.length, widened, results.map((r) => r.ref))
+        return ok({ count: rows.length, query: q, widened, results })
       }
 
       const { rows, widened } = await searchAll(actor.userId, q, { project, kinds }, limit)
-      await recordSearch(actor, q, kinds ?? null, rows.length, widened)
 
       const results = rows.map(unifiedResult)
+      // The refs exactly as the caller was handed them, in rank order. Recorded
+      // from the mapped results rather than the raw rows so what is stored is
+      // what the agent saw — an event nobody can replay measures nothing.
+      await recordSearch(actor, q, kinds ?? null, rows.length, widened, results.map((r) => r.ref))
       await markStaleKnowledge(actor.userId, results)
       return ok({ count: rows.length, query: q, widened, results })
     } catch (error) {

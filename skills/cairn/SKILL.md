@@ -1,6 +1,6 @@
 ---
 name: cairn
-description: Shared task tracker and memory for agents. Use BEFORE starting work on any subject to check what has already been done, tried, or debugged; and to file, claim, annotate, learn, checkpoint, and close tasks. Triggers on "have we done this before", "check if we fixed", "what did we try for", "create a task", "log this", "learn this", "checkpoint this", "what's the status of", "claim this task", "mark it done", "end the session".
+description: Shared task tracker and memory for agents. Use BEFORE starting work on any subject to check what has already been done, tried, or debugged; and to file, claim, annotate, learn, checkpoint, and close tasks. Triggers on "have we done this before", "check if we fixed", "what did we try for", "create a task", "log this", "learn this", "checkpoint this", "what's the status of", "claim this task", "mark it done", "end the session". Not for work already covered by a task you hold, a question answered by reading a file, or throwaway exploration that changes nothing: it is for durable work and durable answers, not for every request that has a verb in it.
 ---
 
 # Cairn
@@ -21,6 +21,49 @@ Requires `cairn` on PATH. Credentials come from `CAIRN_BASE_URL` / `CAIRN_API_KE
 `~/.cairn/env` if those are unset. Where a machine runs several runtimes there is a key
 each — `CAIRN_API_KEY_CLAUDE_CODE`, `CAIRN_API_KEY_CODEX` — and the CLI picks by runtime,
 because the key is what says who wrote a thing.
+
+## When not to reach for it
+
+Section 0 begins "for every non-trivial request", and the rest of this file is about the
+requests that are. This is the other half, because a tracker that fires on everything costs
+more than it records: a `check` before trivia, a task filed for something nobody will ever
+look up, and an agent narrating its own bookkeeping instead of doing the work.
+
+The test is durability, not size. A one-line fix that lands in the repo is durable work and
+gets a task; an afternoon of reading that changes nothing is not and does not.
+
+- **You already hold a task that covers it.** File the next step as a second task and the
+  board now claims two pieces of work where there is one. Note on the task you hold, or use
+  `--parent` when it is genuinely a separate piece. `add` warns you when similar work
+  already exists, and that warning is usually right.
+- **Another agent holds it.** A live claim in `check` is an answer, not an obstacle: pick
+  different work. Filing your own copy of their task is how one bug ends up with two
+  resolutions and a history split across both.
+- **The question is answered by reading a file.** What does this function do, is this flag
+  still used, which port does it bind — open the file. Cairn does not know what the code
+  says, only what happened to it. Section 1's *every time* is about starting work on a
+  subject, and a question a file answers outright is not one: the floor in section 0 for a
+  trivial read-only answer is a `check` and nothing else, and that is worth spending when the
+  subject has a past — a failure that recurs, a decision somebody already made, something
+  already tried. If you cannot tell which you have, it is the one with a past, and `check` is
+  one line.
+- **Throwaway exploration.** Getting your bearings in an unfamiliar codebase files nothing.
+  It stops being throwaway the moment you change something, or learn something that will
+  still be true next month — and the second one does not need a task to hang off, because
+  knowledge is bound to none.
+- **A fact that expires.** "The staging branch is three commits behind" is true until
+  somebody pushes. `learn` is for what will still be true next month; the rest is a note on
+  the task it came up in, or nothing.
+- **Narrating the bookkeeping.** Notes are attempts, findings, decisions and handoffs —
+  what the next agent would otherwise repeat. Not a running commentary on your own progress,
+  and not a report to the human of every `cairn` call you made along the way. `cairn comment`
+  exists for the times you really are addressing them.
+
+**A session that files nothing is not a failure.** Sessions are recorded by the runtime
+whether or not you write anything, so there is no gap to plug and nothing to prove. Filing a
+task to show you were here leaves a tracker that looks busy and answers nothing. The failure
+is the other way round: a session that changed something, decided something, or ruled
+something out, and left no trace of it.
 
 ## 0. Mandatory lifecycle — do not skip a gate
 
@@ -182,11 +225,15 @@ cairn release ACME-42
   which files and claims in one call. Filing and closing without claiming leaves the work
   invisible while it happens; on a machine running more than one agent that is exactly
   when a second one picks up the same thing.
-- **You do not have to remember.** A note or a checkpoint on an open task nobody holds
-  claims it for you, and says so in its reply. This exists because the rule above was
-  stated plainly for weeks and 36% of closed tasks were still never claimed — discipline
-  that costs nothing to skip gets skipped, so the ordinary path now produces the right
-  state. It never steals a live claim: noting on a colleague's task stays a note.
+- **You do not have to remember — if you checkpoint.** A checkpoint on an open task
+  nobody holds claims it for you, and says so in its reply; it is also something you were
+  going to write anyway. This exists because the rule above was stated plainly for weeks
+  and 36% of closed tasks were still never claimed — discipline that costs nothing to skip
+  gets skipped, so the ordinary path now produces the right state. **A note does not claim
+  it.** It tells you the task is open and unheld and leaves the decision to you, because
+  annotating is most of what reading a backlog is, and a `finding` written while merely
+  reading a task is not a claim to be working it. Neither one steals: a checkpoint on a
+  task somebody else holds is refused, and a note on it stays a note.
 - **Closing is still yours to do.** A resolution is refused unless the status is closing,
   because "here is how it ended" while the task stays open is a contradiction — and one
   that used to be accepted silently, leaving the task carrying an answered dot and

@@ -220,7 +220,8 @@ const positional = []
  * the help text is in this set. Add to both, or the test says so.
  */
 const KNOWN_FLAGS = new Set([
-  'agent', 'all', 'also-project', 'archived', 'body', 'branch', 'completed',
+  'agent', 'all', 'allow-dangling', 'also-project', 'archived', 'body',
+  'branch', 'completed',
   'confirm', 'cwd', 'dangling', 'description', 'dir', 'dry-run',
   'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'file', 'files',
   'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'hours', 'id',
@@ -256,6 +257,32 @@ for (let i = 0; i < argv.length; i += 1) {
 }
 
 const FORMAT = flags.json ? 'json' : flags.pretty ? 'pretty' : 'tsv'
+
+/**
+ * Every API response carries the version that served it. Compare it once, so a
+ * stale copy says so on the ordinary path.
+ *
+ * `cairn --version` has always been able to answer this, but it is the one
+ * command an agent has no reason to run: a drifted CLI goes on working, just
+ * not the way the docs say. The Mac's copy was found only because `cairn
+ * vitals` happened to come back "unknown command", after a day of writes under
+ * the wrong identity.
+ *
+ * stderr, never stdout — callers parse stdout, and a warning in it is a bug.
+ * Once per process, because the point is to be noticed, and a line repeated on
+ * every request is a line nobody reads.
+ */
+let warnedStale = false
+const warnIfStale = (res) => {
+  if (warnedStale) return
+  const served = res?.headers?.get?.('x-cairn-version')
+  if (!served || served === VERSION) return
+  warnedStale = true
+  process.stderr.write(
+    `cairn: this CLI is ${VERSION}, ${BASE} is ${served} — ` +
+      `run scripts/sync-agent-files.mjs, or copy cli/cairn.mjs over\n`,
+  )
+}
 
 /** `-` means read the value from stdin, so long markdown bodies stay off argv. */
 const readStdin = async () => {
@@ -621,6 +648,8 @@ const request = async (method, path, body, { soft = false } = {}) => {
     break
   }
 
+  warnIfStale(res)
+
   const text = await res.text()
   let payload
   try {
@@ -638,7 +667,18 @@ const request = async (method, path, body, { soft = false } = {}) => {
     // Surface the server's guidance verbatim — it names valid enum values and,
     // on a refused close, suggests a resolution. Swallowing that would turn a
     // useful round-trip into a wasted one.
-    const extra = payload.suggestedResolution
+    // A refused write names what it could not resolve. Printing only
+    // `error` would hand back "some references did not resolve" and drop the
+    // list of what they were and what the store actually calls them.
+    const refs = [
+      ...(payload.unresolvedReferences ?? []).map(
+        (r) => `  [[${r.ref ?? r}]]${r.suggestions?.length ? ` — did you mean ${r.suggestions.join(', ')}?` : ''}`,
+      ),
+      ...(payload.taskReferences ?? []).map((r) => `  [[${r}]] is a task ref — write it bare as ${String(r).toUpperCase()}`),
+    ]
+    const extra = refs.length
+      ? `\n${refs.join('\n')}`
+      : payload.suggestedResolution
       ? `\nsuggested: ${payload.suggestedResolution}`
       : payload.issues
         ? `\n${payload.issues
@@ -1140,6 +1180,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn context                  the briefing: what you hold, what is in flight,
                                    where the last session here stopped, what is known
     cairn learn "<title>" --body - record what we now know
+                                   --allow-dangling  keep a [[ref]] the store cannot resolve
                                    --project K  true of that project
                                    --entity E   true of that grouping (cairn entities)
                                    --global     true everywhere — say so on purpose
@@ -1798,9 +1839,22 @@ const commands = {
     if (flags.slug) payload.slug = flags.slug
     if (flags.task) payload.sourceTaskRef = flags.task
     if (flags.verified) payload.verified = true
+    // The write refuses a [[reference]] whose fact the store already holds
+    // under another slug, and names it. That refusal is the point, so this
+    // exists for the case it gets wrong — a genuinely new fact whose name
+    // happens to resemble an existing one — and not as the easy way past it.
+    if (flags['allow-dangling']) payload.allowUnresolvedRefs = true
 
     const result = await request('POST', '/api/v1/knowledge', payload)
     emit(result)
+
+    // A reference that resolved to nothing close is accepted, because two
+    // entries citing each other cannot both be written first. Accepted is not
+    // the same as unremarkable, so it is said — on stderr, where a warning
+    // belongs, rather than in the row a caller parses.
+    for (const warning of result?.warnings ?? []) {
+      process.stderr.write(`cairn: ${warning}\n`)
+    }
 
     // Say what was inferred. Silent correctness is still a surprise the next
     // time someone expects the old behaviour.
@@ -2225,6 +2279,21 @@ const commands = {
    * there are none, which is what makes it safe to run on a schedule.
    */
   async vitals() {
+    /**
+     * Whether agents use the memory was measured but only ever displayed in a
+     * browser, which is the one place the population it measures cannot look.
+     * `null` when the aggregate is unreadable — the monitor still answers.
+     */
+    const memoryLines = (m) => {
+      if (!m) return []
+      const out = [
+        `memory ${m.searches} searches (${m.widened} widened, ${m.zeroResults} empty), ` +
+          `${m.tasksFiledWithoutChecking} of ${m.tasksFiled} tasks filed without checking first`,
+      ]
+      for (const miss of m.recentMisses ?? []) out.push(`  asked for, not held: ${miss}`)
+      return out
+    }
+
     const hours = Number(flags.hours ?? 24)
     const data = await request('GET', `/api/v1/vitals?hours=${hours}`)
     const findings = data.findings ?? []
@@ -2239,7 +2308,8 @@ const commands = {
         findings.map((f) => `  [${f.severity}] ${f.message}`).join('\n') +
         `\n\nSessions ${data.sessions.recent} (${data.sessions.recentWithFiles} naming files), ` +
         `tasks ${data.tasks.opened} opened / ${data.tasks.closed} closed, ` +
-        `${data.tasks.stalled} stalled, ${data.autoReleased} claims auto-released.`
+        `${data.tasks.stalled} stalled, ${data.autoReleased} claims auto-released.` +
+        (memoryLines(data.memory).length ? `\n${memoryLines(data.memory).join('\n')}` : '')
       await request('POST', `/api/v1/tasks/${encodeURIComponent(flags.notify)}/notes`, {
         note,
         kind: 'finding',
@@ -2264,6 +2334,7 @@ const commands = {
               `${d.tasks.stalled} stalled, ${d.tasks.held} held`,
           )
           out.push(`claims auto-released ${d.autoReleased}, knowledge written ${d.knowledgeWritten}`)
+          out.push(...memoryLines(d.memory))
           for (const a of d.agents) out.push(`  ${a.agent}: ${a.recent} writes (week before ${a.baseline})`)
         }
         return out
