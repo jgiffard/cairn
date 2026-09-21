@@ -488,13 +488,15 @@ install -m 755 cli/cairn.mjs /usr/local/bin/cairn
 
 **One key per runtime, where a machine runs more than one.** The key *is* the identity —
 `actor_id` comes from the key, never from what the caller claims — so a single key shared
-by Claude Code, Codex and OpenClaw files all of their work under one name, and no agent
-can be held to its own behaviour. Add a key per runtime and the CLI picks the right one:
+by Claude Code, Codex, OpenClaw and Hermes Agent by Nous Research files all of their work
+under one name, and no agent can be held to its own behaviour. Add a key per runtime and the
+CLI picks the right one:
 
 ```bash
 CAIRN_API_KEY=sk_live_...              # the fallback, when nothing else matches
 CAIRN_API_KEY_CODEX=sk_live_...
 CAIRN_API_KEY_CLAUDE_CODE=sk_live_...
+CAIRN_API_KEY_HERMES=sk_live_...        # Hermes Agent by Nous Research
 ```
 
 It works out which runtime it is in from the environment, in this order, and
@@ -532,6 +534,8 @@ cp -r skills/cairn "$CLAWD_HOME"/skills/ # OpenClaw — its own tree, not a dotf
 
 ```bash
 node scripts/install-hooks.mjs        # --dry-run to see what it would write
+# For a classified local router instead of a global `cairn` executable:
+CAIRN_HOOK_CLI=/absolute/path/to/cairn-router node scripts/install-hooks.mjs
 ```
 
 It is idempotent: every entry it writes is tagged, so re-running after an upgrade replaces
@@ -541,11 +545,17 @@ its own and touches nobody else's. Coverage differs by runtime:
 |---|---|---|---|
 | Claude Code | `SessionStart` | `PreToolUse(Read)` | `SessionEnd` **and** `PreCompact` |
 | Codex | `SessionStart` | `PreToolUse(Read)` | `Stop` — there is no `SessionEnd` |
+| Hermes Agent by Nous Research | `pre_llm_call` on the first turn only | — | — — session recording is deliberately not installed |
 | OpenClaw | manual — push `cairn context` output into the existing `agent:bootstrap` hook | — | swept from disk on a schedule — it has no session event of any kind |
 
-All three lean on the same property: `cairn session end` upserts on (platform, id), so a
-session may be written as many times as you like and there is still one row, rewritten in
-place and a little richer each time.
+Hermes Agent by Nous Research **v0.21.3 or newer** requires hook consent on first use. The installer
+uses `hermes config get hooks --json` and `hermes config set --force hooks <json>` to preserve existing
+hooks and **never** auto-approves one; unattended environments must explicitly opt in through Hermes's
+own hook policy. If an installed Hermes Agent cannot provide those commands, the installer exits with
+an actionable error instead of claiming the runtime was merely skipped. Its `on_session_start` event
+cannot inject context, so the installer uses `pre_llm_call` and the Cairn hook emits a briefing only
+when `extra.is_first_turn` (or the compatible top-level `is_first_turn`) is true. It intentionally does
+not record transcripts or sessions.
 
 **Why Claude Code needs `PreCompact` as well as `SessionEnd`.** A session is recorded when
 it ends, and a session that runs for days does not end — it compacts. On the machine this

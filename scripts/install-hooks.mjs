@@ -119,6 +119,20 @@ const isMine = (hook) =>
   Boolean(hook?.[TAG]) ||
   (typeof hook?.command === 'string' && SCRIPT_NAMES.some((n) => hook.command.includes(n)))
 
+const isSafeHookCli = (value) => /^[A-Za-z0-9_./:+-]+$/.test(value)
+
+const canonicalHermesHooks = (hooks) =>
+  JSON.stringify(
+    Object.entries(hooks ?? {})
+      .map(([event, entries]) => [
+        event,
+        (Array.isArray(entries) ? entries : [])
+          .map((entry) => Object.entries(entry ?? {}).sort(([a], [b]) => (a < b ? -1 : 1)))
+          .sort(),
+      ])
+      .sort(),
+  )
+
 // --- Claude Code ------------------------------------------------------------
 
 /**
@@ -220,6 +234,62 @@ const installCodex = () => {
   }
 }
 
+// --- Hermes Agent by Nous Research ------------------------------------------
+
+/**
+ * Hermes Agent by Nous Research can return injected context only from
+ * pre_llm_call; on_session_start runs once but ignores hook output. The context
+ * hook checks extra.is_first_turn, making pre_llm_call a session briefing rather
+ * than a cache-breaking query on every turn.
+ *
+ * Hermes owns atomic config.yaml writes and hook consent. Merge through its CLI
+ * and never pre-approve a hook: interactive Hermes asks on first use, while
+ * unattended sessions require an explicit operator opt-in.
+ */
+const installHermes = () => {
+  let before
+  try {
+    const raw = execFileSync('hermes', ['config', 'get', 'hooks', '--json'], { encoding: 'utf8' }).trim()
+    before = raw ? JSON.parse(raw) : {}
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return log('  Hermes Agent by Nous Research: not installed — skipped')
+    }
+    console.error('  Hermes Agent by Nous Research: hooks configuration is unavailable; requires Hermes Agent by Nous Research v0.21.3 or newer with `hermes config get/set` support')
+    process.exitCode = 1
+    return
+  }
+  if (!before || Array.isArray(before) || typeof before !== 'object') {
+    console.error('  Hermes Agent by Nous Research: hooks configuration is not a mapping; requires Hermes Agent by Nous Research v0.21.3 or newer')
+    process.exitCode = 1
+    return
+  }
+
+  const hookCli = process.env.CAIRN_HOOK_CLI?.trim() || 'cairn'
+  if (!isSafeHookCli(hookCli)) {
+    return log('  Hermes Agent by Nous Research: CAIRN_HOOK_CLI must be one safe executable path — skipped')
+  }
+
+  const hooks = JSON.parse(JSON.stringify(before))
+  const command = `env CAIRN_AGENT=hermes CAIRN_PLATFORM=hermes CAIRN_CLI=${hookCli} node ${CONTEXT}`
+  const current = Array.isArray(hooks.pre_llm_call) ? hooks.pre_llm_call : []
+  hooks.pre_llm_call = [...current.filter((entry) => !isMine(entry)), { command, timeout: 10 }]
+
+  if (canonicalHermesHooks(before) === canonicalHermesHooks(hooks)) {
+    return log('  Hermes Agent by Nous Research: pre_llm_call — unchanged')
+  }
+  if (DRY) return log('  Hermes Agent by Nous Research: would configure pre_llm_call')
+
+  try {
+    execFileSync('hermes', ['config', 'set', '--force', 'hooks', JSON.stringify(hooks)], { stdio: 'inherit' })
+    log('  Hermes Agent by Nous Research: pre_llm_call (briefing on first turn)')
+    log('  Hermes Agent by Nous Research: approve the hook on first use; the installer never auto-accepts it')
+  } catch {
+    console.error('  Hermes Agent by Nous Research: could not update hooks configuration; requires Hermes Agent by Nous Research v0.21.3 or newer with `hermes config get/set` support')
+    process.exitCode = 1
+  }
+}
+
 // --- OpenClaw ---------------------------------------------------------------
 
 /**
@@ -240,10 +310,12 @@ const openclawNotes = () => {
 }
 
 const version = () => {
+  const cli = process.env.CAIRN_HOOK_CLI?.trim() || 'cairn'
+  if (!isSafeHookCli(cli)) return 'CAIRN_HOOK_CLI must be one safe executable path'
   try {
-    return execFileSync('cairn', ['--help'], { encoding: 'utf8' }).split('\n')[0]
+    return execFileSync(cli, ['--help'], { encoding: 'utf8' }).split('\n')[0]
   } catch {
-    return 'cairn CLI not on PATH — install it first'
+    return `${cli} CLI not on PATH — install it first`
   }
 }
 
@@ -252,4 +324,5 @@ log(`  ${version()}`)
 installScripts()
 installClaude()
 installCodex()
+installHermes()
 openclawNotes()
