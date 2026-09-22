@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { MoreHorizontal } from 'lucide-react'
 import { mutate } from '@/lib/api/mutate'
 import { useMutate } from '@/lib/api/use-mutate'
+import { ChangeKeyDialog, type RetiredKeyOwner } from '@/components/change-key-dialog'
 
 /**
  * Deleting a project takes every task in it. The confirmation asks for the
@@ -108,21 +109,28 @@ const DeleteDialog = ({
 }
 
 export const ProjectMenu = ({
+  projectId,
   projectKey,
   title,
   taskCount,
   archived,
+  liveKeys,
+  retired,
 }: {
+  projectId: string
   projectKey: string
   title: string
   taskCount: number
   archived: boolean
+  liveKeys: string[]
+  retired: RetiredKeyOwner[]
 }) => {
   const router = useRouter()
   const request = useMutate()
   const [open, setOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [changingKey, setChangingKey] = useState(false)
   const [draft, setDraft] = useState(title)
   const wrap = useRef<HTMLDivElement>(null)
 
@@ -214,6 +222,16 @@ export const ProjectMenu = ({
           </button>
           <button
             type="button"
+            onClick={() => {
+              setOpen(false)
+              setChangingKey(true)
+            }}
+            className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors"
+          >
+            Change key…
+          </button>
+          <button
+            type="button"
             onClick={() => void setStatus(archived ? 'active' : 'archived')}
             className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors"
           >
@@ -236,6 +254,23 @@ export const ProjectMenu = ({
           projectKey={projectKey}
           taskCount={taskCount}
           onClose={() => setConfirming(false)}
+        />
+      )}
+      {changingKey && (
+        <ChangeKeyDialog
+          project={{ id: projectId, key: projectKey, title }}
+          liveKeys={liveKeys}
+          retired={retired}
+          onClose={() => setChangingKey(false)}
+          onChanged={(key) => {
+            setChangingKey(false)
+            // This page's own address just became an old ref. Following it
+            // would work — it redirects — but would announce a rename the
+            // person made a second ago. Replace, then refresh so the sidebar's
+            // project list picks up the new key.
+            router.replace(`/projects/${key}`)
+            router.refresh()
+          }}
         />
       )}
     </div>

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { currentUser, listProjects } from '@/lib/data'
+import { currentUser, listFormerKeyRecords, listProjects } from '@/lib/data'
 import { admin } from '@/lib/db/client'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { LiveUpdates } from '@/components/live-updates'
@@ -18,7 +18,10 @@ const ProjectsPage = async () => {
   const user = await currentUser()
   if (!user) redirect('/login')
 
-  const projects = await listProjects(user.id, { includeArchived: true })
+  const [projects, formerKeys] = await Promise.all([
+    listProjects(user.id, { includeArchived: true }),
+    listFormerKeyRecords(),
+  ])
 
   // Live counts, not `task_counter`: that is the next number to issue, so a
   // project whose tasks were all deleted still reports the high-water mark.
@@ -44,6 +47,9 @@ const ProjectsPage = async () => {
     status: p.status,
     open: open.get(p.id) ?? 0,
     total: total.get(p.id) ?? 0,
+    formerKeys: formerKeys
+      .filter((row) => row.project_id === p.id)
+      .map(({ key, retired_at }) => ({ key, retired_at })),
   }))
 
   return (
@@ -62,7 +68,10 @@ const ProjectsPage = async () => {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[56rem] px-4 py-6 sm:px-6">
-          <ProjectsManager projects={rows} />
+          <ProjectsManager
+            projects={rows}
+            retired={formerKeys.map(({ key, project_id, current }) => ({ key, project_id, current }))}
+          />
         </div>
       </div>
     </div>

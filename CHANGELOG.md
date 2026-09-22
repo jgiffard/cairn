@@ -9,6 +9,36 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **The web app says when a project key changed** (CAIRN-264). CAIRN-125 made AC-113 keep
+  resolving after AC became HOL, and it did — silently, so someone holding AC-113 from a
+  commit message landed on a page reading HOL-113 with nothing to say it was the same task.
+  An old task address now redirects with a notice, *"AC-113 is now HOL-113 — project AC was
+  renamed HOL on 22 Sept 2026."*, and the marker it rides on is dropped from the address bar
+  so a copied link stays clean. `/projects/AC` was a 404 and now redirects the same way. The
+  projects list and the project header show `formerly AC · 22 Sept 2026`, and the activity
+  feed links a project event to its project instead of to nothing, with a sentence in place
+  of the blank title a key change used to render.
+
+- **A project key can be changed from the web app** (CAIRN-264). The API always could and
+  nothing else could, so the edit most in need of explaining was the one nobody saw
+  explained. *Change key…* in the project menu, and the key button on the projects page,
+  open a dialog that says the two things a reader cannot guess — old refs keep working, and
+  the old key is spent for good, because another project taking it would make its refs lead
+  to two tasks — and checks the API's rules while typing, including a key another project
+  retired. Creating a project refuses a retired key up front for the same reason, rather than
+  after the server does.
+
+### Fixed
+
+- **The "(was AC-n)" label no longer invents refs, and no longer hides** (CAIRN-264). It
+  claimed HOL-114 "was AC-114" although HOL-114 was filed after AC was retired, so that ref
+  never existed; it now only names keys retired after the task was created. It was also
+  hidden on a phone and whenever the task had an `external_ref` — which is every task in a
+  project imported from Linear, the case that exposed this — and is now shown on every width,
+  beside the imported ref rather than instead of it, with the rename and its date on hover.
+
 ## [0.6.0] — 2026-09-22
 
 ### Added

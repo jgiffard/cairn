@@ -1,7 +1,11 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
-import { currentUser, getProject, listTasks } from '@/lib/data'
+import {
+  currentUser, getProject, listFormerKeyRecords, listProjects, listTasks,
+} from '@/lib/data'
+import { projectRedirectNotice, renameLine, renamesOf } from '@/lib/project-rename'
+import { RedirectNotice } from '@/components/redirect-notice'
 import { entitiesForProject } from '@/lib/api/knowledge'
 import { ProjectIcon } from '@/components/icons'
 import { ViewSwitch } from './view-switch'
@@ -17,21 +21,40 @@ const ProjectPage = async ({
   searchParams,
 }: {
   params: Promise<{ key: string }>
-  searchParams: Promise<{ closed?: string }>
+  searchParams: Promise<{ closed?: string; from?: string }>
 }) => {
   const { key } = await params
-  const { closed } = await searchParams
+  const { closed, from } = await searchParams
   const user = await currentUser()
   if (!user) redirect('/login')
 
-  const project = await getProject(user.id, key)
-  if (!project) notFound()
+  const [project, formerKeys] = await Promise.all([
+    getProject(user.id, key),
+    listFormerKeyRecords(),
+  ])
+
+  // A retired key is an address somebody still has — in a bookmark, a note, a
+  // message from before the rename. It was a 404. Send it on, and say so.
+  if (!project) {
+    const retired = formerKeys.find((row) => row.key === key.toUpperCase() && row.current)
+    if (!retired) notFound()
+    const query = new URLSearchParams({ from: retired.key })
+    if (closed === '1') query.set('closed', '1')
+    redirect(`/projects/${retired.current}?${query}`)
+  }
 
   const includeClosed = closed === '1'
-  const [{ tasks, closedHidden, recentlyClosed }, entities] = await Promise.all([
+  const [{ tasks, closedHidden, recentlyClosed }, entities, allProjects] = await Promise.all([
     listTasks(project.id, { includeClosed }),
     entitiesForProject(user.id, project.key),
+    listProjects(user.id, { includeArchived: true }),
   ])
+
+  const renames = renamesOf(
+    formerKeys.filter((row) => row.project_id === project.id),
+    project.key,
+  )
+  const arrivedFrom = projectRedirectNotice(from, renames)
 
   return (
     <div className="flex h-dvh flex-col">
@@ -52,6 +75,14 @@ const ProjectPage = async ({
           <ProjectIcon size={13} projectKey={project.key} />
           <span className="truncate">{project.title}</span>
         </span>
+        {renames.length > 0 && (
+          <span
+            className="text-fg-subtle shrink-0 text-[0.6875rem]"
+            title={renames.map((r) => renameLine(r)).join('\n')}
+          >
+            formerly {renames.map((r) => r.from).join(', ')}
+          </span>
+        )}
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
         <span className="text-fg hidden text-[0.8125rem] sm:block">Tasks</span>
         {/* Which groupings this project belongs to, so "why am I seeing this
@@ -86,13 +117,18 @@ const ProjectPage = async ({
             </PendingLink>
           ) : null}
           <ProjectMenu
+            projectId={project.id}
             projectKey={project.key}
             title={project.title}
             taskCount={tasks.length + closedHidden}
             archived={project.status === 'archived'}
+            liveKeys={allProjects.map((p) => p.key)}
+            retired={formerKeys}
           />
         </div>
       </header>
+
+      <RedirectNotice message={arrivedFrom} className="mx-4 mt-3 shrink-0" />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <ViewSwitch tasks={tasks} recentlyClosed={recentlyClosed} projectKey={project.key} />

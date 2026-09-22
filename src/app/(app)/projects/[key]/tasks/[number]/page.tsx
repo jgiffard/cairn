@@ -18,28 +18,43 @@ import { AttachmentsPanel } from './attachments-panel'
 import { ActivityPanel } from './activity-panel'
 import { ChildrenPanel } from './children-panel'
 import { MobileNavButton } from '@/components/mobile-nav-context'
-import { formerKeysFor, listFormerKeys } from '@/lib/api/project-keys'
+import { RedirectNotice } from '@/components/redirect-notice'
+import { listFormerKeyRecords } from '@/lib/data'
+import { formerRefsOf, renameLine, renamesOf, taskRedirectNotice } from '@/lib/project-rename'
 
 export const dynamic = 'force-dynamic'
 
-const TaskPage = async ({ params }: { params: Promise<{ key: string; number: string }> }) => {
+const TaskPage = async ({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ key: string; number: string }>
+  searchParams: Promise<{ from?: string }>
+}) => {
   const { key, number } = await params
+  const { from } = await searchParams
   const user = await currentUser()
   if (!user) redirect('/login')
 
   const parsed = Number(number)
   if (!Number.isInteger(parsed)) notFound()
 
-  const task = await getTask(user.id, key, parsed)
+  const [task, formerKeys] = await Promise.all([
+    getTask(user.id, key, parsed),
+    listFormerKeyRecords(),
+  ])
 
   // The key may be one this project used to have. Refs escape into commit
   // messages and PR titles, which a rename cannot reach, so an old link lands
-  // on the task and the address bar corrects itself to the live ref.
+  // on the task and the address bar corrects itself to the live ref — saying
+  // so on arrival, through `from`, because a silent swap of AC-113 for
+  // HOL-113 leaves the reader unsure they found the same task.
   if (!task) {
-    const retired = (await listFormerKeys(user.id)).find(
-      (row) => row.key === key.toUpperCase() && row.current,
-    )
-    if (retired) redirect(`/projects/${retired.current}/tasks/${parsed}`)
+    const retired = formerKeys.find((row) => row.key === key.toUpperCase() && row.current)
+    if (retired) {
+      const was = `${retired.key}-${parsed}`
+      redirect(`/projects/${retired.current}/tasks/${parsed}?from=${encodeURIComponent(was)}`)
+    }
     notFound()
   }
 
@@ -63,12 +78,19 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
   // answer: the lookup would succeed and the screen would show CAI-42, so a
   // reader holding ACME-42 from a commit message still could not tell they had
   // found the right task. Showing both is what lets them connect it by eye.
-  const formerKeys = await formerKeysFor(user.id, task.project.id)
+  // Only keys retired after the task was filed: HOL-114 postdates AC, and a
+  // label saying it "was AC-114" names a ref that never existed.
+  const renames = renamesOf(
+    formerKeys.filter((row) => row.project_id === task.project.id),
+    task.project.key,
+  )
+  const formerRefs = formerRefsOf(renames, task)
 
   // The Cairn ref, never the imported one. Preferring external_ref showed a
   // migrated task as LEGACY-1234 — an identifier that resolves nowhere in this
   // system, on the page whose whole job is to tell you what you are looking at.
   const ref = `${task.project.key}-${task.number}`
+  const arrivedFrom = taskRedirectNotice(from, renames, { ...task, ref })
 
   return (
     <div className="flex h-dvh flex-col">
@@ -114,14 +136,22 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
             ({task.external_ref})
           </span>
         ) : null}
-        {formerKeys.length > 0 && !task.external_ref ? (
+        {/* Beside the imported ref, not instead of it — a project imported
+            from Linear and later renamed has both, and they answer different
+            questions. Shown on a phone too: an old ref arriving from a commit
+            message is no less confusing on a small screen. */}
+        {formerRefs.length > 0 ? (
           <span
-            className="text-fg-subtle hidden shrink-0 text-[0.6875rem] tabular sm:inline"
-            title={`This project was renamed. ${formerKeys
-              .map((k) => `${k}-${task.number}`)
-              .join(' and ')} still resolve${formerKeys.length === 1 ? 's' : ''} here.`}
+            className="text-fg-subtle min-w-0 shrink truncate text-[0.6875rem] tabular"
+            title={formerRefs
+              .map(({ ref: was, rename }) => `Was ${was} · ${renameLine(rename)}. ${was} still resolves here.`)
+              .join('\n')}
           >
-            (was {formerKeys.map((k) => `${k}-${task.number}`).join(', ')})
+            (was {formerRefs.map((r) => r.ref).join(', ')})
+            <span className="sr-only">
+              {' — '}
+              {formerRefs.map((r) => renameLine(r.rename)).join('; ')}
+            </span>
           </span>
         ) : null}
         <span className="text-fg hidden max-w-[38ch] truncate text-[0.8125rem] sm:block">
@@ -133,6 +163,8 @@ const TaskPage = async ({ params }: { params: Promise<{ key: string; number: str
         <div className="min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[51.25rem] px-4 py-6 sm:px-6 lg:px-8">
             <EditableTitle taskId={task.id} initial={task.title} />
+
+            <RedirectNotice message={arrivedFrom} />
 
             {/* First thing on the page when it applies: a reader who opens a
                 duplicate wants redirecting, not reading. */}
