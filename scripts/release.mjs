@@ -103,5 +103,5 @@ execFileSync('git', ['tag', '-a', `v${version}`, '--cleanup=verbatim', '-F', '-'
 process.stdout.write(
   `\ncommitted and tagged v${version}. Not pushed — review, then:\n` +
     `  git push origin main && git push origin v${version}\n` +
-    `  gh release create v${version} --notes-from-tag\n`,
+    `  git tag -l v${version} --format='%(contents:body)' | gh release create v${version} --title v${version} --notes-file -\n`,
 )
