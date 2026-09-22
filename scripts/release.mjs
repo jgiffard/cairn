@@ -56,10 +56,22 @@ if (!unreleased) die('no [Unreleased] section found in CHANGELOG.md')
 const body = unreleased[1].trim()
 if (!body) die('[Unreleased] is empty — nothing to release')
 
-const nextChangelog = changelog.replace(
-  /## \[Unreleased\]\n[\s\S]*?(?=\n## \[)/,
-  `## [Unreleased]\n\n## [${version}] — ${today}\n\n${body}\n`,
-)
+const unreleasedLink = new RegExp(`^\\[Unreleased\\]: (\\S+)/compare/v${current.replaceAll('.', '\\.')}\\.\\.\\.HEAD$`, 'm')
+const compareBase = unreleasedLink.exec(changelog)?.[1]
+if (!compareBase) die(`no "[Unreleased]: .../compare/v${current}...HEAD" link found in CHANGELOG.md`)
+
+const nextChangelog = changelog
+  .replace(
+    /## \[Unreleased\]\n[\s\S]*?(?=\n## \[)/,
+    `## [Unreleased]\n\n## [${version}] — ${today}\n\n${body}\n`,
+  )
+  .replace(
+    unreleasedLink,
+    `[Unreleased]: ${compareBase}/compare/v${version}...HEAD\n` +
+      `[${version}]: ${compareBase}/compare/v${current}...v${version}`,
+  )
+
+const tagMessage = `v${version}\n\n${body}\n\n**Full Changelog**: ${compareBase}/compare/v${current}...v${version}\n`
 
 // --- report, then act -------------------------------------------------------
 
@@ -86,7 +98,7 @@ writeFileSync('CHANGELOG.md', nextChangelog)
 
 execFileSync('git', ['add', 'package.json', 'cli/cairn.mjs', 'CHANGELOG.md'])
 execFileSync('git', ['commit', '-m', `release ${version}`])
-execFileSync('git', ['tag', '-a', `v${version}`, '-m', `v${version}`])
+execFileSync('git', ['tag', '-a', `v${version}`, '--cleanup=verbatim', '-F', '-'], { input: tagMessage })
 
 process.stdout.write(
   `\ncommitted and tagged v${version}. Not pushed — review, then:\n` +
