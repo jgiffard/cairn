@@ -4,6 +4,7 @@ import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { resolveProject } from '@/lib/api/project-keys'
 import { createTaskSchema, TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 
 export const dynamic = 'force-dynamic'
@@ -34,20 +35,14 @@ const listQuery = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 })
 
-/** Resolves a project by uuid or by its short key in the shared workspace. */
-const resolveProject = async (idOrKey: string) => {
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrKey)
-  const q = admin().from('projects').select('id, key')
-  const { data } = isUuid
-    ? await q.eq('id', idOrKey).maybeSingle()
-    : await q.eq('key', idOrKey.toUpperCase()).maybeSingle()
-  return data
-}
-
 export const GET = route<{ id: string }>({
   handler: async ({ actor, params, url }) => {
-    const project = await resolveProject(params.id)
-    if (!project) return fail('not_found', `No project ${params.id}.`)
+    // By uuid, live key, or a key the project used to have. `cairn list
+    // --project AC` said "No project AC." about a project that had only been
+    // renamed; it now lists HOL and says so in `renamed_from` (CAIRN-264).
+    const resolved = await resolveProject(params.id)
+    if (!resolved) return fail('not_found', `No project ${params.id}.`)
+    const { project, renamed } = resolved
 
     const parsed = listQuery.safeParse(Object.fromEntries(url.searchParams))
     if (!parsed.success) return fail('validation_failed', 'Bad query parameters.')
@@ -106,15 +101,16 @@ export const GET = route<{ id: string }>({
       .range(offset, offset + limit - 1)
 
     if (error) return failFromDb(error)
-    return ok({ count, offset, limit, tasks: data })
+    return ok({ count, offset, limit, tasks: data, ...(renamed ? { renamed_from: renamed } : {}) })
   },
 })
 
 export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
   schema: createTaskSchema,
   handler: async ({ actor, params, body }) => {
-    const project = await resolveProject(params.id)
-    if (!project) return fail('not_found', `No project ${params.id}.`)
+    const resolved = await resolveProject(params.id)
+    if (!resolved) return fail('not_found', `No project ${params.id}.`)
+    const { project, renamed } = resolved
 
     // A new task has no id yet, so it cannot be its own ancestor — the cycle
     // walk that re-parenting needs is unnecessary here.
@@ -155,6 +151,9 @@ export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
       data: { type: body.type, status: body.status },
     })
 
-    return ok({ ...data, ref: `${project.key}-${data.number}` }, { status: 201 })
+    return ok(
+      { ...data, ref: `${project.key}-${data.number}`, ...(renamed ? { renamed_from: renamed } : {}) },
+      { status: 201 },
+    )
   },
 })

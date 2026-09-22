@@ -6,6 +6,7 @@ import { recordSearch } from '@/lib/api/search-events'
 import { TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 import { admin } from '@/lib/db/client'
 import { stalenessFor } from '@/lib/api/staleness'
+import { liveProjectKey } from '@/lib/api/project-keys'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,7 +53,12 @@ export const GET = route({
     if (!parsed.success) {
       return fail('validation_failed', 'Provide ?q=<subject>.', { issues: parsed.error.issues })
     }
-    const { q, project, type, status, limit, kinds, tasksOnly } = parsed.data
+    const { q, type, status, limit, kinds, tasksOnly } = parsed.data
+    // `--project AC` searches the project AC became. Matched as a string it
+    // filtered on a key no row carries any more, and "nothing found — this
+    // subject looks new" is the most misleading thing check can say.
+    const { key: project, renamed } = await liveProjectKey(parsed.data.project)
+    const told = renamed ? { renamed_from: renamed } : {}
 
     // A type or status filter is a statement about tasks, so it selects the
     // task-only path rather than being silently ignored on the others.
@@ -63,7 +69,7 @@ export const GET = route({
         const { rows, widened } = await searchTasks(actor.userId, q, { project, type, status }, limit)
         const results = rows.map(taskResult)
         await recordSearch(actor, q, ['task'], rows.length, widened, results.map((r) => r.ref))
-        return ok({ count: rows.length, query: q, widened, results })
+        return ok({ count: rows.length, query: q, widened, results, ...told })
       }
 
       const { rows, widened } = await searchAll(actor.userId, q, { project, kinds }, limit)
@@ -74,7 +80,7 @@ export const GET = route({
       // what the agent saw — an event nobody can replay measures nothing.
       await recordSearch(actor, q, kinds ?? null, rows.length, widened, results.map((r) => r.ref))
       await markStaleKnowledge(actor.userId, results)
-      return ok({ count: rows.length, query: q, widened, results })
+      return ok({ count: rows.length, query: q, widened, results, ...told })
     } catch (error) {
       return fail('internal_error', error instanceof Error ? error.message : 'Search failed.')
     }
@@ -141,6 +147,7 @@ const taskResult = (row: SearchRow) => ({
   // Widened hits matched loosely; say so rather than implying precision.
   loose: row.widened,
   tokens: estimateTokens(row.description, row.resolution),
+  ...(row.renamed_from ? { requestedRef: row.requested_ref, renamedFrom: row.renamed_from } : {}),
 })
 
 const unifiedResult = (row: SearchAllRow) => ({
@@ -164,4 +171,6 @@ const unifiedResult = (row: SearchAllRow) => ({
    * confidence signal is worse than none, so it is the reader who decides.
    */
   stale: false,
+  // The exact-ref row only, when the ref went through a retired key.
+  ...(row.renamed_from ? { requestedRef: row.requested_ref, renamedFrom: row.renamed_from } : {}),
 })

@@ -1,4 +1,5 @@
 import { admin } from '@/lib/db/client'
+import { lookupFormerKey } from './project-keys'
 
 /**
  * Resolve project keys to ids for entity membership, saying which ones missed.
@@ -25,6 +26,19 @@ export const resolveProjectKeys = async (keys: string[]): Promise<ResolvedProjec
   if (error) return { ids: [], missing: [], error: error.message }
 
   const found = new Map((data ?? []).map((row) => [row.key as string, row.id as string]))
+
+  // A retired key names the project it became. Refusing it as "no such
+  // project" is the answer CAIRN-264 exists to end.
+  for (const key of wanted) {
+    if (found.has(key)) continue
+    try {
+      const former = await lookupFormerKey(key)
+      if (former) found.set(key, former.projectId)
+    } catch (lookupError) {
+      return { ids: [], missing: [], error: (lookupError as Error).message }
+    }
+  }
+
   return {
     ids: wanted.filter((key) => found.has(key)).map((key) => found.get(key) as string),
     missing: wanted.filter((key) => !found.has(key)),

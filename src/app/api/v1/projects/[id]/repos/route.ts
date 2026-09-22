@@ -4,18 +4,12 @@ import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
 import { normaliseRemote } from '@/lib/api/repos'
+import { resolveProject } from '@/lib/api/project-keys'
 
 export const dynamic = 'force-dynamic'
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-const resolve = async (idOrKey: string) => {
-  const q = admin().from('projects').select('id, key')
-  const { data } = UUID.test(idOrKey)
-    ? await q.eq('id', idOrKey).maybeSingle()
-    : await q.eq('key', idOrKey.toUpperCase()).maybeSingle()
-  return data
-}
+/** Through a retired key too, so `cairn map AC` claims the repo for HOL. */
+const resolve = async (idOrKey: string) => (await resolveProject(idOrKey))?.project ?? null
 
 const linkRepo = z.object({
   remote: z.string().min(1).max(500),

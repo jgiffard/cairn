@@ -6,20 +6,26 @@ import { admin } from '@/lib/db/client'
 import { recordActivity } from '@/lib/api/activity'
 import type { Actor } from '@/lib/api/auth'
 import { removeAttachments } from '@/lib/attachments'
+import { formerKeysByProject, resolveProject } from '@/lib/api/project-keys'
 
 export const dynamic = 'force-dynamic'
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-const resolve = async (_userId: string, idOrKey: string) => {
-  const q = admin()
-    .from('projects')
-    .select('id, key, title, description, status, task_counter')
-  const { data } = UUID.test(idOrKey)
-    ? await q.eq('id', idOrKey).maybeSingle()
-    : await q.eq('key', idOrKey.toUpperCase()).maybeSingle()
-  return data
+type ProjectRow = {
+  id: string
+  key: string
+  title: string
+  description: string | null
+  status: string
+  task_counter: number
 }
+
+/**
+ * By uuid, live key, or a key the project used to have. A retired key acts on
+ * the live project and says so in `renamed_from`, rather than answering "No
+ * project AC" about a project that was only renamed (CAIRN-264).
+ */
+const resolve = (idOrKey: string) =>
+  resolveProject<ProjectRow>(idOrKey, 'id, key, title, description, status, task_counter')
 
 const updateProject = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -30,15 +36,24 @@ const updateProject = z.object({
 
 export const GET = route<{ id: string }>({
   handler: async ({ actor, params }) => {
-    const project = await resolve(actor.userId, params.id)
-    if (!project) return fail('not_found', `No project ${params.id}.`)
+    const resolved = await resolve(params.id)
+    if (!resolved) return fail('not_found', `No project ${params.id}.`)
+    const { project, renamed } = resolved
 
-    const { count } = await admin()
-      .from('tasks')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', project.id)
+    const [{ count }, former] = await Promise.all([
+      admin()
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', project.id),
+      formerKeysByProject([project.id]),
+    ])
 
-    return ok({ ...project, task_count: count ?? 0 })
+    return ok({
+      ...project,
+      task_count: count ?? 0,
+      former_keys: former.get(project.id) ?? [],
+      ...(renamed ? { renamed_from: renamed } : {}),
+    })
   },
 })
 
@@ -84,8 +99,10 @@ const recordProjectChanges = async (
 export const PATCH = route<{ id: string }, z.infer<typeof updateProject>>({
   schema: updateProject,
   handler: async ({ actor, params, body }) => {
-    const project = await resolve(actor.userId, params.id)
-    if (!project) return fail('not_found', `No project ${params.id}.`)
+    const resolved = await resolve(params.id)
+    if (!resolved) return fail('not_found', `No project ${params.id}.`)
+    const { project, renamed: reachedThrough } = resolved
+    const told = reachedThrough ? { renamed_from: reachedThrough } : {}
     if (Object.keys(body).length === 0) {
       return fail('validation_failed', 'No fields to update.')
     }
@@ -98,9 +115,12 @@ export const PATCH = route<{ id: string }, z.infer<typeof updateProject>>({
     const renaming = key !== undefined && key !== project.key
 
     if (renaming) {
+      // Who did it is recorded on the former key itself, so "who renamed
+      // this" does not depend on an activity row surviving.
       const { error } = await admin().rpc('project_rename_key', {
         p_project: project.id,
         p_new_key: key,
+        p_actor: actor.actorId,
       })
       if (error) {
         return failFromDb(error, {
@@ -118,7 +138,7 @@ export const PATCH = route<{ id: string }, z.infer<typeof updateProject>>({
         .eq('id', project.id)
         .single()
       await recordProjectChanges(actor, project, body, renaming)
-      return ok({ ...(data as object), former_key: renaming ? project.key : undefined })
+      return ok({ ...(data as object), former_key: renaming ? project.key : undefined, ...told })
     }
 
     const { data, error } = await admin()
@@ -130,7 +150,7 @@ export const PATCH = route<{ id: string }, z.infer<typeof updateProject>>({
 
     if (error) return failFromDb(error)
     await recordProjectChanges(actor, project, body, renaming)
-    return ok({ ...(data as object), former_key: renaming ? project.key : undefined })
+    return ok({ ...(data as object), former_key: renaming ? project.key : undefined, ...told })
   },
 })
 
@@ -144,7 +164,10 @@ export const PATCH = route<{ id: string }, z.infer<typeof updateProject>>({
  */
 export const DELETE = route<{ id: string }>({
   handler: async ({ actor, params, url }) => {
-    const project = await resolve(actor.userId, params.id)
+    // Resolved through a retired key like everything else, but the
+    // confirmation below must still be the LIVE key: deleting a project is the
+    // one place where "AC" meaning "what AC became" should not be enough.
+    const project = (await resolve(params.id))?.project
     if (!project) return fail('not_found', `No project ${params.id}.`)
 
     const { count } = await admin()

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { activityFeed } from '@/lib/api/activity-feed'
+import { liveProjectKey } from '@/lib/api/project-keys'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +40,9 @@ export const GET = route({
       })
     }
 
-    const rows = await activityFeed(actor.userId, parsed.data)
+    // A retired key filters the project it became, and says so.
+    const { key: project, renamed } = await liveProjectKey(parsed.data.project)
+    const rows = await activityFeed(actor.userId, { ...parsed.data, project })
 
     return ok({
       count: rows.length,
@@ -47,6 +50,7 @@ export const GET = route({
       // has, so hand that back rather than making it dig for it.
       nextBefore: rows.length === parsed.data.limit ? rows.at(-1)?.at : null,
       results: rows,
+      ...(renamed ? { renamed_from: renamed } : {}),
     })
   },
 })

@@ -1,4 +1,5 @@
 import { admin } from '@/lib/db/client'
+import { resolveProject } from './project-keys'
 import type { Actor } from './auth'
 import { actorLabel } from './actor'
 import type { SessionUpsert } from '@/schemas/session'
@@ -43,15 +44,13 @@ export type SessionRow = {
   updated_at: string
 }
 
+/**
+ * Live or retired: a session recorded from a checkout still mapped to AC
+ * belongs to the project AC became, not to no project at all (CAIRN-264).
+ */
 const projectIdForKey = async (_userId: string, key?: string): Promise<string | null> => {
   if (!key) return null
-  const { data, error } = await admin()
-    .from('projects')
-    .select('id')
-    .eq('key', key.toUpperCase())
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  return (data?.id as string) ?? null
+  return (await resolveProject(key))?.project.id ?? null
 }
 
 /**

@@ -4,7 +4,8 @@ import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
 import { diffTaskEvents, recordActivity } from '@/lib/api/activity'
-import { findTask, resolveParent } from '@/lib/api/tasks'
+import { findTask, noSuchTaskMessage, renameFields, resolveParent, resolveTask } from '@/lib/api/tasks'
+import { formerKeysByProject, formerRefsOf, projectsForKeys, resolveProject } from '@/lib/api/project-keys'
 import { buildDigest } from '@/lib/api/digest'
 import { removeAttachments } from '@/lib/attachments'
 import { isTerminal, updateTaskSchema, RESOLUTION_KINDS } from '@/schemas/task'
@@ -12,26 +13,34 @@ import { isTerminal, updateTaskSchema, RESOLUTION_KINDS } from '@/schemas/task'
 export const dynamic = 'force-dynamic'
 
 /**
- * PostgREST rejects a malformed uuid in an `or` filter outright, so a project
- * *key* would break the lookup. Substituting a nil uuid keeps the clause
- * well-formed and simply never matches.
+ * One task, and — when the ref went through a key the project used to have —
+ * how it was reached.
+ *
+ * `requested_ref` and `renamed_from` appear only then. AC-113 answered with
+ * HOL-113 and nothing else, and an agent whose commit message said AC-113 had
+ * no way to tell it had the same task (CAIRN-264). `former_refs` lists the refs
+ * this task was actually issued under, which excludes keys retired before the
+ * task existed.
  */
-const UUID_OR_NULL = (value: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-    ? value
-    : '00000000-0000-0000-0000-000000000000'
-
 export const GET = route<{ ref: string }>({
   handler: async ({ actor, params, url }) => {
-    const task = await findTask(actor, params.ref)
-    if (!task) return fail('not_found', `No task ${params.ref}.`)
+    const resolved = await resolveTask(actor, params.ref)
+    const { task } = resolved
+    if (!task) return fail('not_found', noSuchTaskMessage(params.ref, resolved), renameFields(resolved))
+
+    const formerKeys = (await formerKeysByProject([String(task.project_id)])).get(String(task.project_id)) ?? []
+    const former_refs = formerRefsOf(
+      { number: task.number as number, created_at: task.created_at as string | null },
+      formerKeys,
+    )
+    const told = { ...renameFields(resolved), ...(former_refs.length > 0 ? { former_refs } : {}) }
 
     // `full` stays the default so nothing already calling this changes
     // behaviour. The CLI asks for the digest explicitly.
     if (url.searchParams.get('view') === 'digest') {
-      return ok(await buildDigest(task))
+      return ok({ ...(await buildDigest(task)), ...told })
     }
-    return ok(task)
+    return ok({ ...task, ...told })
   },
 })
 
@@ -189,11 +198,9 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
     // number comes from the target project's counter.
     let moved: { ref: string; from: string } | null = null
     if (body.project) {
-      const { data: target } = await admin()
-        .from('projects')
-        .select('id, key')
-        .or(`key.eq.${body.project.toUpperCase()},id.eq.${UUID_OR_NULL(body.project)}`)
-        .maybeSingle()
+      // Through a retired key too: moving work "to AC" means to the project
+      // AC became, not "no such project".
+      const target = (await resolveProject(body.project))?.project
 
       if (!target) return fail('not_found', `No project ${body.project}.`)
 
@@ -216,17 +223,14 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
     // a statement about where this work belongs, not an addition to it.
     let alsoProjects: string[] | null = null
     if (body.alsoProjects !== undefined) {
-      const keys = [...new Set((body.alsoProjects ?? []).map((k) => k.toUpperCase()))]
+      const requested = [...new Set((body.alsoProjects ?? []).map((k) => k.toUpperCase()))]
 
-      const { data: targets, error: lookupError } = await admin()
-        .from('projects')
-        .select('id, key')
-        .in('key', keys.length > 0 ? keys : ['\u0000'])
-      if (lookupError) return fail('internal_error', lookupError.message)
-
-      const found = new Map((targets ?? []).map((p) => [p.key as string, p.id as string]))
-      const missing = keys.filter((k) => !found.has(k))
+      // A retired key links the project it became, and is reported under its
+      // live key so the response does not repeat the old one back as current.
+      const { found, missing } = await projectsForKeys(requested)
       if (missing.length > 0) return fail('not_found', `No such project: ${missing.join(', ')}`)
+      const byLive = new Map([...found.values()].map((p) => [p.key, p.id]))
+      const keys = [...byLive.keys()]
 
       const { error: clearError } = await admin()
         .from('task_projects')
@@ -237,7 +241,7 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       if (keys.length > 0) {
         const { error: linkError } = await admin()
           .from('task_projects')
-          .insert(keys.map((k) => ({ task_id: task.id, project_id: found.get(k)! })))
+          .insert(keys.map((k) => ({ task_id: task.id, project_id: byLive.get(k)! })))
         if (linkError) {
           // The trigger refuses a link to the task's own home project, which
           // would list it twice in one place.

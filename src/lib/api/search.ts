@@ -1,5 +1,5 @@
 import { admin } from '@/lib/db/client'
-import { projectIdForFormerKey } from './project-keys'
+import { issuedUnderFormerKey, lookupFormerKey, type KeyRename } from './project-keys'
 
 /**
  * Query construction for prior-work discovery.
@@ -72,6 +72,9 @@ export type SearchRow = {
   rank: number
   coverage: number
   widened: boolean
+  /** Set only when the query was a ref through a retired key (CAIRN-264). */
+  requested_ref?: string
+  renamed_from?: KeyRename
 }
 
 /**
@@ -141,7 +144,11 @@ type ExactTask = {
   claimed_by: string | null
   external_ref: string | null
   updated_at: string
+  created_at?: string
   project: { key: string } | { key: string }[] | null
+  /** How the ref reached it, when that was through a retired key. */
+  requested_ref?: string
+  renamed_from?: KeyRename
 }
 
 const keyOfProject = (project: ExactTask['project']) =>
@@ -171,7 +178,7 @@ const tasksByNumber = async (
   return (data ?? []) as unknown as ExactTask[]
 }
 
-const taskByRef = async (userId: string, q: string): Promise<ExactTask | null> => {
+const taskByRef = async (_userId: string, q: string): Promise<ExactTask | null> => {
   const match = REF_QUERY.exec(q)
   if (!match?.[1] || !match[2]) return null
   const key = match[1].toUpperCase()
@@ -188,17 +195,25 @@ const taskByRef = async (userId: string, q: string): Promise<ExactTask | null> =
 
   if (data) return data as unknown as ExactTask
 
-  const projectId = await projectIdForFormerKey(userId, key)
-  if (!projectId) return null
+  const former = await lookupFormerKey(key)
+  if (!former) return null
 
   const { data: byFormer } = await admin()
     .from('tasks')
-    .select(columns)
-    .eq('project_id', projectId)
+    .select(`${columns}, created_at`)
+    .eq('project_id', former.projectId)
     .eq('number', number)
     .maybeSingle()
 
-  return (byFormer as unknown as ExactTask) ?? null
+  const task = (byFormer as unknown as ExactTask | null) ?? null
+  if (!task) return null
+  // HOL-114, filed after AC became HOL, was never AC-114. Answering the old
+  // spelling with it would invent a ref, so the exact path stays out of it and
+  // the ordinary search answers instead.
+  if (!issuedUnderFormerKey(former.rename, task.created_at)) return null
+  // Said, not just done: the caller asked for AC-113 and is handed HOL-113,
+  // and without this cannot tell it is the same task.
+  return { ...task, requested_ref: `${key}-${number}`, renamed_from: former.rename }
 }
 
 const asSearchAllRow = (task: ExactTask): SearchAllRow => ({
@@ -216,6 +231,7 @@ const asSearchAllRow = (task: ExactTask): SearchAllRow => ({
   // Above every ranked hit on purpose: an exact address outranks a mention.
   rank: Number.POSITIVE_INFINITY,
   widened: false,
+  ...(task.renamed_from ? { requested_ref: task.requested_ref, renamed_from: task.renamed_from } : {}),
 })
 
 export const searchTasks = async (
@@ -272,6 +288,7 @@ export const searchTasks = async (
     rank: Number.POSITIVE_INFINITY,
     coverage: 1,
     widened: false,
+    ...(task.renamed_from ? { requested_ref: task.requested_ref, renamed_from: task.renamed_from } : {}),
   }))
 
   const headIds = new Set(heads.map((h) => h.id))
@@ -302,6 +319,8 @@ export type SearchAllRow = {
   body_bytes: number
   rank: number
   widened: boolean
+  requested_ref?: string
+  renamed_from?: KeyRename
 }
 
 export const searchAll = async (

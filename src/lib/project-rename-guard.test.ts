@@ -27,7 +27,7 @@ describe('renaming a project key keeps old refs working', () => {
   })
 
   it('resolves a ref through a retired key when the live key misses', () => {
-    expect(read('src/lib/api/tasks.ts')).toContain('projectIdForFormerKey')
+    expect(read('src/lib/api/tasks.ts')).toContain('lookupFormerKey')
   })
 
   it('still linkifies refs written under a retired key', () => {
@@ -59,5 +59,72 @@ describe('renaming a project key keeps old refs working', () => {
     expect(migration).toContain('guard_project_key_namespace')
     expect(migration).toContain('projects_key_namespace_guard')
     expect(migration).toContain('former_keys_namespace_guard')
+  })
+
+  it('records who renamed it, through the rename function', () => {
+    // The actor lived only in the activity event; 057 puts it on the former
+    // key itself, and only if the route passes it.
+    expect(read('src/app/api/v1/projects/[id]/route.ts')).toMatch(/p_actor:\s*actor\.actorId/)
+  })
+})
+
+/**
+ * Resolving an old ref silently was half of CAIRN-264. AC became HOL and every
+ * surface kept working while none of them said so: `show AC-113` returned
+ * HOL-113 with no explanation, and `next --project AC` answered "nothing open"
+ * about a project with open work, because it matched the key as a string.
+ */
+describe('a rename is told, not only resolved', () => {
+  it('a task reached through a retired key says how it was reached', () => {
+    const route = read('src/app/api/v1/tasks/[ref]/route.ts')
+    expect(route).toContain('resolveTask')
+    expect(route).toContain('renameFields')
+    expect(read('src/lib/api/tasks.ts')).toMatch(/requested_ref:.*renamed_from:/)
+  })
+
+  it('the exact-ref search path carries the rename onto its row', () => {
+    const search = read('src/lib/api/search.ts')
+    expect(search).toContain('renamed_from: former.rename')
+    expect(search).toContain('issuedUnderFormerKey')
+  })
+
+  // Every route that turns a project KEY into a project. A new one that matches
+  // the key as a string brings back "No project AC" — or worse, an empty answer.
+  it.each([
+    'src/app/api/v1/projects/[id]/route.ts',
+    'src/app/api/v1/projects/[id]/tasks/route.ts',
+    'src/app/api/v1/projects/[id]/repos/route.ts',
+    'src/app/api/v1/next/route.ts',
+  ])('%s resolves through resolveProject', (path) => {
+    const source = read(path)
+    expect(source).toContain('resolveProject')
+    expect(source).not.toMatch(/\.eq\('key', idOrKey/)
+    expect(source).not.toMatch(/eq\('projects\.key', query\.project/)
+  })
+
+  it.each([
+    'src/app/api/v1/search/route.ts',
+    'src/app/api/v1/activity/route.ts',
+    'src/app/api/v1/knowledge/route.ts',
+    'src/app/api/v1/events/route.ts',
+    'src/lib/api/context.ts',
+  ])('%s normalises a --project filter to the live key', (path) => {
+    expect(read(path)).toContain('liveProjectKey')
+  })
+
+  it('never claims a former ref for a task created after the rename', () => {
+    const keys = read('src/lib/api/project-keys.ts')
+    expect(keys).toMatch(/export const formerRefsOf/)
+    expect(keys).toMatch(/Date\.parse\(former\.retired_at\) > created/)
+  })
+
+  it('titles rename rows in the feed by transforming the installed function', () => {
+    // Re-copying activity_feed from an older file would revert everything
+    // since — the failure 050 made with cairn_vitals.
+    const migration = read('migrations/057_project_renames_are_told.sql')
+    expect(migration).toContain("pg_get_functiondef(fn)")
+    expect(migration).not.toMatch(/create or replace function (public\.)?activity_feed/i)
+    expect(migration).not.toMatch(/create or replace function (public\.)?project_rename_key/i)
+    expect(migration).toContain("''project_key_changed'', ''project_renamed''")
   })
 })

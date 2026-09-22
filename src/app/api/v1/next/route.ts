@@ -3,6 +3,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
 import { rankNext, type Candidate } from '@/lib/api/next'
+import { resolveProject } from '@/lib/api/project-keys'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,6 +48,15 @@ export const GET = route({
     }
     const query = parsed.data
 
+    // Resolved before filtering, never matched as a string. `--project AC`
+    // after AC became HOL filtered on a key no row carries any more and
+    // answered "nothing open" about a project with open work — an answer that
+    // reads as true (CAIRN-264). A key that was never anyone's is refused for
+    // the same reason: "nothing open" is not what a typo deserves.
+    const resolved = query.project ? await resolveProject(query.project) : null
+    if (query.project && !resolved) return fail('not_found', `No project ${query.project}.`)
+    const projectKey = resolved?.project.key
+
     const base = admin()
       .from('tasks')
       .select(
@@ -56,10 +66,7 @@ export const GET = route({
       .not('status', 'in', '("done","cancelled")')
       .neq('projects.status', 'archived')
 
-    const { data } = await (query.project
-      ? base.eq('projects.key', query.project.toUpperCase())
-      : base
-    )
+    const { data } = await (projectKey ? base.eq('projects.key', projectKey) : base)
       .order('updated_at', { ascending: true })
       .limit(500)
 
@@ -106,6 +113,7 @@ export const GET = route({
       then: ranked.slice(1, query.limit ?? 5),
       considered: candidates.length,
       offerable: ranked.length,
+      ...(resolved?.renamed ? { renamed_from: resolved.renamed } : {}),
     })
   },
 })

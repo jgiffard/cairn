@@ -9,6 +9,7 @@ import {
   referenceWarnings,
 } from '@/lib/api/knowledge-graph'
 import { knowledgeCreate, slugify } from '@/schemas/knowledge'
+import { liveProjectKey } from '@/lib/api/project-keys'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,10 @@ export const GET = route({
     const parsed = listQuery.safeParse(Object.fromEntries(url.searchParams))
     if (!parsed.success) return fail('validation_failed', 'Bad filters.', { issues: parsed.error.issues })
 
-    const { project, entity, label, superseded, limit } = parsed.data
+    const { entity, label, superseded, limit } = parsed.data
+    // Normalised here so every scope below — the project's own rows AND the
+    // entities it belongs to — is looked up under the key the project has now.
+    const { key: project, renamed } = await liveProjectKey(parsed.data.project)
 
     // Naming an unknown project is the caller's mistake, not a server fault.
     // Left to the shared handler it became "Something went wrong." and was
@@ -71,6 +75,7 @@ export const GET = route({
         updatedAt: r.updated_at,
         tokens: Math.ceil((r.body?.length ?? 0) / 4),
       })),
+      ...(renamed ? { renamed_from: renamed } : {}),
     })
   },
 })

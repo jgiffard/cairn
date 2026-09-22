@@ -4,6 +4,7 @@ import { listKnowledge } from './knowledge'
 import { stalenessFor } from './staleness'
 import { contextForFile, type FileContext } from './files'
 import { normaliseRemote, projectKeyFromEmbed, projectKeyFromRepoRows, type RepoRow } from './repos'
+import { formerKeysByProject, formerRefsOf, liveProjectKey, type FormerKey, type KeyRename } from './project-keys'
 
 /**
  * The briefing a session opens with.
@@ -28,6 +29,12 @@ const QUIET_HOURS = 24
 
 export type ContextPayload = {
   project: string | null
+  /**
+   * Set when the project asked for is a key it used to have — typically a
+   * checkout mapped before the rename. The briefing answers for the live
+   * project and says so, instead of briefing on nothing (CAIRN-264).
+   */
+  projectRenamed?: KeyRename
   held: {
     ref: string
     title: string
@@ -35,6 +42,13 @@ export type ContextPayload = {
     claimedAt: string | null
     lastNoteAt: string | null
     quiet: boolean
+    /**
+     * The refs this task had before a RECENT rename of its project, so an
+     * agent that wrote AC-113 in its notes yesterday recognises HOL-113 today.
+     * Only keys retired after the task existed, and only within
+     * RECENT_RENAME_DAYS — past that the old ref is history, not news.
+     */
+    was?: string[]
   }[]
   inFlight: {
     ref: string
@@ -65,6 +79,28 @@ export type ContextPayload = {
 const TASK_SELECT =
   'id, number, title, status, claimed_by, claimed_at, heartbeat_at, updated_at, ' +
   'project:projects!project_id!inner(key)'
+
+/** Held tasks also carry what a recent rename is measured against. */
+const HELD_SELECT = `${TASK_SELECT}, project_id, created_at`
+
+/** How long a key change stays worth mentioning beside a held ref. */
+export const RECENT_RENAME_DAYS = 30
+
+/**
+ * The former refs worth showing beside a held task: keys retired after the
+ * task was created (earlier ones never named it) and within the window.
+ */
+export const recentFormerRefs = (
+  task: { number: number; created_at?: string | null },
+  formerKeys: Pick<FormerKey, 'key' | 'retired_at'>[],
+  now = Date.now(),
+): string[] =>
+  formerRefsOf(
+    task,
+    formerKeys.filter(
+      (former) => now - Date.parse(former.retired_at) <= RECENT_RENAME_DAYS * 86_400_000,
+    ),
+  )
 
 type TaskRow = {
   id: string
@@ -133,8 +169,12 @@ export const buildContext = async (
   actor: Actor,
   input: { cwd?: string; project?: string; file?: string; repo?: string },
 ): Promise<ContextPayload> => {
+  // A key given explicitly may be one the project no longer has — every
+  // checkout mapped before a rename sends it — so it is resolved to the live
+  // key rather than matched as a string that no row carries any more.
+  const asked = input.project ? await liveProjectKey(input.project) : null
   const project =
-    input.project?.toUpperCase() ??
+    asked?.key ??
     (input.repo ? await projectForRepo(actor.userId, input.repo) : null) ??
     (input.cwd ? await projectForCwd(actor.userId, input.cwd) : null)
 
@@ -143,14 +183,17 @@ export const buildContext = async (
   if (actor.actorId) {
     const { data, error } = await admin()
       .from('tasks')
-      .select(TASK_SELECT)
+      .select(HELD_SELECT)
       .eq('claimed_by', actor.actorId)
       .order('claimed_at', { ascending: true })
       .limit(10)
     if (error) throw new Error(error.message)
 
-    const rows = (data ?? []) as unknown as TaskRow[]
-    const lastNotes = await lastNoteTimes(rows.map((r) => r.id))
+    const rows = (data ?? []) as unknown as (TaskRow & { project_id: string; created_at: string | null })[]
+    const [lastNotes, formerKeys] = await Promise.all([
+      lastNoteTimes(rows.map((r) => r.id)),
+      formerKeysByProject([...new Set(rows.map((r) => r.project_id))]),
+    ])
 
     for (const row of rows) {
       const lastNoteAt = lastNotes.get(row.id) ?? null
@@ -158,6 +201,7 @@ export const buildContext = async (
       const quiet = Boolean(
         since && Date.now() - new Date(since).getTime() > QUIET_HOURS * 3_600_000,
       )
+      const was = recentFormerRefs(row, formerKeys.get(row.project_id) ?? [])
       held.push({
         ref: refOf(row),
         title: row.title,
@@ -165,6 +209,7 @@ export const buildContext = async (
         claimedAt: row.claimed_at,
         lastNoteAt,
         quiet,
+        ...(was.length > 0 ? { was } : {}),
       })
     }
   }
@@ -272,7 +317,16 @@ export const buildContext = async (
 
   const file = input.file ? await contextForFile(actor.userId, input.file) : undefined
 
-  return { project, held, inFlight, lastSession, knowledge, staleClaims, file }
+  return {
+    project,
+    ...(asked?.renamed ? { projectRenamed: asked.renamed } : {}),
+    held,
+    inFlight,
+    lastSession,
+    knowledge,
+    staleClaims,
+    file,
+  }
 }
 
 const lastNoteTimes = async (taskIds: string[]): Promise<Map<string, string>> => {
