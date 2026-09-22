@@ -9,6 +9,75 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **A project key rename is told, not only resolved** (CAIRN-264). AC was renamed HOL and
+  ACC HOLC on 2026-09-22. CAIRN-125 had already made the old refs resolve, and they did —
+  which is the problem: `cairn show AC-113` printed HOL-113 and said nothing, so an agent
+  whose commit message said AC-113 could not tell it had the same task. Anything reached
+  through a retired key now says how. `GET /tasks/{ref}` adds `requested_ref` and
+  `renamed_from: { key, to, at, by }`; the CLI prints `AC-113 is now HOL-113 — project AC
+  was renamed HOL on 2026-09-22` on stderr before the task, and `cairn check "AC-113"`
+  does the same for its exact-ref hit (`requestedRef`/`renamedFrom` on that row). A current
+  ref changes nothing. The MCP facade now returns the CLI's stderr ahead of its stdout, so
+  an MCP caller is told too — it used to get stdout alone, and with it none of what the CLI
+  says *about* an answer.
+
+- **`cairn project rekey <KEY> <NEW>`**, also spelled `cairn project rename <KEY> --key
+  <NEW>` as `entities rename` does (CAIRN-264). The API has always accepted a key change and
+  the CLI never offered one, so the one rename that rewrites every ref was the one only
+  reachable by a hand-written PATCH. It prints what it did, and that the old refs keep
+  resolving and the old key cannot go to another project.
+
+- **Former keys are listed** (CAIRN-264). `GET /projects` and `/projects/{key}` carry
+  `former_keys: [{ key, retired_at, retired_by, new_key }]`, and `cairn projects` shows them
+  in a `was` column. It is the last column on purpose: `cairn projects` is parsed by header
+  (trig's connector reads it), and a column appended at the end is one no reader sees move.
+
+- **The briefing names a held task by the ref it had, for a month after a rename**
+  (CAIRN-264): `HOL-113 (was AC-113)`, only for keys retired after the task was filed and
+  within 30 days. A checkout still mapped to the old key gets a line saying so, and
+  `cairn map` warns about every mapping that names a retired key and what to map instead.
+
+- **Who retired a key, and what it became** (CAIRN-264, migration 057).
+  `project_former_keys` gains `retired_by` and `new_key`, which `project_rename_key` fills
+  from now on; until now the actor lived only in the activity event, and for a project
+  renamed twice nothing said that AC had become HOL rather than today's key. Backfilled from
+  the `project_key_changed` events where they exist, and `new_key` from the order of
+  retirements where they do not; `retired_by` is left empty rather than guessed. Both
+  functions 057 touches are edited from their installed definitions, not re-copied — see
+  `never-rebuild-a-sql-function-by-copying-an-older-migration-s-body`.
+
+### Fixed
+
+- **`--project <retired key>` answers for the project it became** (CAIRN-264). Every place
+  that turned a key into a project matched it as a string, so after AC became HOL, `cairn
+  list --project AC` said "No project AC." and `cairn next --project AC` said "nothing open"
+  about a project with open work — the second one reading as true. One resolver
+  (`resolveProject`, `liveProjectKey` in `src/lib/api/project-keys.ts`) now backs the
+  project routes, task list and create, repos (`cairn map`), `next`, `context`, `search`,
+  `activity`, `knowledge`, `sessions`, the live-update stream, moving a task, `alsoProjects`
+  and entity membership. Each answers for the live project and carries `renamed_from`, and
+  the CLI prints `note: project AC is now HOL` once on stderr.
+
+- **Project renames have a title in the activity feed** (CAIRN-264, migration 057).
+  `project_key_changed` and `project_renamed` were recorded with their actor and from/to and
+  rendered blank, because `activity_feed` titled events from `data.title` and `data.key`
+  only. They now read `AC → HOL` and `A2A comms → Holloway`, with the project's live key as
+  `project_key` and `ref` to link through.
+
+- **An old ref is never claimed for a task filed after the rename** (CAIRN-264). HOL-114
+  was filed after AC became HOL, and the task page said it had been AC-114 — a ref nobody
+  ever wrote down. `GET /tasks/{ref}` now carries `former_refs`, which only lists keys
+  retired after the task was created, and `AC-114` is a 404 that says `AC-114 was never
+  issued. Did you mean HOL-114?` rather than silently answering with a task it never named.
+
+### Changed
+
+- **`GET /next?project=` with a key that names no project is a 404** instead of "nothing
+  open" (CAIRN-264). Silence was the answer for a typo and for a renamed project alike, and
+  it read as true for both.
+
 ## [0.6.0] — 2026-09-22
 
 ### Added

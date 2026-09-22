@@ -395,6 +395,7 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn reconcile` | Release your own claims that went quiet |
 | `cairn vitals [--all]` | Is the memory still being written — counts against the week before, and what looks wrong. `--all` adds whether it is being *read*: searches, how many widened or came back empty, tasks filed without checking first, and `asked for, not held: <slug>` for each recent miss |
 | `cairn project rename\|archive\|restore\|delete <KEY>` | Deleting takes every task with it, and demands `--confirm <KEY>` |
+| `cairn project rekey <KEY> <NEW>` · `cairn project rename <KEY> --key <NEW>` | Change the key. Every ref is renumbered under the new key, the old refs keep resolving, and the old key cannot be given to another project. Anything reached through a retired key says so — `AC-113 is now HOL-113`, `note: project AC is now HOL` — on stderr, and as `requested_ref` / `renamed_from` in the JSON. `cairn projects` lists former keys in a trailing `was` column |
 | `cairn replay` | Send writes put aside while the server was unreachable. Rarely needed by hand — any successful write drains the queue |
 | `cairn map <KEY>` | Tell Cairn which project this checkout is. Validates the key, and claims the repository so every other clone and worktree resolves too. `cairn map none` releases both |
 

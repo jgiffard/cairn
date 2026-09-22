@@ -500,6 +500,11 @@ Leaving them is how a tracker fills with work that looks live and is not.
 briefing project-aware. Do it once per repository — it claims the repo, so a second clone
 and a `git worktree` resolve without being mapped again.
 
+A project's key can change (`cairn project rekey AC HOL`). Old refs and `--project AC`
+keep working, and every answer reached that way says so: `AC-113 is now HOL-113 — project
+AC was renamed HOL on …`. When you see that, write the new ref from then on, and run
+`cairn map HOL` if the briefing or `cairn map` says this checkout is still mapped to AC.
+
 ### Which one to pick up
 
 ```bash
