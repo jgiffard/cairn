@@ -376,6 +376,38 @@ const warnIfStale = (res) => {
   )
 }
 
+/**
+ * A rename, said out loud (CAIRN-264).
+ *
+ * AC was renamed HOL. Every old ref and `--project AC` went on resolving, and
+ * nothing said why the answer came back as HOL — so an agent whose notes said
+ * AC-113 could not tell it had the same task, and one filtering on AC could not
+ * tell a renamed project from an empty one. The server now reports how it got
+ * there (`requested_ref`, `renamed_from`); this says so.
+ *
+ * stderr, like every other advisory here: stdout is parsed, and the same facts
+ * are in it already as fields for anything that parses. Once per key per
+ * process, because a batch touching forty old refs needs telling once.
+ */
+const renameDay = (at) => (typeof at === 'string' ? at.slice(0, 10) : '?')
+
+const renameLine = (requested, rename, ref) => {
+  const by = rename.by ? ` by ${rename.by}` : ''
+  if (requested && ref && requested !== ref) {
+    return `${requested} is now ${ref} — project ${rename.key} was renamed ${rename.to} on ${renameDay(rename.at)}${by}. ${requested} still resolves; write ${ref}.`
+  }
+  return `note: project ${rename.key} is now ${rename.to} — renamed on ${renameDay(rename.at)}${by}. ${rename.key} still resolves; write ${rename.to}.`
+}
+
+const toldRenames = new Set()
+const tellRename = (requested, rename, ref) => {
+  if (!rename?.key || !rename?.to) return
+  const id = `${requested ?? ''}|${rename.key}`
+  if (toldRenames.has(id)) return
+  toldRenames.add(id)
+  process.stderr.write(`${renameLine(requested, rename, ref)}\n`)
+}
+
 /** `-` means read the value from stdin, so long markdown bodies stay off argv. */
 const readStdin = async () => {
   const chunks = []
@@ -791,6 +823,13 @@ const request = async (method, path, body, { soft = false } = {}) => {
     die(`${payload.error}${extra}`, payload.code === 'already_claimed' ? 9 : 1)
   }
 
+  // Any response reached through a retired key says so here, once, rather than
+  // each verb remembering to — the gap CAIRN-264 was, verb by verb.
+  const told = payload.data
+  if (told && typeof told === 'object' && !Array.isArray(told) && told.renamed_from) {
+    tellRename(told.requested_ref, told.renamed_from, refOfTask(told))
+  }
+
   // Recorded here rather than at each call site: one place that already knows
   // the method, the path and that the server said yes.
   if (method !== 'GET') {
@@ -1061,6 +1100,39 @@ const rememberWrite = (method, path, data) => {
   }
 }
 
+/** HOL-113 from a full task row or a digest, whichever this is. */
+const refOfTask = (data) => {
+  if (typeof data?.ref === 'string') return data.ref
+  const key = data?.project?.key ?? data?.projects?.key
+  return key && data?.number !== undefined ? `${key}-${data.number}` : undefined
+}
+
+/**
+ * Mappings that name a key the project no longer has.
+ *
+ * They keep working — the server resolves a retired key — but every briefing
+ * and `next` from that directory then goes through the old name, and an agent
+ * reading "[AC]" files new work under a key that no longer exists as far as
+ * anyone else can see (CAIRN-264). One soft call, so an older server or a
+ * network failure leaves `cairn map` exactly as it was.
+ */
+const warnRetiredMappings = async (map) => {
+  const keys = new Set(Object.values(map))
+  if (keys.size === 0) return
+  const projects = await request('GET', '/api/v1/projects?archived=1', undefined, { soft: true })
+  if (!Array.isArray(projects)) return
+  const liveFor = new Map()
+  for (const p of projects) for (const f of p.former_keys ?? []) liveFor.set(f.key, { to: p.key, at: f.retired_at })
+  for (const [path, k] of Object.entries(map)) {
+    const now = liveFor.get(k)
+    if (!now) continue
+    process.stderr.write(
+      `warning: ${path} is mapped to ${k}, which was renamed ${now.to} on ${renameDay(now.at)}. ` +
+        `It still resolves; run \`cairn map ${now.to}\` there to update it.\n`,
+    )
+  }
+}
+
 const readProjectMap = () => {
   try {
     return JSON.parse(readFileSync(PROJECT_MAP_PATH, 'utf8'))
@@ -1148,11 +1220,25 @@ const renderContext = (d, { fileOnly = false } = {}) => {
   const where = d.project ? `[${d.project}]` : '[unfiled]'
   out.push(`## Cairn ${where}`)
 
+  // This checkout is mapped to a key the project no longer has. The briefing
+  // is for the live project either way; saying so is what stops the next agent
+  // filing "AC-…" refs into its notes for another month.
+  if (d.projectRenamed) {
+    const r = d.projectRenamed
+    out.push(
+      `  ${r.key} was renamed ${r.to} on ${renameDay(r.at)} -- ${r.key}-n refs still resolve; ` +
+        `write ${r.to}-n, and run \`cairn map ${r.to}\` here to update this checkout.`,
+    )
+  }
+
   if (d.held?.length) {
     out.push('', 'You are holding:')
     for (const t of d.held) {
       const quiet = t.quiet ? '  <- no note in 24h; checkpoint or release it' : ''
-      out.push(`  ${t.ref}  ${t.status}  ${truncate(t.title, 58)}${quiet}`)
+      // A recent rename, beside the ref it changed: the agent that wrote
+      // AC-113 in yesterday's notes must recognise HOL-113 as the same task.
+      const was = t.was?.length ? ` (was ${t.was.join(', ')})` : ''
+      out.push(`  ${t.ref}${was}  ${t.status}  ${truncate(t.title, 58)}${quiet}`)
     }
   }
 
@@ -1270,9 +1356,12 @@ const HELP = `cairn — agent-first task tracker and shared memory
   projects
     cairn map [<KEY>|none]                       which project this directory is
     cairn --version                              this CLI, the server, and whether they match
-    cairn projects [--archived]                  --archived includes retired ones
+    cairn projects [--archived]                  --archived includes retired ones;
+                                                 \`was\` lists keys a project used to have
     cairn project create <KEY> "<title>" [--body -]   KEY is 2-10 uppercase
     cairn project rename <KEY> "<title>"
+    cairn project rekey <KEY> <NEW>              change the key; old refs keep resolving
+    cairn project rename <KEY> --key <NEW>       the same, as entities spells it
     cairn project archive <KEY>                  hides it; the tasks stay searchable
     cairn project restore <KEY>
     cairn project delete <KEY> --confirm <KEY>   deletes every task in it
@@ -1360,6 +1449,11 @@ const commands = {
     if (flags.kinds) params.set('kinds', flags.kinds)
     if (flags.tasks) params.set('tasksOnly', '1')
     const data = await request('GET', `/api/v1/search?${params}`)
+    // The exact-ref hit, when the ref asked for used a retired key: said before
+    // the table, so "AC-113" coming back as HOL-113 is not a mystery.
+    for (const r of data.results ?? []) {
+      if (r.renamedFrom) tellRename(r.requestedRef, r.renamedFrom, r.ref)
+    }
     emit(data, {
       rows: (d) =>
         d.results.map((r) => ({
@@ -1443,7 +1537,21 @@ const commands = {
 
   async projects() {
     const suffix = flags.archived ? '?archived=1' : ''
-    emit(await request('GET', `/api/v1/projects${suffix}`))
+    const data = await request('GET', `/api/v1/projects${suffix}`)
+    if (FORMAT !== 'tsv') return emit(data)
+    // `was` is the keys a project used to have, space-separated, and it is the
+    // LAST column: readers of this table (trig's connector among them) key on
+    // the header, and a column appended at the end is one they never see move.
+    // When they were retired, and by whom, is in --json as `former_keys`.
+    const rows = data.map(({ former_keys: former, ...rest }) => ({
+      ...rest,
+      was: (former ?? []).map((f) => f.key).join(' '),
+    }))
+    const columns = [
+      ...new Set(rows.flatMap(({ was: _was, ...rest }) => Object.keys(flatten(rest)))),
+      'was',
+    ]
+    emit(rows, { columns })
   },
 
   async add() {
@@ -1786,7 +1894,7 @@ const commands = {
   async project() {
     const sub = need(
       positional[0],
-      'usage: cairn project <create|rename|archive|restore|delete> <KEY> [...]',
+      'usage: cairn project <create|rename|rekey|archive|restore|delete> <KEY> [...]',
     )
     const key = need(positional[1], 'a project key is required')
 
@@ -1817,8 +1925,47 @@ const commands = {
       return
     }
 
+    /**
+     * Changing the KEY, which the API has always allowed and this CLI never
+     * offered — so the one rename that rewrites every ref was the one only
+     * reachable by a hand-written PATCH (CAIRN-264). `rekey` says what it does;
+     * `rename --key` is the same thing in the spelling `entities rename` uses.
+     */
+    const rekey = async (newKey, title) => {
+      if (!/^[A-Z][A-Z0-9]{1,9}$/.test(newKey)) {
+        die(`"${newKey}" is not a project key — 2 to 10 uppercase letters or digits, e.g. CAIRN`)
+      }
+      const data = await request('PATCH', `/api/v1/projects/${key}`, {
+        key: newKey,
+        ...(title ? { title } : {}),
+      })
+      emit(data)
+      if (FORMAT !== 'tsv') return
+      if (!data.former_key) {
+        process.stderr.write(`${data.key} already has that key; nothing changed.\n`)
+        return
+      }
+      const was = data.former_key
+      process.stderr.write(
+        `renamed ${was} -> ${data.key}: every ${was}-n ref now reads ${data.key}-n.\n` +
+          `${was}-n refs keep resolving, so commits and notes that say ${was}-42 still find ` +
+          `${data.key}-42, and ${was} cannot be given to another project.\n` +
+          `checkouts mapped to ${was} keep working; run "cairn map ${data.key}" in each to update the map.\n`,
+      )
+    }
+
+    if (sub === 'rekey') {
+      await rekey(need(positional[2], 'usage: cairn project rekey <KEY> <NEW_KEY>'))
+      return
+    }
+
     if (sub === 'rename') {
-      const title = need(positional[2], 'usage: cairn project rename <KEY> "<new title>"')
+      if (flags.key !== undefined) {
+        const newKey = need(flags.key, 'usage: cairn project rename <KEY> --key <NEW_KEY> ["<new title>"]')
+        await rekey(newKey, positional[2])
+        return
+      }
+      const title = need(positional[2], 'usage: cairn project rename <KEY> "<new title>"  (or --key <NEW_KEY>)')
       emit(await request('PATCH', `/api/v1/projects/${key}`, { title }))
       return
     }
@@ -1842,7 +1989,7 @@ const commands = {
       emit(await request('DELETE', `/api/v1/projects/${key}?confirm=${encodeURIComponent(key)}`))
       return
     }
-    die(`unknown subcommand "${sub}" — expected create, rename, archive, restore or delete`)
+    die(`unknown subcommand "${sub}" — expected create, rename, rekey, archive, restore or delete`)
   },
 
   async claim() {
@@ -2329,10 +2476,12 @@ const commands = {
     if (!key) {
       const map = readProjectMap()
       const rows = Object.entries(map).map(([path, k]) => ({ project: k, path }))
-      return emit(
+      emit(
         { count: rows.length, here: projectForDir(process.cwd()) ?? '', rows },
         { rows: (d) => d.rows, columns: ['project', 'path'] },
       )
+      await warnRetiredMappings(map)
+      return
     }
 
     const map = readProjectMap()
@@ -2377,6 +2526,9 @@ const commands = {
       // were given: this route resolves a uuid too, and a uuid in the map is 36
       // characters that every later /context rejects outright — which is the
       // same silence, reached by a route that looks like it validated.
+      // A retired key resolves to the live project, and the request above has
+      // already said so on stderr. What is stored is the LIVE key, so this
+      // checkout stops sending the old one.
       const project = await request('GET', `/api/v1/projects/${encodeURIComponent(key)}`)
       map[dir] = project.key
 

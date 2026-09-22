@@ -41,7 +41,13 @@ const cairn = async (args) => {
       env: process.env,
       maxBuffer: 8 * 1024 * 1024,
     })
-    return { text: stdout.trim() || stderr.trim() || 'ok', isError: false }
+    // stderr as well, ahead of stdout. It carries what the CLI says ABOUT an
+    // answer rather than the answer — "AC-113 is now HOL-113, project AC was
+    // renamed HOL" (CAIRN-264), "nothing found", what a digest withheld — and
+    // returning stdout alone meant an MCP caller asked for AC-113, got HOL-113
+    // and was never told why. The shell caller always saw both.
+    const text = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n')
+    return { text: text || 'ok', isError: false }
   } catch (error) {
     // Exit 9 is the CLI's "another agent holds this". Surface it as text
     // rather than a protocol error, so the model can act on it.
