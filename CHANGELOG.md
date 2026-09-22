@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-22
+
 ### Added
 
 - **A CLI can tell whether it is the current file, not just the current release**
@@ -742,7 +744,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/montytorr/cairn/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/montytorr/cairn/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/montytorr/cairn/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/montytorr/cairn/compare/v0.3.0...v0.4.0

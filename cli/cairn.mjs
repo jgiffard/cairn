@@ -62,7 +62,7 @@ const fileEnv = () => {
  * old was found writing under the wrong identity exactly once, which was
  * enough.
  */
-const VERSION = '0.5.1'
+const VERSION = '0.6.0'
 
 const FILE_ENV = fileEnv()
 /**
