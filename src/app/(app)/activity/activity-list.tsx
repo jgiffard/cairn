@@ -40,11 +40,35 @@ const KIND: Record<
 /** Where a row leads. A session has no page of its own, and its useful content
  *  is the line already shown, so it stays unlinked rather than pointing at a
  *  list the reader is already looking at. */
-const hrefFor = (row: ActivityRow): string | null => {
+export const hrefFor = (row: ActivityRow): string | null => {
   if (row.kind === 'knowledge') return `/knowledge/${row.ref}`
   if (row.kind === 'session') return null
   const [key, number] = row.ref.split('-')
-  return key && number ? `/projects/${key}/tasks/${number}` : null
+  if (key && number) return `/projects/${key}/tasks/${number}`
+  // An event about the project itself — renamed, re-keyed, archived — carries
+  // the project's live key as its ref and no number. It was unlinked, so the
+  // one row saying "AC is now HOL" led nowhere.
+  if (row.kind === 'event' && row.project_key) return `/projects/${row.project_key.split(',')[0]}`
+  return null
+}
+
+/**
+ * What a project event says when the feed supplied no title. Until the feed
+ * reads `data.from`/`data.to` for these, a key change arrived as a blank line;
+ * a sentence naming the live key is less than it should say, and more than
+ * nothing.
+ */
+const PROJECT_EVENT: Record<string, (key: string) => string> = {
+  project_key_changed: (key) => `Project key changed — now ${key}`,
+  project_renamed: (key) => `Project ${key} renamed`,
+  project_archived: (key) => `Project ${key} archived`,
+  project_restored: (key) => `Project ${key} restored`,
+}
+
+export const titleFor = (row: ActivityRow): string => {
+  if (row.title.trim()) return row.title
+  const describe = row.detail ? PROJECT_EVENT[row.detail] : undefined
+  return describe ? describe(row.project_key?.split(',')[0] ?? row.ref) : row.title
 }
 
 const Row = ({ row }: { row: ActivityGroup }) => {
@@ -74,7 +98,7 @@ const Row = ({ row }: { row: ActivityGroup }) => {
           same grey before saying anything, and a timeline you cannot skim by
           content is a list of timestamps. */}
       <div className="min-w-0 flex-1">
-        <p className="text-fg line-clamp-2 text-[0.8125rem] leading-snug">{row.title}</p>
+        <p className="text-fg line-clamp-2 text-[0.8125rem] leading-snug">{titleFor(row)}</p>
 
         <div className="text-fg-subtle mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[0.6875rem]">
           <span style={{ color }}>{label}</span>

@@ -3,10 +3,13 @@
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useState } from 'react'
-import { Archive, ArchiveRestore, Check, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Archive, ArchiveRestore, Check, KeyRound, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { Button, InlineInput } from '@/components/ui/control'
 import { ProjectIcon } from '@/components/icons'
+import { ChangeKeyDialog, type RetiredKeyOwner } from '@/components/change-key-dialog'
 import { useMutate } from '@/lib/api/use-mutate'
+import { shortDateWithYear } from '@/lib/dates'
+import { PROJECT_KEY_RULE as KEY_RULE, renameLine, renamesOf, type RetiredKey } from '@/lib/project-rename'
 import { cn } from '@/lib/utils'
 
 type Row = {
@@ -17,9 +20,27 @@ type Row = {
   status: string
   open: number
   total: number
+  formerKeys: RetiredKey[]
 }
 
-const KEY_RULE = /^[A-Z][A-Z0-9]{1,9}$/
+/**
+ * `formerly AC · 22 Sept 2026`, beside the live key. A rename that is only
+ * recorded is found by the people who already know it happened; this is where
+ * everyone else looks up what a project is called.
+ */
+const FormerlyLabel = ({ row }: { row: Row }) => {
+  const renames = renamesOf(row.formerKeys, row.key)
+  const last = renames.at(-1)
+  if (!last) return null
+  return (
+    <span
+      className="text-fg-subtle min-w-0 truncate text-[0.6875rem]"
+      title={renames.map((r) => renameLine(r)).join('\n')}
+    >
+      formerly {renames.map((r) => r.from).join(', ')} · {shortDateWithYear(last.at)}
+    </span>
+  )
+}
 
 /**
  * Create a project, and keep the list tidy afterwards.
@@ -29,7 +50,13 @@ const KEY_RULE = /^[A-Z][A-Z0-9]{1,9}$/
  * not to be clever, but because being told the rule after typing a title and
  * a description is a worse way to learn it.
  */
-export const ProjectsManager = ({ projects }: { projects: Row[] }) => {
+export const ProjectsManager = ({
+  projects,
+  retired,
+}: {
+  projects: Row[]
+  retired: RetiredKeyOwner[]
+}) => {
   const router = useRouter()
   const send = useMutate()
 
@@ -41,8 +68,12 @@ export const ProjectsManager = ({ projects }: { projects: Row[] }) => {
   const [draft, setDraft] = useState('')
   const [confirming, setConfirming] = useState<string | null>(null)
   const [confirmKey, setConfirmKey] = useState('')
+  const [changingKey, setChangingKey] = useState<string | null>(null)
 
-  const keyTaken = projects.some((p) => p.key === key.toUpperCase())
+  // A retired key is as taken as a live one: the server refuses it, because
+  // every ref already issued under it would then lead to two tasks.
+  const retiredBy = retired.find((r) => r.key === key.toUpperCase())
+  const keyTaken = projects.some((p) => p.key === key.toUpperCase()) || Boolean(retiredBy)
   const keyValid = KEY_RULE.test(key.toUpperCase()) && !keyTaken
 
   const create = async () => {
@@ -118,6 +149,7 @@ export const ProjectsManager = ({ projects }: { projects: Row[] }) => {
           </Link>
         )}
         <span className="text-fg-subtle tabular shrink-0 text-[0.75rem]">{p.key}</span>
+        <FormerlyLabel row={p} />
       </div>
 
       <span className="text-fg-subtle tabular shrink-0 text-[0.75rem]">
@@ -138,6 +170,16 @@ export const ProjectsManager = ({ projects }: { projects: Row[] }) => {
         >
           <Pencil size={13} aria-hidden />
           <span className="sr-only">Rename {p.key}</span>
+        </Button>
+
+        <Button
+          size="sm"
+          variant="ghost"
+          title="Change key — old refs keep working"
+          onClick={() => setChangingKey(p.id)}
+        >
+          <KeyRound size={13} aria-hidden />
+          <span className="sr-only">Change key of {p.key}</span>
         </Button>
 
         <Button
@@ -171,6 +213,7 @@ export const ProjectsManager = ({ projects }: { projects: Row[] }) => {
   )
 
   const target = projects.find((p) => p.id === confirming)
+  const rekeying = projects.find((p) => p.id === changingKey)
 
   return (
     <div className="flex flex-col gap-6">
@@ -221,7 +264,9 @@ export const ProjectsManager = ({ projects }: { projects: Row[] }) => {
           </div>
 
           <p className={cn('text-[0.6875rem]', keyTaken ? 'text-danger' : 'text-fg-subtle')}>
-            {keyTaken
+            {retiredBy
+              ? `${retiredBy.key} used to be ${retiredBy.current}'s key and can never be reused — every ${retiredBy.key}-n ref still leads to ${retiredBy.current}.`
+              : keyTaken
               ? `${key.toUpperCase()} is already in use.`
               : 'The key prefixes every ref this project issues — ACME-1, ACME-2. Two to ten characters, starting with a letter. Changing it later keeps old refs working, but it is worth getting right.'}
           </p>
@@ -245,6 +290,19 @@ export const ProjectsManager = ({ projects }: { projects: Row[] }) => {
             {archived.map(row)}
           </ul>
         </>
+      )}
+
+      {rekeying && (
+        <ChangeKeyDialog
+          project={rekeying}
+          liveKeys={projects.map((p) => p.key)}
+          retired={retired}
+          onClose={() => setChangingKey(null)}
+          onChanged={() => {
+            setChangingKey(null)
+            router.refresh()
+          }}
+        />
       )}
 
       {target && (

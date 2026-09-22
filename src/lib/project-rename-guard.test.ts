@@ -42,7 +42,24 @@ describe('renaming a project key keeps old refs working', () => {
     // Resolution alone is half an answer: the lookup succeeds but the screen
     // shows the new ref, so a reader holding the old one cannot tell they
     // found the right task.
-    expect(read('src/app/(app)/projects/[key]/tasks/[number]/page.tsx')).toContain('formerKeysFor')
+    // formerRefsOf is the version that only claims keys retired after the
+    // task was filed (CAIRN-264).
+    const page = read('src/app/(app)/projects/[key]/tasks/[number]/page.tsx')
+    expect(page).toContain('formerRefsOf')
+    // Beside the imported ref, not instead of it: a renamed project imported
+    // from Linear never showed the label at all.
+    expect(page).not.toMatch(/!task\.external_ref/)
+  })
+
+  it('says so when an old address redirects', () => {
+    // A silent swap of AC-113 for HOL-113 is the thing CAIRN-264 fixed; the
+    // redirect carries a marker and both pages render the notice from it.
+    const task = read('src/app/(app)/projects/[key]/tasks/[number]/page.tsx')
+    const project = read('src/app/(app)/projects/[key]/page.tsx')
+    expect(task).toMatch(/\?from=/)
+    expect(task).toContain('RedirectNotice')
+    expect(project).toContain('from: retired.key')
+    expect(project).toContain('RedirectNotice')
   })
 
   it('refuses to reuse a key another project retired', () => {

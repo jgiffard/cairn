@@ -86,6 +86,36 @@ export const getProject = async (_userId: string, key: string): Promise<Project 
 }
 
 /**
+ * Every retired project key, with when it stopped being the key and what its
+ * project is called now. The rename record is workspace-wide — the table's
+ * primary key is the key itself — so, like `listFormerKeys`, this is not
+ * filtered by owner. That module hands out the key only; the UI also needs the
+ * date, because "was AC-113" is only true of a task filed before AC retired.
+ */
+export type FormerKeyRecord = {
+  key: string
+  project_id: string
+  retired_at: string
+  current: string
+}
+
+export const listFormerKeyRecords = async (): Promise<FormerKeyRecord[]> => {
+  const { data, error } = await admin()
+    .from('project_former_keys')
+    .select('key, project_id, retired_at, project:projects(key)')
+    .order('retired_at')
+
+  if (error) throw new Error(error.message)
+  type Row = Omit<FormerKeyRecord, 'current'> & {
+    project: { key: string } | { key: string }[] | null
+  }
+  return ((data ?? []) as unknown as Row[]).map(({ project, ...row }) => ({
+    ...row,
+    current: (Array.isArray(project) ? project[0]?.key : project?.key) ?? '',
+  }))
+}
+
+/**
  * Columns the board and list actually render. Deliberately NOT `select *`:
  * one imported project holds 691 tasks and 1.9MB of markdown descriptions,
  * and shipping all of that to the browser to render two clamped preview lines
