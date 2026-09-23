@@ -121,6 +121,9 @@ beforeAll(async () => {
   await fact(`recall-related-other-${suffix}`, 'Only true in the other project', 'other-project-only fact', {
     sourceTaskRef: `${OTHER}-3`, projects: [OTHER],
   })
+  await fact(`recall-related-global-${suffix}`, 'True everywhere', 'a globally scoped fact', {
+    sourceTaskRef: `${OTHER}-3`, projects: [],
+  })
   await fact(`recall-terms-${suffix}`, `Reach and ${word}`, `${word} akamai warm reach notes`)
   await fact(`recall-other-file-${suffix}`, 'A fact scoped to another project', `see \`${path}\``, {
     projects: [OTHER],
@@ -183,8 +186,20 @@ describe('recallFor', () => {
     expect(recalled.knowledge.map((k) => k.slug)).not.toContain(`recall-other-file-${suffix}`)
   })
 
-  it('does not recall another project’s knowledge through a related source task', () => {
+  it('does not recall another project’s knowledge through a related source task', async () => {
+    // Without the mention this passes vacuously: the task would not be related
+    // at all, and nothing about scope would have been tested.
+    const { rows } = await pool().query(
+      'select 1 from task_mentions where source_task_id = $1 and target_task_id = $2',
+      [t.relatedOther, t.target],
+    )
+    expect(rows).toHaveLength(1)
     expect(recalled.knowledge.map((k) => k.slug)).not.toContain(`recall-related-other-${suffix}`)
+  })
+
+  it('does recall globally scoped knowledge learned on that same related task', () => {
+    const bySlug = new Map(recalled.knowledge.map((k) => [k.slug, k.why]))
+    expect(bySlug.get(`recall-related-global-${suffix}`)).toContain(`learned on ${OTHER}-3`)
   })
 
   it('matches terms within the task\'s project only, and ranks links above matches', () => {

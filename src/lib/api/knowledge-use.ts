@@ -53,28 +53,21 @@ export type UnusedEntry = {
 /**
  * Current entries nobody was given in `days`, never-recalled first. An entry younger
  * than the window is left out: it has not had the chance.
+ *
+ * Reads `knowledge.last_recalled_at` (062), which the telemetry triggers keep
+ * current, so the work is bounded by `limit` through one index rather than
+ * growing with every search and read ever recorded. "Unused in the window" is
+ * the same test as knowledge_recall_counts(since) returning zero for both
+ * counts: no recall at or after `since`.
  */
 export const unusedKnowledge = async (days: number, limit: number): Promise<UnusedEntry[]> => {
-  // Rank the eligible set by all-time history *before* applying the output
-  // limit. Otherwise an older, once-recalled fact can crowd out a newer fact
-  // that has never been recalled. Restrict the all-time count to entries that
-  // are already unused in the requested window.
   const { rows } = await pool().query(
-    `with eligible as materialized (
-       select k.id, k.slug, k.title, k.created_at
-         from knowledge_recall_counts($1) w
-         join knowledge k on k.id = w.knowledge_id
-        where w.returned = 0 and w.read = 0
-          and k.superseded_by is null
-          and k.created_at < $1
-     ), ever as (
-       select * from knowledge_recall_counts('-infinity'::timestamptz,
-         coalesce((select array_agg(id) from eligible), '{}'::uuid[]))
-     )
-     select e.slug, e.title, e.created_at, h.last_recalled
-       from eligible e
-       join ever h on h.knowledge_id = e.id
-      order by h.last_recalled asc nulls first, e.created_at asc, e.id asc
+    `select k.slug, k.title, k.created_at, k.last_recalled_at
+       from knowledge k
+      where k.superseded_by is null
+        and k.created_at < $1
+        and (k.last_recalled_at is null or k.last_recalled_at < $1)
+      order by k.last_recalled_at asc nulls first, k.created_at asc, k.id asc
       limit $2`,
     [since(days), limit],
   )
@@ -82,6 +75,6 @@ export const unusedKnowledge = async (days: number, limit: number): Promise<Unus
     slug: r.slug as string,
     title: r.title as string,
     createdAt: new Date(r.created_at as string).toISOString(),
-    lastRecalled: r.last_recalled ? new Date(r.last_recalled as string).toISOString() : null,
+    lastRecalled: r.last_recalled_at ? new Date(r.last_recalled_at as string).toISOString() : null,
   }))
 }

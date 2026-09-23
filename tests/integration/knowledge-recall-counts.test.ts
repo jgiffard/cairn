@@ -86,16 +86,64 @@ describe('recall counts', () => {
   })
 
   it('lists what nobody was given, never-recalled first, and not what is too young to judge', async () => {
-    const unused = (await unusedKnowledge(30, 200)).map((u) => u.slug).filter((s) => s.endsWith(suffix))
-    expect(unused).toEqual([slug('forgotten'), slug('stale')])
-
-    const stale = (await unusedKnowledge(30, 200)).find((u) => u.slug === slug('stale'))
-    expect(stale?.lastRecalled).not.toBeNull()
+    const unused = (await unusedKnowledge(30, 100_000)).filter((u) => u.slug.endsWith(suffix))
+    // Never recalled first (oldest entry first among them), then oldest recall.
+    // busy was recalled inside the window and young has not had the chance.
+    expect(unused.map((u) => u.slug)).toEqual([
+      slug('forgotten'),
+      slug('never-recalled-limited'),
+      slug('stale'),
+      slug('older-recalled'),
+    ])
+    expect(unused.find((u) => u.slug === slug('stale'))?.lastRecalled).not.toBeNull()
+    expect(unused.find((u) => u.slug === slug('never-recalled-limited'))?.lastRecalled).toBeNull()
   })
 
-  it('does not let an older recalled entry crowd out a never-recalled entry at limit one', async () => {
-    const only = (await unusedKnowledge(30, 1)).find((u) => u.slug.endsWith(suffix))
-    expect(only?.slug).toBe(slug('never-recalled-limited'))
-    expect(only?.lastRecalled).toBeNull()
+  it('ranks before it limits: an older, once-recalled entry never crowds out a never-recalled one', async () => {
+    // Other suites share this database, so assert against the ranking itself
+    // rather than assuming these rows are the only unused ones.
+    const all = (await unusedKnowledge(30, 100_000)).map((u) => u.slug)
+    const target = all.indexOf(slug('never-recalled-limited'))
+    expect(target).toBeGreaterThanOrEqual(0)
+    expect(all.indexOf(slug('older-recalled'))).toBeGreaterThan(target)
+
+    const limited = (await unusedKnowledge(30, target + 1)).map((u) => u.slug)
+    expect(limited.at(-1)).toBe(slug('never-recalled-limited'))
+    expect(limited).not.toContain(slug('older-recalled'))
+  })
+})
+
+describe('last_recalled_at (062)', () => {
+  const lastRecalledAt = async (name: string) => {
+    const { rows } = await pool().query('select last_recalled_at from knowledge where id = $1', [ids[name]])
+    return rows[0].last_recalled_at as Date | null
+  }
+
+  it('agrees with the all-time count for every fixture, so the fast path and the audit path cannot drift', async () => {
+    const everything = await recallCounts(Object.values(ids), Number.POSITIVE_INFINITY)
+    for (const name of Object.keys(ids)) {
+      const stored = await lastRecalledAt(name)
+      const counted = everything.get(ids[name]!)?.lastRecalled ?? null
+      expect(stored ? stored.toISOString() : null, name).toBe(counted)
+    }
+  })
+
+  it('moves forward on a search or a hit, never back, and ignores a miss', async () => {
+    await entry('touched', '90 days')
+    expect(await lastRecalledAt('touched')).toBeNull()
+
+    await read(slug('touched'), false, '3 days')
+    expect(await lastRecalledAt('touched')).toBeNull()
+
+    await searched([slug('touched')], '10 days')
+    const afterSearch = await lastRecalledAt('touched')
+    expect(afterSearch).not.toBeNull()
+
+    await read(slug('touched').replace(/-/g, '_'), true, '5 days')
+    const afterRead = await lastRecalledAt('touched')
+    expect(afterRead!.getTime()).toBeGreaterThan(afterSearch!.getTime())
+
+    await searched([slug('touched')], '20 days')
+    expect((await lastRecalledAt('touched'))!.getTime()).toBe(afterRead!.getTime())
   })
 })
