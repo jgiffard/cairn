@@ -194,7 +194,25 @@ const knowledgeFor = async (
          select kf.knowledge_id, 'about ' || kf.path as why
            from knowledge_files kf
            join file_touches ft on ft.path = kf.path
+           join tasks touched on touched.id = ft.task_id
           where ft.task_id = $1
+            and (
+              exists (
+                select 1 from knowledge_projects kp
+                 where kp.knowledge_id = kf.knowledge_id
+                   and kp.project_id = touched.project_id
+              )
+              or exists (
+                select 1 from knowledge_entities ke
+                join project_entities pe on pe.entity_id = ke.entity_id
+                 where ke.knowledge_id = kf.knowledge_id
+                   and pe.project_id = touched.project_id
+              )
+              or (
+                not exists (select 1 from knowledge_projects kp where kp.knowledge_id = kf.knowledge_id)
+                and not exists (select 1 from knowledge_entities ke where ke.knowledge_id = kf.knowledge_id)
+              )
+            )
          union all
          select k.id, case when k.source_task_id = $1 then 'learned on this task'
                            else 'learned on ' || p.key || '-' || t.number end

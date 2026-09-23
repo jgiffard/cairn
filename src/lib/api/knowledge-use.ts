@@ -56,16 +56,19 @@ export type UnusedEntry = {
  */
 export const unusedKnowledge = async (days: number, limit: number): Promise<UnusedEntry[]> => {
   // The window first, which the created_at indexes bound. "Last recalled ever"
-  // has no bound, so it is asked only about the entries this call will list —
-  // never about the whole store.
+  // has no bound, so cap the candidate IDs before asking about history. The
+  // oldest-created unused entries are the bounded candidate set; the requested
+  // limit must constrain both this query and the all-time lookup below.
   const { rows: candidates } = await pool().query(
     `select k.id, k.slug, k.title, k.created_at
        from knowledge_recall_counts($1) w
        join knowledge k on k.id = w.knowledge_id
       where w.returned = 0 and w.read = 0
         and k.superseded_by is null
-        and k.created_at < $1`,
-    [since(days)],
+        and k.created_at < $1
+      order by k.created_at asc, k.id asc
+      limit $2`,
+    [since(days), limit],
   )
   if (candidates.length === 0) return []
 

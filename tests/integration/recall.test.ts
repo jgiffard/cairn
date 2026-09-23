@@ -31,6 +31,7 @@ const t = {
   parent: randomUUID(),
   blocker: randomUUID(),
   unrelated: randomUUID(),
+  otherTouched: randomUUID(),
 }
 
 const actor = {
@@ -87,6 +88,7 @@ beforeAll(async () => {
   })
   await task(t.blocker, 4, 'Token capability flag', { status: 'done', resolution: 'tokens carry a warmed bit now' })
   await task(t.unrelated, 1, `Unrelated ${word} in another project`, { project: otherProjectId })
+  await task(t.otherTouched, 2, 'Different project touching the same relative file', { project: otherProjectId })
 
   await pool().query('insert into task_deps (blocking_id, blocked_id) values ($1, $2)', [t.blocker, t.target])
   await note(t.parent, 'decided: reach work ships behind a flag', 'decision')
@@ -102,12 +104,20 @@ beforeAll(async () => {
     path,
     t.target,
   ])
+  await pool().query('insert into file_touches (owner_user_id, path, task_id) values ($1,$2,$3)', [
+    ownerId,
+    path,
+    t.otherTouched,
+  ])
 
   await fact(`recall-about-file-${suffix}`, 'The ladder lives in one file', `see \`${path}\``)
   await fact(`recall-learned-${suffix}`, 'Warmed cookies are IP-bound', 'the _abck cookie', {
     sourceTaskRef: `${KEY}-3`,
   })
   await fact(`recall-terms-${suffix}`, `Reach and ${word}`, `${word} akamai warm reach notes`)
+  await fact(`recall-other-file-${suffix}`, 'A fact scoped to another project', `see \`${path}\``, {
+    projects: [OTHER],
+  })
   await fact(`recall-withdrawn-${suffix}`, 'Old ladder note', `see \`${path}\``)
   await updateKnowledge(actor, `recall-withdrawn-${suffix}`, { supersededBy: `recall-about-file-${suffix}` })
   await createKnowledge(actor, {
@@ -159,6 +169,10 @@ describe('recallFor', () => {
     const bySlug = new Map(recalled.knowledge.map((k) => [k.slug, k.why]))
     expect(bySlug.get(`recall-about-file-${suffix}`)).toContain(`about ${path}`)
     expect(bySlug.get(`recall-learned-${suffix}`)).toContain(`learned on ${KEY}-3`)
+  })
+
+  it('does not recall another project’s knowledge through a shared relative file path', () => {
+    expect(recalled.knowledge.map((k) => k.slug)).not.toContain(`recall-other-file-${suffix}`)
   })
 
   it('matches terms within the task\'s project only, and ranks links above matches', () => {
