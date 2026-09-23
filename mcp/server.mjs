@@ -181,7 +181,6 @@ const TOOLS = [
       ...(a.label ? ['--label', a.label] : []),
       ...(a.task ? ['--task', a.task] : []),
       ...(a.allowDangling ? ['--allow-dangling'] : []),
-      ...(a.reason ? ['--reason', a.reason] : []),
     ],
   },
   {
@@ -225,6 +224,7 @@ const TOOLS = [
       ...(a.entity ? ['--entity', a.entity] : []),
       ...(a.global ? ['--global'] : []),
       ...(a.allowDangling ? ['--allow-dangling'] : []),
+      ...(a.reason ? ['--reason', a.reason] : []),
     ],
   },
   {
