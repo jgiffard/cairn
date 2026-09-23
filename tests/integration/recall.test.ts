@@ -32,6 +32,7 @@ const t = {
   blocker: randomUUID(),
   unrelated: randomUUID(),
   otherTouched: randomUUID(),
+  relatedOther: randomUUID(),
 }
 
 const actor = {
@@ -48,13 +49,13 @@ const task = async (
   id: string,
   number: number,
   title: string,
-  extra: { status?: string; resolution?: string; parent?: string; project?: string } = {},
+  extra: { status?: string; resolution?: string; parent?: string; project?: string; description?: string } = {},
 ) =>
   pool().query(
-    `insert into tasks (id, project_id, number, title, actor_type, actor_id, status, resolution, parent_id)
-     values ($1,$2,$3,$4,'agent',$5,$6,$7,$8)`,
+    `insert into tasks (id, project_id, number, title, actor_type, actor_id, status, resolution, parent_id, description)
+     values ($1,$2,$3,$4,'agent',$5,$6,$7,$8,$9)`,
     [id, extra.project ?? projectId, number, title, AGENT, extra.status ?? 'todo', extra.resolution ?? null,
-      extra.parent ?? null],
+      extra.parent ?? null, extra.description ?? null],
   )
 
 const note = (taskId: string, text: string, kind: string) =>
@@ -89,6 +90,9 @@ beforeAll(async () => {
   await task(t.blocker, 4, 'Token capability flag', { status: 'done', resolution: 'tokens carry a warmed bit now' })
   await task(t.unrelated, 1, `Unrelated ${word} in another project`, { project: otherProjectId })
   await task(t.otherTouched, 2, 'Different project touching the same relative file', { project: otherProjectId })
+  await task(t.relatedOther, 3, 'Cross-project related task', {
+    project: otherProjectId, description: `This work relates to ${KEY}-2.`,
+  })
 
   await pool().query('insert into task_deps (blocking_id, blocked_id) values ($1, $2)', [t.blocker, t.target])
   await note(t.parent, 'decided: reach work ships behind a flag', 'decision')
@@ -114,6 +118,9 @@ beforeAll(async () => {
   await fact(`recall-learned-${suffix}`, 'Warmed cookies are IP-bound', 'the _abck cookie', {
     sourceTaskRef: `${KEY}-3`,
   })
+  await fact(`recall-related-other-${suffix}`, 'Only true in the other project', 'other-project-only fact', {
+    sourceTaskRef: `${OTHER}-3`, projects: [OTHER],
+  })
   await fact(`recall-terms-${suffix}`, `Reach and ${word}`, `${word} akamai warm reach notes`)
   await fact(`recall-other-file-${suffix}`, 'A fact scoped to another project', `see \`${path}\``, {
     projects: [OTHER],
@@ -135,6 +142,7 @@ beforeAll(async () => {
     title: `Ship the akamai warm for reach ${word}`,
     description: null,
     project_key: KEY,
+    project_id: projectId,
   })
 })
 
@@ -173,6 +181,10 @@ describe('recallFor', () => {
 
   it('does not recall another project’s knowledge through a shared relative file path', () => {
     expect(recalled.knowledge.map((k) => k.slug)).not.toContain(`recall-other-file-${suffix}`)
+  })
+
+  it('does not recall another project’s knowledge through a related source task', () => {
+    expect(recalled.knowledge.map((k) => k.slug)).not.toContain(`recall-related-other-${suffix}`)
   })
 
   it('matches terms within the task\'s project only, and ranks links above matches', () => {

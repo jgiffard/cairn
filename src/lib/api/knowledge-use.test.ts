@@ -11,23 +11,16 @@ import { unusedKnowledge } from './knowledge-use'
 describe('unusedKnowledge', () => {
   beforeEach(() => mocks.query.mockReset())
 
-  it('bounds the all-time history lookup to the requested candidate limit', async () => {
-    const candidates = Array.from({ length: 4 }, (_, i) => ({
-      id: `id-${i}`,
-      slug: `slug-${i}`,
-      title: `Knowledge ${i}`,
-      created_at: new Date(Date.UTC(2020, 0, i + 1)),
-    }))
-    mocks.query
-      .mockResolvedValueOnce({ rows: candidates.slice(0, 2) })
-      .mockResolvedValueOnce({ rows: [] })
+  it('ranks never-recalled entries before applying the result limit', async () => {
+    const ranked = [{ slug: 'never-recalled', title: 'Never recalled',
+      created_at: new Date(Date.UTC(2020, 0, 1)), last_recalled: null }]
+    mocks.query.mockResolvedValueOnce({ rows: ranked })
 
-    await expect(unusedKnowledge(30, 2)).resolves.toHaveLength(2)
+    await expect(unusedKnowledge(30, 1)).resolves.toMatchObject([{ lastRecalled: null }])
 
-    const [candidateSql, candidateParams] = mocks.query.mock.calls[0] as [string, unknown[]]
-    expect(candidateSql).toMatch(/order by k\.created_at asc, k\.id asc\s+limit \$2/i)
-    expect(candidateParams[1]).toBe(2)
-    const historyParams = mocks.query.mock.calls[1]?.[1] as unknown[]
-    expect(historyParams[1]).toHaveLength(2)
+    const [sql, params] = mocks.query.mock.calls[0] as [string, unknown[]]
+    expect(sql).toMatch(/order by h\.last_recalled asc nulls first, e\.created_at asc, e\.id asc\s+limit \$2/i)
+    expect(sql.indexOf('order by h.last_recalled')).toBeGreaterThan(sql.indexOf("knowledge_recall_counts('-infinity'"))
+    expect(params[1]).toBe(1)
   })
 })

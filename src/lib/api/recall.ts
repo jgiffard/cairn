@@ -75,7 +75,14 @@ const clip = (text: string, around?: string) => {
   return flat.length > TEXT_BUDGET ? `${flat.slice(0, TEXT_BUDGET)}…` : flat
 }
 
-type Task = { id: string; ref: string; title: string; description: string | null; project_key: string }
+type Task = {
+  id: string
+  ref: string
+  title: string
+  description: string | null
+  project_key: string
+  project_id: string
+}
 
 /** Tasks related to this one by structure or by a written ref, with why. */
 const relatedTasks = async (task: Task): Promise<Map<string, Set<Why>>> => {
@@ -217,12 +224,27 @@ const knowledgeFor = async (
          select k.id, case when k.source_task_id = $1 then 'learned on this task'
                            else 'learned on ' || p.key || '-' || t.number end
            from knowledge k join tasks t on t.id = k.source_task_id join projects p on p.id = t.project_id
-          where k.source_task_id = any($2::uuid[]) or k.source_task_id = $1
+          where (k.source_task_id = any($2::uuid[]) or k.source_task_id = $1)
+            and (
+              exists (
+                select 1 from knowledge_projects kp
+                 where kp.knowledge_id = k.id and kp.project_id = $3
+              )
+              or exists (
+                select 1 from knowledge_entities ke
+                join project_entities pe on pe.entity_id = ke.entity_id
+                 where ke.knowledge_id = k.id and pe.project_id = $3
+              )
+              or (
+                not exists (select 1 from knowledge_projects kp where kp.knowledge_id = k.id)
+                and not exists (select 1 from knowledge_entities ke where ke.knowledge_id = k.id)
+              )
+            )
        ) r
        join knowledge k on k.id = r.knowledge_id
       where k.superseded_by is null
       group by k.id`,
-    [task.id, related],
+    [task.id, related, task.project_id],
   )
 
   const found = new Map<string, { row: Record<string, unknown>; why: string[]; score: number }>()

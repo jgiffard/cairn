@@ -50,6 +50,8 @@ beforeAll(async () => {
   await entry('stale', '90 days')
   await entry('forgotten', '90 days')
   await entry('young', '2 days')
+  await entry('older-recalled', '90 days')
+  await entry('never-recalled-limited', '60 days')
 
   await searched([slug('busy'), 'CAIRN-1', slug('busy')])
   await searched([slug('busy')], '2 days')
@@ -59,6 +61,7 @@ beforeAll(async () => {
   await read(slug('busy'), false)
 
   await searched([slug('stale')], '60 days')
+  await searched([slug('older-recalled')], '45 days')
 })
 
 afterAll(async () => {
@@ -88,5 +91,11 @@ describe('recall counts', () => {
 
     const stale = (await unusedKnowledge(30, 200)).find((u) => u.slug === slug('stale'))
     expect(stale?.lastRecalled).not.toBeNull()
+  })
+
+  it('does not let an older recalled entry crowd out a never-recalled entry at limit one', async () => {
+    const only = (await unusedKnowledge(30, 1)).find((u) => u.slug.endsWith(suffix))
+    expect(only?.slug).toBe(slug('never-recalled-limited'))
+    expect(only?.lastRecalled).toBeNull()
   })
 })

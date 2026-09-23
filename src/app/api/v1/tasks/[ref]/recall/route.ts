@@ -17,7 +17,7 @@ export const GET = route<{ ref: string }>({
     const task = await findTask(actor, params.ref)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
 
-    const embedded = task.project as { key: string } | { key: string }[]
+    const embedded = task.project as { id: string; key: string } | { id: string; key: string }[]
     const project = Array.isArray(embedded) ? embedded[0] : embedded
     if (!project) return fail('internal_error', `Task ${params.ref} has no project.`)
 
@@ -30,6 +30,7 @@ export const GET = route<{ ref: string }>({
           title: task.title as string,
           description: (task.description as string | null) ?? null,
           project_key: project.key,
+          project_id: project.id,
         },
         {
           decisions: bounded(url.searchParams.get('decisions'), 8),

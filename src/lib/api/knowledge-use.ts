@@ -51,41 +51,37 @@ export type UnusedEntry = {
 }
 
 /**
- * Current entries nobody was given in `days`, oldest first. An entry younger
+ * Current entries nobody was given in `days`, never-recalled first. An entry younger
  * than the window is left out: it has not had the chance.
  */
 export const unusedKnowledge = async (days: number, limit: number): Promise<UnusedEntry[]> => {
-  // The window first, which the created_at indexes bound. "Last recalled ever"
-  // has no bound, so cap the candidate IDs before asking about history. The
-  // oldest-created unused entries are the bounded candidate set; the requested
-  // limit must constrain both this query and the all-time lookup below.
-  const { rows: candidates } = await pool().query(
-    `select k.id, k.slug, k.title, k.created_at
-       from knowledge_recall_counts($1) w
-       join knowledge k on k.id = w.knowledge_id
-      where w.returned = 0 and w.read = 0
-        and k.superseded_by is null
-        and k.created_at < $1
-      order by k.created_at asc, k.id asc
+  // Rank the eligible set by all-time history *before* applying the output
+  // limit. Otherwise an older, once-recalled fact can crowd out a newer fact
+  // that has never been recalled. Restrict the all-time count to entries that
+  // are already unused in the requested window.
+  const { rows } = await pool().query(
+    `with eligible as materialized (
+       select k.id, k.slug, k.title, k.created_at
+         from knowledge_recall_counts($1) w
+         join knowledge k on k.id = w.knowledge_id
+        where w.returned = 0 and w.read = 0
+          and k.superseded_by is null
+          and k.created_at < $1
+     ), ever as (
+       select * from knowledge_recall_counts('-infinity'::timestamptz,
+         coalesce((select array_agg(id) from eligible), '{}'::uuid[]))
+     )
+     select e.slug, e.title, e.created_at, h.last_recalled
+       from eligible e
+       join ever h on h.knowledge_id = e.id
+      order by h.last_recalled asc nulls first, e.created_at asc, e.id asc
       limit $2`,
     [since(days), limit],
   )
-  if (candidates.length === 0) return []
-
-  const ever = await recallCounts(
-    candidates.map((c) => c.id as string),
-    Number.POSITIVE_INFINITY,
-  )
-  return candidates
-    .map((c) => ({
-      slug: c.slug as string,
-      title: c.title as string,
-      createdAt: new Date(c.created_at as string).toISOString(),
-      lastRecalled: ever.get(c.id as string)?.lastRecalled ?? null,
-    }))
-    .sort(
-      (a, b) =>
-        (a.lastRecalled ?? '').localeCompare(b.lastRecalled ?? '') || a.createdAt.localeCompare(b.createdAt),
-    )
-    .slice(0, limit)
+  return rows.map((r) => ({
+    slug: r.slug as string,
+    title: r.title as string,
+    createdAt: new Date(r.created_at as string).toISOString(),
+    lastRecalled: r.last_recalled ? new Date(r.last_recalled as string).toISOString() : null,
+  }))
 }
