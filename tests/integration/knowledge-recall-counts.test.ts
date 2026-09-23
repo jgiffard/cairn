@@ -113,10 +113,17 @@ describe('recall counts', () => {
   })
 })
 
-describe('last_recalled_at (062)', () => {
+describe('knowledge_recall_state (062)', () => {
   const lastRecalledAt = async (name: string) => {
-    const { rows } = await pool().query('select last_recalled_at from knowledge where id = $1', [ids[name]])
-    return rows[0].last_recalled_at as Date | null
+    const { rows } = await pool().query(
+      'select last_recalled_at from knowledge_recall_state where knowledge_id = $1',
+      [ids[name]],
+    )
+    return (rows[0]?.last_recalled_at as Date | undefined) ?? null
+  }
+  const updatedAt = async (name: string) => {
+    const { rows } = await pool().query('select updated_at from knowledge where id = $1', [ids[name]])
+    return (rows[0].updated_at as Date).toISOString()
   }
 
   it('agrees with the all-time count for every fixture, so the fast path and the audit path cannot drift', async () => {
@@ -145,5 +152,38 @@ describe('last_recalled_at (062)', () => {
 
     await searched([slug('touched')], '20 days')
     expect((await lastRecalledAt('touched'))!.getTime()).toBe(afterRead!.getTime())
+  })
+
+  it('never makes a recall look like an edit: search, hit and miss all leave updated_at alone', async () => {
+    await entry('untouched', '90 days')
+    const before = await updatedAt('untouched')
+
+    await searched([slug('untouched')], '0 days')
+    await read(slug('untouched'), true, '0 days')
+    await read(slug('untouched'), false, '0 days')
+
+    expect(await lastRecalledAt('untouched')).not.toBeNull()
+    expect(await updatedAt('untouched')).toBe(before)
+  })
+
+  it('the backfill restores recall state without touching knowledge rows', async () => {
+    const names = Object.keys(ids)
+    const before = Object.fromEntries(await Promise.all(names.map(async (n) => [n, await updatedAt(n)])))
+    const expected = await recallCounts(Object.values(ids), Number.POSITIVE_INFINITY)
+
+    await pool().query('delete from knowledge_recall_state where knowledge_id = any($1)', [Object.values(ids)])
+    await pool().query('select knowledge_recall_state_backfill()')
+
+    for (const name of names) {
+      const stored = await lastRecalledAt(name)
+      expect(stored ? stored.toISOString() : null, name).toBe(expected.get(ids[name]!)?.lastRecalled ?? null)
+      expect(await updatedAt(name), name).toBe(before[name])
+    }
+  })
+
+  it('a real edit still advances updated_at', async () => {
+    const before = await updatedAt('untouched')
+    await pool().query(`update knowledge set title = title || ' (edited)' where id = $1`, [ids.untouched])
+    expect(new Date(await updatedAt('untouched')).getTime()).toBeGreaterThan(new Date(before).getTime())
   })
 })

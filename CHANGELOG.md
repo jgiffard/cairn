@@ -18,8 +18,8 @@ out under **Breaking** with what to do about it.
   --unused [--days N]` (`?unused=N`, MCP `cairn_know unusedDays`) lists current entries nobody
   was given in that window, never-recalled first — dead, or titled so no search finds them.
   The session briefing and `cairn recall` record nothing, so they are not counted, and every
-  surface says so. `--unused` reads `knowledge.last_recalled_at` (migration 062), kept current
-  by triggers on the telemetry tables and backfilled once, so it is one index scan bounded by
+  surface says so. `--unused` reads `knowledge_recall_state` (migration 062), kept current by
+  triggers on the telemetry tables and backfilled once, and never touches a knowledge row, so it is one index scan bounded by
   its limit rather than a recount of all recorded history on every request.
 
 - **`cairn recall <ref>`: what already bears on this task, and why** (CAIRN-268). `check`

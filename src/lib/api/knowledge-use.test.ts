@@ -19,7 +19,9 @@ describe('unusedKnowledge', () => {
     await expect(unusedKnowledge(30, 1)).resolves.toMatchObject([{ lastRecalled: null }])
 
     const [sql, params] = mocks.query.mock.calls[0] as [string, unknown[]]
-    expect(sql).toMatch(/order by k\.last_recalled_at asc nulls first, k\.created_at asc, k\.id asc\s+limit \$2/i)
+    expect(sql).toMatch(/order by last_recalled_at asc nulls first, created_at asc, id asc\s+limit \$2/i)
+    // Both halves are cut at the limit before they are merged.
+    expect(sql.match(/limit \$2/g)).toHaveLength(3)
     expect(params[1]).toBe(1)
   })
 
@@ -27,8 +29,9 @@ describe('unusedKnowledge', () => {
     mocks.query.mockResolvedValueOnce({ rows: [] })
     await unusedKnowledge(30, 1)
     const [sql] = mocks.query.mock.calls[0] as [string, unknown[]]
-    // 062 keeps last_recalled_at on the row; an unbounded aggregate over
+    // 062 keeps knowledge_recall_state; an unbounded aggregate over
     // search_events/knowledge_reads is exactly what it replaced.
     expect(sql).not.toMatch(/knowledge_recall_counts|search_events|knowledge_reads|-infinity/i)
+    expect(sql).toMatch(/knowledge_recall_state/)
   })
 })
