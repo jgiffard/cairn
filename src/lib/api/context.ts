@@ -181,10 +181,12 @@ export const buildContext = async (
   // --- what this agent is still holding ---------------------------------
   const held: ContextPayload['held'] = []
   if (actor.actorId) {
-    const { data, error } = await admin()
+    let query = admin()
       .from('tasks')
       .select(HELD_SELECT)
       .eq('claimed_by', actor.actorId)
+    if (project) query = query.eq('projects.key', project)
+    const { data, error } = await query
       .order('claimed_at', { ascending: true })
       .limit(10)
     if (error) throw new Error(error.message)
@@ -248,7 +250,8 @@ export const buildContext = async (
       .order('ended_at', { ascending: false, nullsFirst: false })
       .limit(1)
 
-    query = input.cwd ? query.eq('cwd', input.cwd) : query
+    if (input.cwd) query = query.eq('cwd', input.cwd)
+    if (project) query = query.eq('projects.key', project)
 
     const { data, error } = await query.maybeSingle()
     if (error) throw new Error(error.message)
