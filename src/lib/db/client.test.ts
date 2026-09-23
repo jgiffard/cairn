@@ -135,3 +135,46 @@ describe('upsert SQL', () => {
     expect(statements).toEqual([])
   })
 })
+
+describe('is filters', () => {
+  const capture = async (run: () => PromiseLike<unknown>) =>
+    (await withFakePool(run)).statements
+
+  it('negates .not(column, "is", null) into IS NOT NULL', async () => {
+    // CAIRN-272: the negation was dropped, so this ran as IS NULL and the
+    // sessions agent filter, the cwd project fallback and stale claims all
+    // read the opposite rows.
+    const [sql] = await capture(() =>
+      admin().from('sessions').select('agent_id').not('agent_id', 'is', null),
+    )
+
+    expect(sql).toContain('"agent_id" is not null')
+  })
+
+  it('keeps .is(column, null) as IS NULL', async () => {
+    const [sql] = await capture(() => admin().from('sessions').select('agent_id').is('agent_id', null))
+
+    expect(sql).toContain('"agent_id" is null')
+  })
+})
+
+describe('not filters', () => {
+  it('unquotes a PostgREST quoted list, so done tasks stay out of cairn next', async () => {
+    // CAIRN-272: '("done","cancelled")' was bound as '"done"', which no status
+    // equals, so the NOT IN excluded nothing.
+    const { statements, parameters } = await withFakePool(() =>
+      admin().from('tasks').select('id').not('status', 'in', '("done","cancelled")'),
+    )
+
+    expect(statements[0]).toContain('"status" not in ($1, $2)')
+    expect(parameters[0]).toEqual(['done', 'cancelled'])
+  })
+
+  it('translates a PostgREST operator name into SQL', async () => {
+    const [sql] = (
+      await withFakePool(() => admin().from('tasks').select('id').not('status', 'eq', 'done'))
+    ).statements
+
+    expect(sql).toContain('not (b."status" = $1)')
+  })
+})

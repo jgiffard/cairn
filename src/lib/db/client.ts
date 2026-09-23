@@ -10,6 +10,7 @@ type DatabaseError = {
 type DynamicRow = Record<string, any>
 type Result<T = DynamicRow[]> = { data: T; error: DatabaseError | null; count: number | null; status: number }
 type Filter = { column: string; operator: string; value: unknown; negate?: boolean }
+
 type FilterGroup = { or: Filter[] }
 type Order = { column: string; ascending: boolean; nullsFirst?: boolean }
 type Relation = {
@@ -105,6 +106,14 @@ export const pool = () => {
   }
   return runtime.__cairnPool
 }
+
+const FILTER_OPERATORS: Record<string, string> = {
+  eq: '=', neq: '<>', gt: '>', gte: '>=', lt: '<', lte: '<=', is: 'is', in: 'in', like: 'like', ilike: 'ilike',
+}
+
+/** PostgREST lets a list value be double-quoted, as in `("done","cancelled")`. */
+const unquote = (value: string) =>
+  value.length >= 2 && value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value
 
 const identifier = (value: string) => {
   if (!/^[a-z_][a-z0-9_]*$/i.test(value)) throw new Error(`Unsafe SQL identifier: ${value}`)
@@ -265,17 +274,19 @@ class DirectQuery<T = DynamicRow[]> implements PromiseLike<Result<T>> {
   like(column: string, value: unknown) { this.filters.push({ column, operator: 'like', value }); return this }
   contains(column: string, value: unknown) { this.filters.push({ column, operator: '@>', value }); return this }
   overlaps(column: string, value: unknown) { this.filters.push({ column, operator: '&&', value }); return this }
-  not(column: string, operator: string, value: unknown) { this.filters.push({ column, operator, value, negate: true }); return this }
+  not(column: string, operator: string, value: unknown) {
+    const sqlOperator = FILTER_OPERATORS[operator]
+    if (!sqlOperator) throw new Error(`Unsupported NOT filter operator: ${operator}`)
+    this.filters.push({ column, operator: sqlOperator, value, negate: true })
+    return this
+  }
   or(expression: string) {
     const filters = splitTopLevel(expression).map((part): Filter => {
       const match = part.match(/^([^.]+)\.(eq|neq|gt|gte|lt|lte|is|in|like|ilike)\.(.*)$/)
       if (!match) throw new Error(`Unsupported OR filter: ${part}`)
-      const operators: Record<string, string> = {
-        eq: '=', neq: '<>', gt: '>', gte: '>=', lt: '<', lte: '<=', is: 'is', in: 'in', like: 'like', ilike: 'ilike',
-      }
       let value: unknown = match[3]
       if (match[2] === 'is') value = match[3] === 'null' ? null : match[3] === 'true'
-      return { column: match[1]!, operator: operators[match[2]!]!, value }
+      return { column: match[1]!, operator: FILTER_OPERATORS[match[2]!]!, value }
     })
     this.filters.push({ or: filters })
     return this
@@ -299,17 +310,17 @@ class DirectQuery<T = DynamicRow[]> implements PromiseLike<Result<T>> {
   private scalarClause(filter: Filter, column: string, parameters: unknown[]) {
     let clause: string
     if (filter.operator === 'is') {
-      clause = `${column} is ${filter.value === null ? 'null' : filter.value === true ? 'true' : 'false'}`
+      clause = `${column} is ${filter.negate ? 'not ' : ''}${filter.value === null ? 'null' : filter.value === true ? 'true' : 'false'}`
     } else if (filter.operator === 'in' || filter.operator === 'not.in') {
       const values = Array.isArray(filter.value)
         ? filter.value
-        : String(filter.value).replace(/^\(|\)$/g, '').split(',').filter(Boolean)
+        : String(filter.value).replace(/^\(|\)$/g, '').split(',').filter(Boolean).map(unquote)
       if (values.length === 0) clause = filter.operator === 'not.in' || filter.negate ? 'true' : 'false'
       else {
         const refs = values.map((value) => { parameters.push(value); return `$${parameters.length}` })
         clause = `${column} ${filter.operator === 'not.in' || filter.negate ? 'not in' : 'in'} (${refs.join(', ')})`
       }
-    } else if (filter.operator === 'not' || (filter.negate && filter.operator === 'is')) {
+    } else if (filter.operator === 'not') {
       clause = `${column} is not ${filter.value === null ? 'null' : String(filter.value)}`
     } else {
       parameters.push(filter.value)
