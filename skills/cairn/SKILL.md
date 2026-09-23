@@ -440,6 +440,11 @@ cairn verify <slug>                                  # still true; you checked
 cairn know <slug> --history                          # what it used to say, and who changed it
 ```
 
+A fact is linked to the files it is about — the backticked paths in its body, the files its
+source task touched, and any you name with `--files a,b` — so `cairn context --file <path>`
+finds it, and it is marked stale when those files are reworked. Name the files when the body
+does not.
+
 A correction keeps what it corrected: every `relearn`, re-scope and supersession stores the
 version it replaced, with who replaced it and the `--reason` if you gave one. Give one — "the
 default was 15, not the cap" is what makes the old version readable as a mistake rather than

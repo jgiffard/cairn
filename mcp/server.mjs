@@ -162,6 +162,12 @@ const TOOLS = [
         global: { type: 'boolean', description: 'True everywhere. Say so on purpose.' },
         label: { type: 'string', description: 'Comma-separated labels.' },
         task: { type: 'string', description: 'The task it was learned on, e.g. CAI-42.' },
+        files: {
+          type: 'string',
+          description:
+            'Comma-separated paths it is about, beyond the backticked ones its body names. ' +
+            'Linked so a later lookup by file finds it, and so it ages when they change.',
+        },
         allowDangling: {
           type: 'boolean',
           description:
@@ -180,6 +186,7 @@ const TOOLS = [
       ...(a.global ? ['--global'] : []),
       ...(a.label ? ['--label', a.label] : []),
       ...(a.task ? ['--task', a.task] : []),
+      ...(a.files ? ['--files', a.files] : []),
       ...(a.allowDangling ? ['--allow-dangling'] : []),
     ],
   },
@@ -213,6 +220,12 @@ const TOOLS = [
           type: 'string',
           description: 'Why it changed. Kept with the version this replaces.',
         },
+        files: {
+          type: 'string',
+          description:
+            'Comma-separated paths it is about. Replaces those named explicitly before; ' +
+            'paths in the body are linked on their own.',
+        },
       },
       required: ['slug'],
     },
@@ -225,6 +238,7 @@ const TOOLS = [
       ...(a.global ? ['--global'] : []),
       ...(a.allowDangling ? ['--allow-dangling'] : []),
       ...(a.reason ? ['--reason', a.reason] : []),
+      ...(a.files ? ['--files', a.files] : []),
     ],
   },
   {

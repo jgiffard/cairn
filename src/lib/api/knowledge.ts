@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg'
-import { admin, normalizeDatabaseValue, transaction } from '@/lib/db/client'
+import { admin, normalizeDatabaseValue, pool, transaction } from '@/lib/db/client'
+import { normalisePath } from './files'
 import type { Actor } from './auth'
 import { normalizeSlugRef, slugify, type KnowledgeCreate, type KnowledgeUpdate } from '@/schemas/knowledge'
 import { findTask } from './tasks'
@@ -373,6 +374,7 @@ export const createKnowledge = async (actor: Actor, input: KnowledgeCreate) => {
            select $1, unnest($2::uuid[])`, [row.id, entities.ids],
         )
       }
+      await replaceExplicitFiles(client, row.id, input.files)
       return normalizeDatabaseValue(row) as KnowledgeRow
     })
   } catch (error) {
@@ -383,6 +385,36 @@ export const createKnowledge = async (actor: Actor, input: KnowledgeCreate) => {
 
   const [row] = await withProjects([data as unknown as KnowledgeRow])
   return row
+}
+
+/**
+ * The files an entry is explicitly about (CAIRN-269). Only this origin is the
+ * caller's: paths the body names and files the source work touched are kept by
+ * the `knowledge_files_sync` trigger, so they cannot drift from the text.
+ */
+const replaceExplicitFiles = async (client: PoolClient, knowledgeId: string, files: string[] | undefined) => {
+  if (files === undefined) return
+  await client.query(`delete from knowledge_files where knowledge_id = $1 and origin = 'explicit'`, [knowledgeId])
+  const paths = [...new Set(files.map((f) => normalisePath(f)).filter(Boolean))]
+  if (paths.length === 0) return
+  await client.query(
+    `insert into knowledge_files (knowledge_id, path, origin)
+     select $1, unnest($2::text[]), 'explicit' on conflict do nothing`,
+    [knowledgeId, paths],
+  )
+}
+
+/** Which files each entry is linked to, from every origin. */
+export const linkedFiles = async (ids: string[]): Promise<Map<string, string[]>> => {
+  const out = new Map<string, string[]>()
+  if (ids.length === 0) return out
+  const { rows } = await pool().query(
+    `select knowledge_id, array_agg(distinct path order by path) as paths
+       from knowledge_files where knowledge_id = any($1::uuid[]) group by knowledge_id`,
+    [ids],
+  )
+  for (const row of rows) out.set(row.knowledge_id as string, row.paths as string[])
+  return out
 }
 
 type RevisionChange = 'relearned' | 'rescoped' | 'superseded' | 'reinstated'
@@ -574,6 +606,7 @@ export const updateKnowledge = async (actor: Actor, slug: string, patch: Knowled
         )
       }
     }
+    await replaceExplicitFiles(client, existing.id, patch.files)
     if (projectIds !== undefined) {
       await client.query('delete from knowledge_projects where knowledge_id = $1', [existing.id])
       if (projectIds.length > 0) {

@@ -76,6 +76,8 @@ export const knowledgeCreate = z.object({
   projects: z.array(z.string().min(1).max(10)).max(20).default([]),
   /** Groupings this is true of — a business, a stack, a subsystem. */
   entities: z.array(z.string().min(1).max(40)).max(20).default([]),
+  /** Files this is about, beyond the paths its body names (CAIRN-269). */
+  files: z.array(z.string().min(1).max(500)).max(50).optional(),
   sourceTaskRef: z.string().max(40).optional(),
   sourceSessionId: z.string().uuid().optional(),
   verified: z.boolean().optional(),
@@ -107,6 +109,8 @@ export const knowledgeUpdate = z.object({
   supersededBy: z.string().max(120).nullable().optional(),
   verified: z.boolean().optional(),
   allowUnresolvedRefs: z.boolean().optional(),
+  /** Replaces the files named explicitly; body and source links are kept up by the database. */
+  files: z.array(z.string().min(1).max(500)).max(50).optional(),
   /** Why the entry changed. Kept on the revision the edit produces. */
   reason: z.string().min(1).max(500).optional(),
 })

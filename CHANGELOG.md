@@ -11,6 +11,17 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **Which files a fact is about is stored, and can be asked backwards** (CAIRN-269).
+  Staleness worked out a fact's files at read time and nowhere else, and "what do we know
+  about this file" read `file_touches.knowledge_id`, which nothing ever wrote — so `cairn
+  context --file` never returned knowledge. `knowledge_files` (migration 060) now holds the
+  links: backticked paths in the body and the files the source task or session touched, both
+  kept by trigger and backfilled, plus files named with `cairn learn --files a,b` / `relearn
+  --files` (`files` on the API, `files` on the MCP tools). `context --file` finds knowledge
+  by path or basename, and staleness ages a fact on its explicit files too. Links are not
+  written to `file_touches`: that table is a log of touches, and an anchor there would read as
+  every other fact about the same file having been reworked.
+
 - **A task knows where else it was named** (CAIRN-267). Agents write refs into notes all the
   time, and they only ever pointed one way: BB-343's finding said its closure must not be
   read as permission for BB-333, and `cairn show BB-333` said nothing about it. Every

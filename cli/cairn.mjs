@@ -1372,6 +1372,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    where the last session here stopped, what is known
     cairn learn "<title>" --body - record what we now know
                                    --allow-dangling  keep a [[ref]] the store cannot resolve
+                                   --files a,b  files it is about, beyond those its body names
                                    --project K  true of that project
                                    --entity E   true of that grouping (cairn entities)
                                    --global     true everywhere — say so on purpose
@@ -1389,6 +1390,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn replay                   send writes put aside while the server was down
     cairn relearn <slug> --body -  correct it  [--reason "why"] [--allow-dangling]
                                    --project K | --entity E | --global  re-scope it
+                                   --files a,b  the files it is about (replaces those named before)
     cairn unlearn <slug> [--superseded-by <slug> [--reason "why"]]
     cairn session list             recent sessions
     cairn session end --id <id>    write the episodic record, checkpoint what is held
@@ -2089,6 +2091,8 @@ const commands = {
     if (entities.length) payload.entities = entities
     if (flags.slug) payload.slug = flags.slug
     if (flags.task) payload.sourceTaskRef = flags.task
+    // Files it is about beyond the paths its body names (CAIRN-269).
+    if (flags.files) payload.files = splitList(flags.files)
     if (flags.verified) payload.verified = true
     // The write refuses a [[reference]] whose fact the store already holds
     // under another slug, and names it. That refusal is the point, so this
@@ -2419,6 +2423,8 @@ const commands = {
     if (flags['allow-dangling']) patch.allowUnresolvedRefs = true
     // Why it changed, kept on the version this replaces (CAIRN-266).
     if (typeof flags.reason === 'string') patch.reason = flags.reason
+    // Replaces the explicitly named files; `--files ''` clears them (CAIRN-269).
+    if (flags.files !== undefined) patch.files = flags.files === true ? [] : splitList(flags.files)
 
     const result = await request('PATCH', `/api/v1/knowledge/${slug}`, patch)
     emit(result)
