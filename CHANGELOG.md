@@ -19,8 +19,11 @@ out under **Breaking** with what to do about it.
   was given in that window, never-recalled first — dead, or titled so no search finds them.
   The session briefing and `cairn recall` record nothing, so they are not counted, and every
   surface says so. `--unused` reads `knowledge_recall_state` (migration 062), kept current by
-  triggers on the telemetry tables and backfilled once, and never touches a knowledge row, so it is one index scan bounded by
-  its limit rather than a recount of all recorded history on every request.
+  triggers on the telemetry tables and backfilled once; a recall never writes a knowledge row,
+  so it never changes `updated_at`. The query merges two index-driven halves, never-recalled
+  and least-recently-recalled, each cut at the limit. Its cost grows with the number of current
+  entries in the worst case (when nearly all have been recalled, finding the never-recalled ones
+  walks the corpus), never with recorded search and read history.
 
 - **`cairn recall <ref>`: what already bears on this task, and why** (CAIRN-268). `check`
   answers from a phrase; this starts from the task. Decisions: resolutions and
