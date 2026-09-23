@@ -106,7 +106,7 @@ const TOOLS = [
       },
       required: ['ref'],
     },
-    run: (a) => ['recall', a.ref, ...(a.limit ? ['--limit', String(a.limit)] : [])],
+    run: (a) => ['recall', a.ref, ...(a.limit !== undefined ? ['--limit', String(a.limit)] : [])],
   },
   {
     name: 'cairn_know',
@@ -138,7 +138,7 @@ const TOOLS = [
       },
     },
     run: (a) =>
-      a.unusedDays
+      a.unusedDays !== undefined
         ? ['know', '--unused', '--days', String(a.unusedDays)]
         : [
             'know',

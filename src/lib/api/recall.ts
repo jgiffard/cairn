@@ -110,8 +110,9 @@ const decisionsFrom = async (task: Task, related: Map<string, Set<Why>>): Promis
   const ids = [...related.keys()]
   if (ids.length === 0) return []
 
-  const { rows } = await pool().query(
-    `with related as (select unnest($1::uuid[]) as id)
+  const [{ rows }, { rows: pointed }] = await Promise.all([
+    pool().query(
+      `with related as (select unnest($1::uuid[]) as id)
      select p.key || '-' || t.number as ref, t.id, t.title, t.status,
             'resolution' as kind, t.resolution as text, t.resolved_by as by,
             coalesce(t.resolved_at, t.updated_at) as at, null::uuid as note_id
@@ -126,16 +127,16 @@ const decisionsFrom = async (task: Task, related: Map<string, Set<Why>>): Promis
          join task_notes n on n.task_id = t.id and n.kind in ('decision', 'finding')
      ) notes
      where nth <= 2`,
-    [ids],
-  )
-
-  // A note that names this task is the reason its task came up at all, so it
-  // is shown whatever its rank among that task's notes.
-  const { rows: pointed } = await pool().query(
-    `select m.note_id from task_mentions m join task_notes n on n.id = m.note_id
-      where m.target_task_id = $1 and n.kind in ('decision', 'finding')`,
-    [task.id],
-  )
+      [ids],
+    ),
+    // A note that names this task is the reason its task came up at all, so
+    // it is shown whatever its rank among that task's notes.
+    pool().query(
+      `select m.note_id from task_mentions m join task_notes n on n.id = m.note_id
+        where m.target_task_id = $1 and n.kind in ('decision', 'finding')`,
+      [task.id],
+    ),
+  ])
   const namesThisTask = new Set(pointed.map((r) => r.note_id as string))
 
   const { rows: extra } = namesThisTask.size

@@ -424,8 +424,6 @@ const sameSet = (a: string[], b: string[]) => {
   return left.size === new Set(b).size && b.every((v) => left.has(v))
 }
 
-const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i])
-
 /**
  * Keep the version an edit is about to replace (CAIRN-266).
  *
@@ -481,7 +479,7 @@ const recordRevision = async (
   const contentChanged =
     (fields.title !== undefined && fields.title !== live.title) ||
     (fields.body !== undefined && fields.body !== live.body) ||
-    (fields.labels !== undefined && !sameList(fields.labels as string[], live.labels))
+    (fields.labels !== undefined && !sameSet(fields.labels as string[], live.labels))
   const scopeChanged =
     (projectIds !== undefined && !sameSet(projectIds, live.project_ids)) ||
     (entityIds !== undefined && !sameSet(entityIds, live.entity_ids))

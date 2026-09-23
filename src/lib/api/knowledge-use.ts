@@ -19,7 +19,8 @@ export type RecallCount = {
   lastRecalled: string | null
 }
 
-const since = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString()
+const since = (days: number) =>
+  Number.isFinite(days) ? new Date(Date.now() - days * 86_400_000).toISOString() : '-infinity'
 
 export const recallCounts = async (
   ids: string[],
@@ -54,22 +55,34 @@ export type UnusedEntry = {
  * than the window is left out: it has not had the chance.
  */
 export const unusedKnowledge = async (days: number, limit: number): Promise<UnusedEntry[]> => {
-  const { rows } = await pool().query(
-    `select k.slug, k.title, k.created_at, ever.last_recalled
+  // The window first, which the created_at indexes bound. "Last recalled ever"
+  // has no bound, so it is asked only about the entries this call will list —
+  // never about the whole store.
+  const { rows: candidates } = await pool().query(
+    `select k.id, k.slug, k.title, k.created_at
        from knowledge_recall_counts($1) w
        join knowledge k on k.id = w.knowledge_id
-       join knowledge_recall_counts('-infinity') ever on ever.knowledge_id = k.id
       where w.returned = 0 and w.read = 0
         and k.superseded_by is null
-        and k.created_at < $1
-      order by ever.last_recalled asc nulls first, k.created_at asc
-      limit $2`,
-    [since(days), limit],
+        and k.created_at < $1`,
+    [since(days)],
   )
-  return rows.map((r) => ({
-    slug: r.slug as string,
-    title: r.title as string,
-    createdAt: new Date(r.created_at as string).toISOString(),
-    lastRecalled: r.last_recalled ? new Date(r.last_recalled as string).toISOString() : null,
-  }))
+  if (candidates.length === 0) return []
+
+  const ever = await recallCounts(
+    candidates.map((c) => c.id as string),
+    Number.POSITIVE_INFINITY,
+  )
+  return candidates
+    .map((c) => ({
+      slug: c.slug as string,
+      title: c.title as string,
+      createdAt: new Date(c.created_at as string).toISOString(),
+      lastRecalled: ever.get(c.id as string)?.lastRecalled ?? null,
+    }))
+    .sort(
+      (a, b) =>
+        (a.lastRecalled ?? '').localeCompare(b.lastRecalled ?? '') || a.createdAt.localeCompare(b.createdAt),
+    )
+    .slice(0, limit)
 }

@@ -113,6 +113,18 @@ describe('knowledge revisions', () => {
     expect(await revisions()).toHaveLength(1)
   })
 
+  it('treats labels as a set, so reordering them is not a new version', async () => {
+    await updateKnowledge(editor, SLUG, { labels: ['postgres', 'pooling'] })
+    await updateKnowledge(editor, SLUG, { labels: ['pooling', 'postgres'] })
+    expect((await revisions()).map((r) => r.change)).toEqual(['relearned', 'relearned'])
+    // Back to what the rest of this file expects.
+    await updateKnowledge(editor, SLUG, { labels: ['postgres'] })
+    await pool().query(
+      `delete from knowledge_revisions where knowledge_id = (select id from knowledge where slug = $1) and revision > 1`,
+      [SLUG],
+    )
+  })
+
   it('calls a scope-only change a rescope, and keeps the old scope as keys', async () => {
     await updateKnowledge(editor, SLUG, { projects: [KEY] })
     await updateKnowledge(editor, SLUG, { projects: [] })
