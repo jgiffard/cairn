@@ -1381,6 +1381,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn entities                 groupings a fact can be true of, and their projects
     cairn entities assign|unassign <key> --project A,B
     cairn entities rename <key> --key <new> --title "T"
+    cairn recall <ref>             decisions and knowledge that bear on this task, and why
     cairn know [<slug>|<query>]    read it back, or list what applies here
     cairn know --gaps              where the memory has holes
     cairn know --orphans           entries nothing links to, that link to nothing
@@ -1998,6 +1999,23 @@ const commands = {
   async claim() {
     const ref = need(positional[0], 'usage: cairn claim <ref>')
     emit(await request('POST', `/api/v1/tasks/${ref}/claim`, {}))
+
+    // What already bears on it, at the moment it is picked up (CAIRN-268). A
+    // recall nobody remembers to run is one that does not happen, and the case
+    // it exists for — a closure elsewhere saying "do not read this as
+    // permission for <this task>" — is exactly the one the claimer does not
+    // know to look for. stderr, and soft: the claim has already succeeded.
+    if (FORMAT !== 'tsv') return
+    const r = await request('GET', `/api/v1/tasks/${ref}/recall?decisions=3&knowledge=3`, undefined, { soft: true })
+    const decisions = Array.isArray(r?.decisions) ? r.decisions : []
+    const facts = Array.isArray(r?.knowledge) ? r.knowledge : []
+    if (decisions.length === 0 && facts.length === 0) return
+    const lines = [`bears on this — cairn recall ${ref}:`]
+    for (const d of decisions) {
+      lines.push(`  ${d.ref} ${d.kind} (${d.why.join(', ')}): ${truncate(d.text, 140)}`)
+    }
+    if (facts.length) lines.push(`  knowledge: ${facts.map((k) => k.slug + (k.stale ? ' [stale]' : '')).join(', ')}`)
+    process.stderr.write(`${lines.join('\n')}\n`)
   },
   async beat() {
     emit(await request('POST', `/api/v1/tasks/${need(positional[0], 'usage: cairn beat <ref>')}/beat`, {}))
@@ -2519,6 +2537,42 @@ const commands = {
   },
 
   // --- the briefing ------------------------------------------------------
+
+  /**
+   * What already bears on one task (CAIRN-268): decisions on the tasks around
+   * it and the knowledge that applies, each line saying why it was picked. Run
+   * it when picking a task up — it is the question `check` answers from a
+   * phrase, asked from the task instead.
+   */
+  async recall() {
+    const ref = need(positional[0], 'usage: cairn recall <ref> [--limit N]')
+    const params = new URLSearchParams()
+    if (flags.limit) {
+      params.set('decisions', flags.limit)
+      params.set('knowledge', flags.limit)
+    }
+    const r = await request('GET', `/api/v1/tasks/${ref}/recall${String(params) ? `?${params}` : ''}`)
+    if (FORMAT !== 'tsv') return emit(r)
+
+    const out = [`# ${r.ref} — ${r.title}`, '']
+    out.push(r.decisions.length ? 'decisions' : 'decisions: none recorded on related tasks')
+    for (const d of r.decisions) {
+      out.push(`  ${d.ref}  ${d.kind} · ${d.why.join(', ')} · ${d.by ?? '?'} · ${d.at.slice(0, 10)}  [${d.status}]`)
+      out.push(`    ${d.text}`)
+    }
+    out.push('')
+    out.push(r.knowledge.length ? 'knowledge' : 'knowledge: nothing linked or matching')
+    for (const k of r.knowledge) {
+      const marks = [k.stale ? 'stale' : '', k.verified ? 'verified' : ''].filter(Boolean).join(', ')
+      out.push(`  ${k.slug}${marks ? `  [${marks}]` : ''}`)
+      out.push(`    ${k.title} — ${k.why.join('; ')}`)
+    }
+    const more = []
+    if (r.omitted.decisions) more.push(`${r.omitted.decisions} more decision(s)`)
+    if (r.omitted.knowledge) more.push(`${r.omitted.knowledge} more fact(s)`)
+    if (more.length) out.push('', `${more.join(', ')} — cairn recall ${ref} --limit 30`)
+    process.stdout.write(`${out.join('\n')}\n`)
+  },
 
   async context() {
     const cwd = flags.cwd ?? process.cwd()

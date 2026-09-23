@@ -11,6 +11,17 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **`cairn recall <ref>`: what already bears on this task, and why** (CAIRN-268). `check`
+  answers from a phrase; this starts from the task. Decisions: resolutions and
+  decision/finding notes on tasks that name it (with the note that does, excerpted around the
+  name), tasks it names, its parent, sub-tasks, blockers, and answered tasks with a similar
+  title. Knowledge: current entries linked to files it touched, learned on it or a related
+  task, or matching its terms within its project, with their stale mark. Every line carries
+  `why`. `GET /api/v1/tasks/{ref}/recall`, MCP `cairn_recall`, and `cairn claim` now prints
+  the top three of each on stderr — the recall an agent does not think to run is the one that
+  catches a closure elsewhere saying "do not read this as permission for this task". Built on
+  the mentions of CAIRN-267 and the file links of CAIRN-269.
+
 - **Which files a fact is about is stored, and can be asked backwards** (CAIRN-269).
   Staleness worked out a fact's files at read time and nowhere else, and "what do we know
   about this file" read `file_touches.knowledge_id`, which nothing ever wrote — so `cairn

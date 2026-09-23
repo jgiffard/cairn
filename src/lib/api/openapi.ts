@@ -953,6 +953,24 @@ export const openapiSpec = () => ({
       },
       delete: { summary: 'Forget it', responses: { '200': okResponse('Deleted.'), '404': errorResponse } },
     },
+    '/tasks/{ref}/recall': {
+      parameters: [
+        { name: 'ref', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'decisions', in: 'query', schema: { type: 'integer', default: 8, maximum: 30 } },
+        { name: 'knowledge', in: 'query', schema: { type: 'integer', default: 8, maximum: 30 } },
+      ],
+      get: {
+        summary: 'What already bears on this task',
+        description:
+          'Two lists, each line with `why` it was picked. `decisions`: resolutions and ' +
+          'decision/finding notes on related tasks — ones that name this task (and the note ' +
+          'that does), ones it names, its parent, sub-tasks, blockers, and answered tasks with ' +
+          'a similar title. `knowledge`: current entries linked to files this task touched, ' +
+          'learned on it or a related task, or matching its terms within its project, with ' +
+          'their stale mark. `omitted` says how many lines each limit cut.',
+        responses: { '200': okResponse('{ ref, title, decisions, knowledge, omitted }.'), '404': errorResponse },
+      },
+    },
     '/tasks/{ref}/mentions': {
       parameters: [
         { name: 'ref', in: 'path', required: true, schema: { type: 'string' } },

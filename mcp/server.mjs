@@ -91,6 +91,24 @@ const TOOLS = [
     run: (a) => ['show', a.ref],
   },
   {
+    name: 'cairn_recall',
+    description:
+      'What already bears on one task: resolutions, decision and finding notes on the tasks ' +
+      'around it (ones that name it, ones it names, parent, sub-tasks, blockers, similar ' +
+      'titles) and the knowledge that applies (linked to files it touched, learned on it or ' +
+      'a related task, or matching its terms). Every line says why it was picked. Use it when ' +
+      'picking a task up, before starting the work.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ref: { type: 'string', description: 'e.g. CAI-42' },
+        limit: { type: 'number', description: 'Lines per section, default 8, at most 30.' },
+      },
+      required: ['ref'],
+    },
+    run: (a) => ['recall', a.ref, ...(a.limit ? ['--limit', String(a.limit)] : [])],
+  },
+  {
     name: 'cairn_know',
     description:
       'Read what is known. With a slug, returns that entry; with a phrase, searches ' +

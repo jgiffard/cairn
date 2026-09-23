@@ -152,10 +152,19 @@ you do not know in advance which one holds the answer.
 cairn check "flaky auth redirect"   # index. cheap.
 cairn show ACME-42                   # digest: the answer, findings, a clipped body
 cairn show ACME-42 --full            # everything, when the digest is not enough
+cairn recall ACME-42                 # picking it up: the decisions and facts that bear on it
 cairn note ACME-42 "..."             # act, and record it
 ```
 
 Never pull bodies in bulk to browse them. That is what the index is for.
+
+`recall` starts from the task rather than a phrase. It returns resolutions and
+decision/finding notes on the tasks around it — ones that name it, ones it names, its parent,
+sub-tasks, blockers, similar closed work — and the knowledge that applies: linked to files it
+touched, learned on it or a related task, or matching its terms. Each line says why it was
+picked. `claim` prints the top of it for you; read it before you start, because the line that
+says "do not read that closure as permission for this" is the one you would not know to look
+for.
 
 ## 3. Record as you go
 
