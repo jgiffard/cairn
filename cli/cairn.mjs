@@ -262,7 +262,7 @@ const flags = new Proxy(typedFlags, {
 const KNOWN_FLAGS = new Set([
   'agent', 'all', 'allow-dangling', 'also-project', 'archived', 'body',
   'branch', 'completed',
-  'confirm', 'cwd', 'dangling', 'description', 'dir', 'dry-run',
+  'confirm', 'cwd', 'dangling', 'days', 'description', 'dir', 'dry-run',
   'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'file', 'files',
   'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'history', 'hours', 'id',
   'json', 'key', 'kind', 'kinds', 'label', 'learned', 'limit', 'max-parents',
@@ -271,7 +271,7 @@ const KNOWN_FLAGS = new Set([
   'reason', 'remote', 'repo', 'request', 'resolution', 'scheduled',
   'show-toplevel', 'slug', 'start', 'started', 'status', 'summary',
   'superseded', 'superseded-by', 'task', 'tasks', 'title', 'tool-calls',
-  'type', 'url', 'verified', 'version',
+  'type', 'unused', 'url', 'verified', 'version',
 ])
 
 for (let i = 0; i < argv.length; i += 1) {
@@ -1387,6 +1387,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn know --orphans           entries nothing links to, that link to nothing
     cairn know --dangling          references pointing at entries nobody wrote
     cairn know <slug> --history    every version, who changed it and why  [--full]
+    cairn know --unused [--days 30]  facts no search or read has returned lately
     cairn verify <slug>            it is still true — clears the stale mark
     cairn replay                   send writes put aside while the server was down
     cairn relearn <slug> --body -  correct it  [--reason "why"] [--allow-dangling]
@@ -2219,6 +2220,33 @@ const commands = {
     // The server normalises the spelling on lookup; this only has to stop
     // ruling the reference out before asking.
     /**
+     * Facts nobody was given in a month (CAIRN-270): dead, or titled so that
+     * no search finds them. Either way worth a look — link it, retitle it,
+     * verify it, or unlearn it. The count leaves out the session briefing,
+     * which records nothing, and the output says so.
+     */
+    if (flags.unused) {
+      const days = flags.days ?? (flags.unused === true ? '30' : flags.unused)
+      const params = new URLSearchParams({ unused: String(days), limit: flags.limit ?? '50' })
+      const data = await request('GET', `/api/v1/knowledge?${params}`)
+      if (FORMAT === 'json') return emit(data)
+      emit(data, {
+        rows: (d) =>
+          d.results.map((u) => ({
+            slug: u.slug,
+            'last recalled': u.lastRecalled ? u.lastRecalled.slice(0, 10) : 'never',
+            written: u.createdAt.slice(0, 10),
+            title: truncate(u.title, 60),
+          })),
+        columns: ['slug', 'last recalled', 'written', 'title'],
+      })
+      if (FORMAT === 'tsv') {
+        process.stderr.write(`not recalled in ${data.days} days — ${data.counted}\n`)
+      }
+      return
+    }
+
+    /**
      * What it used to say (CAIRN-266). One row per version, newest first, each
      * saying how it came to be: written, or which edit produced it, by whom and
      * why. `--full` prints the bodies, which is the part worth comparing.
@@ -2362,10 +2390,14 @@ const commands = {
             ? r.entities.join(',')
             : 'global',
         verified: r.verified ? 'yes' : '',
+        // Searches that returned it and direct reads, last 30 days (CAIRN-270).
+        recalled: String(r.recalled ?? ''),
         tokens: `~${r.tokens}`,
         title: truncate(r.title, 70),
       })),
-      columns: ['slug', 'scope', 'verified', 'tokens', 'title'],
+      // `recalled` last: a column appended at the end is one no reader of this
+      // table sees move.
+      columns: ['slug', 'scope', 'verified', 'tokens', 'title', 'recalled'],
     })
   },
 

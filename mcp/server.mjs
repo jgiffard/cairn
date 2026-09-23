@@ -129,14 +129,23 @@ const TOOLS = [
             'With a slug: every version of the entry, who changed it and why, instead of ' +
             'the current text.',
         },
+        unusedDays: {
+          type: 'number',
+          description:
+            'Instead: current entries no search or direct read returned in this many days — ' +
+            'dead, or titled so nothing finds them. The session briefing is not counted.',
+        },
       },
     },
-    run: (a) => [
-      'know',
-      ...(a.subject ? [a.subject] : []),
-      ...(a.project ? ['--project', a.project] : []),
-      ...(a.history ? ['--history'] : []),
-    ],
+    run: (a) =>
+      a.unusedDays
+        ? ['know', '--unused', '--days', String(a.unusedDays)]
+        : [
+            'know',
+            ...(a.subject ? [a.subject] : []),
+            ...(a.project ? ['--project', a.project] : []),
+            ...(a.history ? ['--history'] : []),
+          ],
   },
   {
     name: 'cairn_gaps',

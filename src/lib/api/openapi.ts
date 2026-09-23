@@ -894,8 +894,23 @@ export const openapiSpec = () => ({
             schema: { type: 'boolean', default: false },
           },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
+          {
+            name: 'unused',
+            in: 'query',
+            description:
+              'Instead of the index: current entries no search returned and no direct read ' +
+              'fetched in this many days, never-recalled first, leaving out entries younger ' +
+              'than the window. The session briefing and `cairn recall` record nothing and are ' +
+              'not counted; `counted` in the response says so.',
+            schema: { type: 'integer', minimum: 1, maximum: 365 },
+          },
         ],
-        responses: { '200': okResponse('Knowledge index.') },
+        responses: {
+          '200': okResponse(
+            'Knowledge index. Each row carries `recalled`: searches that returned it plus direct ' +
+              'reads in the last `recallWindowDays` days.',
+          ),
+        },
       },
       post: {
         summary: 'Record what we now know',

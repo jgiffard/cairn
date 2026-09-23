@@ -382,6 +382,7 @@ at something nobody has written.
 ### What is not connected
 
 ```bash
+cairn know --unused      # entries no search or read has returned in 30 days
 cairn know --gaps        # the shape of the memory: islands, orphans, dead references
 cairn know --orphans     # entries nothing links to, that link to nothing
 cairn know --dangling    # references pointing at entries nobody ever wrote

@@ -11,6 +11,15 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **How often each fact is actually recalled** (CAIRN-270). 053 recorded which entries every
+  search returned and every direct read by slug, and nothing read either per entry.
+  `knowledge_recall_counts` (migration 061) does: `cairn know` lists gain a `recalled` column
+  (last column, 30 days), the knowledge page says "recalled N× in 30 days", and `cairn know
+  --unused [--days N]` (`?unused=N`, MCP `cairn_know unusedDays`) lists current entries nobody
+  was given in that window, never-recalled first — dead, or titled so no search finds them.
+  The session briefing and `cairn recall` record nothing, so they are not counted, and every
+  surface says so.
+
 - **`cairn recall <ref>`: what already bears on this task, and why** (CAIRN-268). `check`
   answers from a phrase; this starts from the task. Decisions: resolutions and
   decision/finding notes on tasks that name it (with the note that does, excerpted around the

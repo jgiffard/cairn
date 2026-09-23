@@ -99,3 +99,32 @@ describe('know --history', () => {
     ])
   })
 })
+
+describe('know --unused (CAIRN-270)', () => {
+  it('asks for the window, prints never for an entry with no record, and says what is not counted', async () => {
+    const seen: Seen = {}
+    const base = await serve(seen, {
+      count: 1,
+      days: 45,
+      counted: 'the session briefing is not recorded',
+      results: [{ slug: 'old-fact', title: 'Old fact', createdAt: '2026-06-01T00:00:00.000Z', lastRecalled: null }],
+    })
+    const home = await mkdtemp(join(tmpdir(), 'cairn-unused-'))
+    directories.push(home)
+    const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn('node', ['cli/cairn.mjs', 'know', '--unused', '--days', '45'], {
+        env: { ...process.env, HOME: home, CAIRN_BASE_URL: base, CAIRN_API_KEY: 'test-key' },
+      })
+      let out = ''
+      let err = ''
+      child.stdout.on('data', (c) => { out += c })
+      child.stderr.on('data', (c) => { err += c })
+      child.on('error', reject)
+      child.on('close', () => resolve({ stdout: out, stderr: err }))
+    })
+
+    expect(seen.path).toBe('/api/v1/knowledge?unused=45&limit=50')
+    expect(stdout).toContain('old-fact\tnever\t2026-06-01\tOld fact')
+    expect(stderr).toContain('not recalled in 45 days — the session briefing is not recorded')
+  })
+})

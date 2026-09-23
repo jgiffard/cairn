@@ -103,10 +103,12 @@ export const KnowledgeDetail = ({
   allLabels,
   suggestedEntities,
   revisions,
+  recall,
 }: {
   slug: string
   row: Row
   revisions: Revision[]
+  recall: { days: number; returned: number; read: number; lastRecalled: string | null; counted: string }
   allProjects: KeyTitle[]
   allEntities: KeyTitle[]
   allLabels: string[]
@@ -319,6 +321,17 @@ export const KnowledgeDetail = ({
             <time dateTime={current.createdAt} title={fullDateTime(current.createdAt)}>
               first written {shortDate(current.createdAt)}
             </time>
+            {/* How often it is handed to anyone (CAIRN-270), and what that
+                leaves out — a fact the briefing shows daily would otherwise
+                read as unused. */}
+            <span title={`Last ${recall.days} days: ${recall.counted}.`}>
+              {recall.returned + recall.read === 0
+                ? `not recalled in ${recall.days} days`
+                : `recalled ${recall.returned + recall.read}× in ${recall.days} days (${recall.returned} search, ${recall.read} read)`}
+              {recall.lastRecalled && recall.returned + recall.read === 0
+                ? ` · last ${shortDate(recall.lastRecalled)}`
+                : ''}
+            </span>
           </div>
 
           {revisions.length > 0 && (

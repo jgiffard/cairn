@@ -12,6 +12,7 @@ import {
   supersededByInfo,
 } from '@/lib/api/knowledge'
 import { listEntities } from '@/lib/api/entities'
+import { COUNTED, RECALL_WINDOW_DAYS, recallCounts } from '@/lib/api/knowledge-use'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { KnowledgeDetail } from './knowledge-detail'
 
@@ -27,7 +28,7 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
 
   const firstProject = (row.projects ?? [])[0]
 
-  const [projects, entities, others, supersededMap, suggested, learnedOn, history] = await Promise.all([
+  const [projects, entities, others, supersededMap, suggested, learnedOn, history, use] = await Promise.all([
     listProjects(user.id),
     listEntities(user.id),
     // Only for the label suggestions now. The supersede picker used to be fed
@@ -43,6 +44,8 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
     sourceTaskRef(user.id, row.source_task_id),
     // What it said before each correction (CAIRN-266).
     knowledgeRevisions(user.id, slug),
+    // How often it is actually handed to anyone (CAIRN-270).
+    recallCounts([row.id]),
   ])
 
   return (
@@ -79,6 +82,13 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
             createdAt: row.created_at,
             author: row.actor_id,
             sourceTask: learnedOn,
+          }}
+          recall={{
+            days: RECALL_WINDOW_DAYS,
+            returned: use.get(row.id)?.returned ?? 0,
+            read: use.get(row.id)?.read ?? 0,
+            lastRecalled: use.get(row.id)?.lastRecalled ?? null,
+            counted: COUNTED,
           }}
           revisions={(history?.revisions ?? []).map((r) => ({
             revision: r.revision,
