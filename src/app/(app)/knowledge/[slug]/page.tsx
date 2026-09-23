@@ -6,6 +6,7 @@ import { currentUser, listProjects } from '@/lib/data'
 import {
   entitiesForProject,
   getKnowledge,
+  knowledgeRevisions,
   listKnowledge,
   sourceTaskRef,
   supersededByInfo,
@@ -26,7 +27,7 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
 
   const firstProject = (row.projects ?? [])[0]
 
-  const [projects, entities, others, supersededMap, suggested, learnedOn] = await Promise.all([
+  const [projects, entities, others, supersededMap, suggested, learnedOn, history] = await Promise.all([
     listProjects(user.id),
     listEntities(user.id),
     // Only for the label suggestions now. The supersede picker used to be fed
@@ -40,6 +41,8 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
     firstProject ? entitiesForProject(user.id, firstProject) : Promise.resolve([]),
     // Where this was learned. Stored since knowledge existed, shown nowhere.
     sourceTaskRef(user.id, row.source_task_id),
+    // What it said before each correction (CAIRN-266).
+    knowledgeRevisions(user.id, slug),
   ])
 
   return (
@@ -77,6 +80,15 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
             author: row.actor_id,
             sourceTask: learnedOn,
           }}
+          revisions={(history?.revisions ?? []).map((r) => ({
+            revision: r.revision,
+            title: r.title,
+            body: r.body,
+            change: r.change,
+            editedBy: r.edited_by,
+            editedAt: r.edited_at,
+            reason: r.reason,
+          }))}
           allProjects={projects.map((p) => ({ key: p.key, title: p.title }))}
           allEntities={entities.map((e) => ({ key: e.key, title: e.title }))}
           allLabels={[...new Set(others.flatMap((o) => o.labels))].sort()}

@@ -105,12 +105,19 @@ const TOOLS = [
           description: 'A slug to read, or a phrase to search. Omit to list what applies here.',
         },
         project: { type: 'string', description: 'Optional project key, e.g. CAI.' },
+        history: {
+          type: 'boolean',
+          description:
+            'With a slug: every version of the entry, who changed it and why, instead of ' +
+            'the current text.',
+        },
       },
     },
     run: (a) => [
       'know',
       ...(a.subject ? [a.subject] : []),
       ...(a.project ? ['--project', a.project] : []),
+      ...(a.history ? ['--history'] : []),
     ],
   },
   {
@@ -174,6 +181,7 @@ const TOOLS = [
       ...(a.label ? ['--label', a.label] : []),
       ...(a.task ? ['--task', a.task] : []),
       ...(a.allowDangling ? ['--allow-dangling'] : []),
+      ...(a.reason ? ['--reason', a.reason] : []),
     ],
   },
   {
@@ -202,6 +210,10 @@ const TOOLS = [
             'Keep a [[reference]] the store cannot resolve. An edit runs the same check as ' +
             'a write, so a correction can be refused the same way.',
         },
+        reason: {
+          type: 'string',
+          description: 'Why it changed. Kept with the version this replaces.',
+        },
       },
       required: ['slug'],
     },
@@ -226,12 +238,14 @@ const TOOLS = [
       properties: {
         slug: { type: 'string' },
         supersededBy: { type: 'string', description: 'Slug of the entry that replaces it.' },
+        reason: { type: 'string', description: 'Why it was superseded. Needs supersededBy.' },
       },
       required: ['slug'],
     },
     run: (a) => [
       'unlearn', a.slug,
       ...(a.supersededBy ? ['--superseded-by', a.supersededBy] : []),
+      ...(a.supersededBy && a.reason ? ['--reason', a.reason] : []),
     ],
   },
   {

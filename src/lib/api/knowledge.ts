@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg'
 import { admin, normalizeDatabaseValue, transaction } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { normalizeSlugRef, slugify, type KnowledgeCreate, type KnowledgeUpdate } from '@/schemas/knowledge'
@@ -384,6 +385,130 @@ export const createKnowledge = async (actor: Actor, input: KnowledgeCreate) => {
   return row
 }
 
+type RevisionChange = 'relearned' | 'rescoped' | 'superseded' | 'reinstated'
+
+const sameSet = (a: string[], b: string[]) => {
+  const left = new Set(a)
+  return left.size === new Set(b).size && b.every((v) => left.has(v))
+}
+
+const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i])
+
+/**
+ * Keep the version an edit is about to replace (CAIRN-266).
+ *
+ * Decided by comparing values, not by which fields the patch carried: the
+ * browser sends every field on every save, and a save that changes nothing is
+ * not a new version. A `verify` alone is not one either — it confirms the text,
+ * it does not change it.
+ *
+ * Reads the live row `for update`, so two edits racing each other each keep the
+ * version they actually replaced, and number it without colliding.
+ */
+const recordRevision = async (
+  client: PoolClient,
+  actor: Actor,
+  knowledgeId: string,
+  fields: Record<string, unknown>,
+  projectIds: string[] | undefined,
+  entityIds: string[] | undefined,
+  reason: string | undefined,
+) => {
+  const { rows } = await client.query(
+    `select k.title, k.body, k.labels, k.verified_at, k.superseded_by,
+            coalesce((select array_agg(kp.project_id::text) from knowledge_projects kp
+                       where kp.knowledge_id = k.id), '{}') as project_ids,
+            coalesce((select array_agg(p.key order by p.key) from knowledge_projects kp
+                       join projects p on p.id = kp.project_id
+                      where kp.knowledge_id = k.id), '{}') as project_keys,
+            coalesce((select array_agg(ke.entity_id::text) from knowledge_entities ke
+                       where ke.knowledge_id = k.id), '{}') as entity_ids,
+            coalesce((select array_agg(e.key order by e.key) from knowledge_entities ke
+                       join entities e on e.id = ke.entity_id
+                      where ke.knowledge_id = k.id), '{}') as entity_keys
+       from knowledge k
+      where k.id = $1
+        for update of k`,
+    [knowledgeId],
+  )
+  const live = rows[0] as
+    | {
+        title: string
+        body: string
+        labels: string[]
+        verified_at: string | null
+        superseded_by: string | null
+        project_ids: string[]
+        project_keys: string[]
+        entity_ids: string[]
+        entity_keys: string[]
+      }
+    | undefined
+  if (!live) return
+
+  const contentChanged =
+    (fields.title !== undefined && fields.title !== live.title) ||
+    (fields.body !== undefined && fields.body !== live.body) ||
+    (fields.labels !== undefined && !sameList(fields.labels as string[], live.labels))
+  const scopeChanged =
+    (projectIds !== undefined && !sameSet(projectIds, live.project_ids)) ||
+    (entityIds !== undefined && !sameSet(entityIds, live.entity_ids))
+  const supersession = fields.superseded_by !== undefined && fields.superseded_by !== live.superseded_by
+
+  let change: RevisionChange | null = null
+  if (supersession) change = fields.superseded_by === null ? 'reinstated' : 'superseded'
+  else if (contentChanged) change = 'relearned'
+  else if (scopeChanged) change = 'rescoped'
+  if (!change) return
+
+  await client.query(
+    `insert into knowledge_revisions
+       (knowledge_id, revision, title, body, labels, projects, entities, verified_at,
+        superseded_by, change, edited_by_type, edited_by, reason)
+     select $1, coalesce(max(revision), 0) + 1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+       from knowledge_revisions where knowledge_id = $1`,
+    [knowledgeId, live.title, live.body, live.labels, live.project_keys, live.entity_keys,
+      live.verified_at, live.superseded_by, change, actor.actorType, actor.actorId, reason ?? null],
+  )
+}
+
+export type KnowledgeRevision = {
+  revision: number
+  title: string
+  body: string
+  labels: string[]
+  projects: string[]
+  entities: string[]
+  verified_at: string | null
+  superseded_by: string | null
+  change: RevisionChange
+  edited_by_type: 'human' | 'agent'
+  edited_by: string | null
+  reason: string | null
+  edited_at: string
+}
+
+/** Every replaced version of an entry, newest first. Null when there is no such entry. */
+export const knowledgeRevisions = async (
+  userId: string,
+  slug: string,
+): Promise<{ entry: KnowledgeRow; revisions: KnowledgeRevision[] } | null> => {
+  const entry = await getKnowledge(userId, slug)
+  if (!entry) return null
+
+  const { data, error } = await admin()
+    .from('knowledge_revisions')
+    .select(
+      'revision, title, body, labels, projects, entities, verified_at, superseded_by, ' +
+        'change, edited_by_type, edited_by, reason, edited_at',
+    )
+    .eq('knowledge_id', entry.id)
+    .order('revision', { ascending: false })
+  if (error) throw new Error(error.message)
+
+  return { entry, revisions: (data ?? []) as unknown as KnowledgeRevision[] }
+}
+
 export const updateKnowledge = async (actor: Actor, slug: string, patch: KnowledgeUpdate) => {
   const existing = await getKnowledge(actor.userId, slug)
   if (!existing) return null
@@ -426,6 +551,8 @@ export const updateKnowledge = async (actor: Actor, slug: string, patch: Knowled
   }
 
   await transaction(async (client) => {
+    await recordRevision(client, actor, existing.id, fields, projectIds, entityIds, patch.reason)
+
     if (Object.keys(fields).length > 0) {
       const columns = Object.keys(fields)
       const allowed = new Set(['title', 'body', 'labels', 'verified_at', 'superseded_by'])

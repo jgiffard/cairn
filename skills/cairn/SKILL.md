@@ -427,11 +427,17 @@ accumulation without correction — two contradictory claims, equally findable, 
 tell which one is current.
 
 ```bash
-cairn relearn <slug> --body -                        # it changed
+cairn relearn <slug> --body - --reason "why"         # it changed
 cairn relearn <slug> --global                        # it is true more widely than filed
 cairn unlearn <old-slug> --superseded-by <new-slug>  # it was wrong
 cairn verify <slug>                                  # still true; you checked
+cairn know <slug> --history                          # what it used to say, and who changed it
 ```
+
+A correction keeps what it corrected: every `relearn`, re-scope and supersession stores the
+version it replaced, with who replaced it and the `--reason` if you gave one. Give one — "the
+default was 15, not the cap" is what makes the old version readable as a mistake rather than
+as a second opinion. A `verify` is not a new version.
 
 `relearn` takes the scope flags too — `--project`, `--entity`, `--global` — so a fact filed
 against this directory's project can be widened once you find it is true elsewhere.

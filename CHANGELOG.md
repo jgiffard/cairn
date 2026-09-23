@@ -11,6 +11,19 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **A knowledge correction keeps what it corrected** (CAIRN-266). `relearn` was a plain
+  UPDATE: the previous title, body, labels and scope were gone for good, `actor_id` went on
+  naming the first author, and the feed credited every later correction to them. Each edit
+  that changes an entry's content, scope or supersession now stores the version it replaced
+  in `knowledge_revisions` (migration 058), with who replaced it, when, and an optional
+  reason — `cairn relearn --reason`, `cairn unlearn --superseded-by X --reason`, and
+  `reason` on `PATCH /api/v1/knowledge/{slug}`. Read it back with `cairn know <slug>
+  --history [--full]`, `GET /api/v1/knowledge/{slug}/history`, the MCP `cairn_know
+  history` flag, or the "earlier versions" list on the knowledge page. A `verify`, and a save
+  that changes nothing, are not new versions. The feed now shows a revised entry as written
+  by its author and then each correction by its editor; entries never revised read exactly
+  as before.
+
 - **A project key rename is told, not only resolved** (CAIRN-264). AC was renamed HOL and
   ACC HOLC on 2026-09-22. CAIRN-125 had already made the old refs resolve, and they did —
   which is the problem: `cairn show AC-113` printed HOL-113 and said nothing, so an agent

@@ -29,6 +29,17 @@ type Row = {
   sourceTask: { ref: string; title: string } | null
 }
 
+/** A version an edit replaced, and the edit that replaced it (CAIRN-266). */
+type Revision = {
+  revision: number
+  title: string
+  body: string
+  change: 'relearned' | 'rescoped' | 'superseded' | 'reinstated'
+  editedBy: string | null
+  editedAt: string
+  reason: string | null
+}
+
 type KeyTitle = { key: string; title: string }
 type SlugTitle = { slug: string; title: string }
 
@@ -91,9 +102,11 @@ export const KnowledgeDetail = ({
   allEntities,
   allLabels,
   suggestedEntities,
+  revisions,
 }: {
   slug: string
   row: Row
+  revisions: Revision[]
   allProjects: KeyTitle[]
   allEntities: KeyTitle[]
   allLabels: string[]
@@ -307,6 +320,38 @@ export const KnowledgeDetail = ({
               first written {shortDate(current.createdAt)}
             </time>
           </div>
+
+          {revisions.length > 0 && (
+            <details className="border-border mt-6 border-t pt-4">
+              <summary className="text-fg-muted hover:text-fg cursor-pointer text-[0.75rem]">
+                {revisions.length} earlier version{revisions.length === 1 ? '' : 's'} — this is
+                version {(revisions[0]?.revision ?? 0) + 1}
+              </summary>
+              <ol className="mt-3 flex flex-col gap-4">
+                {revisions.map((r) => (
+                  <li key={r.revision} className="border-border border-l-2 pl-3">
+                    <div className="text-fg-subtle flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.6875rem]">
+                      <span className="text-fg-muted">v{r.revision}</span>
+                      <span>
+                        replaced{r.editedBy ? ` by ${r.editedBy}` : ''} ·{' '}
+                        <time dateTime={r.editedAt} title={fullDateTime(r.editedAt)}>
+                          {shortDate(r.editedAt)}
+                        </time>{' '}
+                        · {r.change}
+                      </span>
+                    </div>
+                    {r.reason && <p className="text-fg-muted mt-1 text-[0.75rem]">{r.reason}</p>}
+                    <details className="mt-1">
+                      <summary className="text-fg cursor-pointer text-[0.78125rem]">{r.title}</summary>
+                      <div className="mt-2">
+                        <MarkdownView>{r.body || '_No body._'}</MarkdownView>
+                      </div>
+                    </details>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
 
           {!current.superseded && (
             <div className="border-border mt-8 flex flex-wrap items-center gap-2 border-t pt-4">

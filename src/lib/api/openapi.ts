@@ -953,6 +953,20 @@ export const openapiSpec = () => ({
       },
       delete: { summary: 'Forget it', responses: { '200': okResponse('Deleted.'), '404': errorResponse } },
     },
+    '/knowledge/{slug}/history': {
+      parameters: [
+        { name: 'slug', in: 'path', required: true, schema: { type: 'string' } },
+      ],
+      get: {
+        summary: 'What it used to say',
+        description:
+          'Every version an edit replaced, newest first: its title, body, labels and scope as ' +
+          'they stood, and who replaced it, when, and why. `version` is the live row\'s ' +
+          'number, so revision N is version N and the live row is `version`. A `verified` ' +
+          'alone, or a PATCH that changes nothing, is not a new version.',
+        responses: { '200': okResponse('The versions.'), '404': errorResponse },
+      },
+    },
     '/entities': {
       get: {
         summary: 'Groupings a fact can be true of',

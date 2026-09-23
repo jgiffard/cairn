@@ -264,7 +264,7 @@ const KNOWN_FLAGS = new Set([
   'branch', 'completed',
   'confirm', 'cwd', 'dangling', 'description', 'dir', 'dry-run',
   'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'file', 'files',
-  'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'hours', 'id',
+  'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'history', 'hours', 'id',
   'json', 'key', 'kind', 'kinds', 'label', 'learned', 'limit', 'max-parents',
   'message', 'mine', 'next', 'no-checkpoint', 'no-parent', 'notify', 'older',
   'orphans', 'output', 'parent', 'platform', 'pretty', 'priority', 'project',
@@ -1384,11 +1384,12 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn know --gaps              where the memory has holes
     cairn know --orphans           entries nothing links to, that link to nothing
     cairn know --dangling          references pointing at entries nobody wrote
+    cairn know <slug> --history    every version, who changed it and why  [--full]
     cairn verify <slug>            it is still true — clears the stale mark
     cairn replay                   send writes put aside while the server was down
-    cairn relearn <slug> --body -  correct it  [--allow-dangling]
+    cairn relearn <slug> --body -  correct it  [--reason "why"] [--allow-dangling]
                                    --project K | --entity E | --global  re-scope it
-    cairn unlearn <slug> [--superseded-by <slug>]
+    cairn unlearn <slug> [--superseded-by <slug> [--reason "why"]]
     cairn session list             recent sessions
     cairn session end --id <id>    write the episodic record, checkpoint what is held
     cairn reconcile                release your own claims that went quiet
@@ -2195,6 +2196,63 @@ const commands = {
     // related entries and not the target, with nothing to say it had missed.
     // The server normalises the spelling on lookup; this only has to stop
     // ruling the reference out before asking.
+    /**
+     * What it used to say (CAIRN-266). One row per version, newest first, each
+     * saying how it came to be: written, or which edit produced it, by whom and
+     * why. `--full` prints the bodies, which is the part worth comparing.
+     */
+    if (flags.history) {
+      const slug = need(subject, 'usage: cairn know <slug> --history [--full]')
+      const h = await request('GET', `/api/v1/knowledge/${slug}/history`)
+      if (FORMAT === 'json') return emit(h)
+
+      const versions = [
+        {
+          version: `${h.version} (live)`,
+          change: h.revisions[0]?.change ?? 'learned',
+          by: h.revisions[0]?.edited_by ?? h.author ?? '',
+          at: (h.revisions[0]?.edited_at ?? h.createdAt ?? '').slice(0, 16).replace('T', ' '),
+          reason: h.revisions[0]?.reason ?? '',
+          title: h.title,
+        },
+        ...h.revisions.map((r, i) => {
+          const older = h.revisions[i + 1]
+          return {
+            version: String(r.revision),
+            change: older?.change ?? 'learned',
+            by: older?.edited_by ?? (r.revision === 1 ? h.author ?? '' : ''),
+            at: (older?.edited_at ?? (r.revision === 1 ? h.createdAt : '') ?? '').slice(0, 16).replace('T', ' '),
+            reason: older?.reason ?? '',
+            title: r.title,
+          }
+        }),
+      ]
+
+      if (flags.full) {
+        const bodies = [{ revision: h.version, body: null }, ...h.revisions]
+        for (const [i, v] of versions.entries()) {
+          process.stdout.write(`## v${v.version} · ${v.change} · ${v.by} · ${v.at}\n`)
+          if (v.reason) process.stdout.write(`reason: ${v.reason}\n`)
+          process.stdout.write(`# ${v.title}\n\n`)
+          if (i > 0) process.stdout.write(`${bodies[i].body}\n\n`)
+          else process.stdout.write('(the live body — cairn know ' + h.slug + ')\n\n')
+        }
+        return
+      }
+
+      emit(
+        { count: versions.length, results: versions },
+        {
+          rows: (d) => d.results.map((v) => ({ ...v, reason: truncate(v.reason, 50), title: truncate(v.title, 60) })),
+          columns: ['version', 'change', 'by', 'at', 'reason', 'title'],
+        },
+      )
+      if (FORMAT === 'tsv' && h.revisions.length === 0) {
+        process.stderr.write('never revised: this is the version first written\n')
+      }
+      return
+    }
+
     if (subject && /^[a-z0-9]+([_-][a-z0-9]+)*$/i.test(subject)) {
       const hit = await request('GET', `/api/v1/knowledge/${subject}`, undefined, { soft: true })
       if (hit) {
@@ -2294,6 +2352,7 @@ const commands = {
     if (flags['superseded-by']) {
       return emit(await request('PATCH', `/api/v1/knowledge/${slug}`, {
         supersededBy: flags['superseded-by'],
+        ...(typeof flags.reason === 'string' ? { reason: flags.reason } : {}),
       }))
     }
     emit(await request('DELETE', `/api/v1/knowledge/${slug}`))
@@ -2358,6 +2417,8 @@ const commands = {
     // refuses to do: an answer that looks like it took your argument and did
     // not.
     if (flags['allow-dangling']) patch.allowUnresolvedRefs = true
+    // Why it changed, kept on the version this replaces (CAIRN-266).
+    if (typeof flags.reason === 'string') patch.reason = flags.reason
 
     const result = await request('PATCH', `/api/v1/knowledge/${slug}`, patch)
     emit(result)

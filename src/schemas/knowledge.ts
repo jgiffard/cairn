@@ -107,6 +107,8 @@ export const knowledgeUpdate = z.object({
   supersededBy: z.string().max(120).nullable().optional(),
   verified: z.boolean().optional(),
   allowUnresolvedRefs: z.boolean().optional(),
+  /** Why the entry changed. Kept on the revision the edit produces. */
+  reason: z.string().min(1).max(500).optional(),
 })
 
 export const actorType = z.enum(ACTOR_TYPES)
