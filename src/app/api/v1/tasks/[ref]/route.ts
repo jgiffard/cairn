@@ -7,6 +7,7 @@ import { diffTaskEvents, recordActivity } from '@/lib/api/activity'
 import { findTask, noSuchTaskMessage, renameFields, resolveParent, resolveTask } from '@/lib/api/tasks'
 import { formerKeysByProject, formerRefsOf, projectsForKeys, resolveProject } from '@/lib/api/project-keys'
 import { buildDigest } from '@/lib/api/digest'
+import { mentionsOf } from '@/lib/api/mentions'
 import { removeAttachments } from '@/lib/attachments'
 import { isTerminal, updateTaskSchema, RESOLUTION_KINDS } from '@/schemas/task'
 
@@ -40,7 +41,8 @@ export const GET = route<{ ref: string }>({
     if (url.searchParams.get('view') === 'digest') {
       return ok({ ...(await buildDigest(task)), ...told })
     }
-    return ok({ ...task, ...told })
+    const mentioned = await mentionsOf(task.id as string, 50)
+    return ok({ ...task, ...told, mentioned_in: mentioned.mentions, mentioned_in_total: mentioned.total })
   },
 })
 

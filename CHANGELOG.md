@@ -11,6 +11,17 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **A task knows where else it was named** (CAIRN-267). Agents write refs into notes all the
+  time, and they only ever pointed one way: BB-343's finding said its closure must not be
+  read as permission for BB-333, and `cairn show BB-333` said nothing about it. Every
+  resolvable ref in a note, comment, description or resolution is now indexed in
+  `task_mentions` (migration 059, filled by triggers and backfilled from everything already
+  written), through retired keys too. `cairn show` carries the first five as `mentionedIn`
+  — decisions, findings and resolutions first — `show --full` adds `mentioned_in`, `GET
+  /api/v1/tasks/{ref}/mentions` lists them all, and the task page shows a "Mentioned in"
+  section. Only refs that resolve to a task count, so `UTF-8` and `HTTP-404` do not; a task
+  naming itself does not either. An edited description stops claiming a ref it dropped.
+
 - **A knowledge correction keeps what it corrected** (CAIRN-266). `relearn` was a plain
   UPDATE: the previous title, body, labels and scope were gone for good, `actor_id` went on
   naming the first author, and the feed credited every later correction to them. Each edit

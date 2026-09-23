@@ -170,6 +170,12 @@ cairn note ACME-42 "staying on supavisor; direct conns break PgBouncer" --kind d
 **Write down dead ends.** "Tried X, made no difference" saves the next agent an hour and
 is as valuable as a fix. Notes are deduplicated, so a retry after a timeout is safe.
 
+**Name the other task when it is affected.** A ref written in a note, comment, description
+or resolution — `ACME-31` — shows up on `cairn show ACME-31` under `mentionedIn`, decisions
+and findings first. So when something you decided here constrains or contradicts other work,
+write its ref in a `decision` or `finding` note: whoever picks that task up sees it without
+having to know to look. No link command needed; the ref in prose is the link.
+
 Use `cairn comment` instead when you are addressing the human rather than the next agent.
 
 ### Evidence, as opposed to narration

@@ -953,6 +953,22 @@ export const openapiSpec = () => ({
       },
       delete: { summary: 'Forget it', responses: { '200': okResponse('Deleted.'), '404': errorResponse } },
     },
+    '/tasks/{ref}/mentions': {
+      parameters: [
+        { name: 'ref', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
+      ],
+      get: {
+        summary: 'Where other tasks named this one',
+        description:
+          'Every note, comment, description and resolution on another task that writes this ' +
+          'task\'s ref — through a retired key too — with the text around it. Decisions, ' +
+          'findings and resolutions first, then handoffs and descriptions, then the rest; ' +
+          'newest first within each. Indexed from what was written, not guessed: a mention is ' +
+          'something somebody wrote. The digest carries the first five as `mentionedIn`.',
+        responses: { '200': okResponse('{ total, mentions }.'), '404': errorResponse },
+      },
+    },
     '/knowledge/{slug}/history': {
       parameters: [
         { name: 'slug', in: 'path', required: true, schema: { type: 'string' } },
