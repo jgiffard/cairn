@@ -262,16 +262,16 @@ const flags = new Proxy(typedFlags, {
 const KNOWN_FLAGS = new Set([
   'agent', 'all', 'allow-dangling', 'also-project', 'archived', 'body',
   'branch', 'completed',
-  'confirm', 'cwd', 'dangling', 'description', 'dir', 'dry-run',
+  'confirm', 'cwd', 'dangling', 'days', 'description', 'dir', 'dry-run',
   'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'file', 'files',
-  'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'hours', 'id',
+  'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'history', 'hours', 'id',
   'json', 'key', 'kind', 'kinds', 'label', 'learned', 'limit', 'max-parents',
   'message', 'mine', 'next', 'no-checkpoint', 'no-parent', 'notify', 'older',
   'orphans', 'output', 'parent', 'platform', 'pretty', 'priority', 'project',
   'reason', 'remote', 'repo', 'request', 'resolution', 'scheduled',
   'show-toplevel', 'slug', 'start', 'started', 'status', 'summary',
   'superseded', 'superseded-by', 'task', 'tasks', 'title', 'tool-calls',
-  'type', 'url', 'verified', 'version',
+  'type', 'unused', 'url', 'verified', 'version',
 ])
 
 for (let i = 0; i < argv.length; i += 1) {
@@ -1372,6 +1372,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    where the last session here stopped, what is known
     cairn learn "<title>" --body - record what we now know
                                    --allow-dangling  keep a [[ref]] the store cannot resolve
+                                   --files a,b  files it is about, beyond those its body names
                                    --project K  true of that project
                                    --entity E   true of that grouping (cairn entities)
                                    --global     true everywhere — say so on purpose
@@ -1380,15 +1381,19 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn entities                 groupings a fact can be true of, and their projects
     cairn entities assign|unassign <key> --project A,B
     cairn entities rename <key> --key <new> --title "T"
+    cairn recall <ref>             decisions and knowledge that bear on this task, and why
     cairn know [<slug>|<query>]    read it back, or list what applies here
     cairn know --gaps              where the memory has holes
     cairn know --orphans           entries nothing links to, that link to nothing
     cairn know --dangling          references pointing at entries nobody wrote
+    cairn know <slug> --history    every version, who changed it and why  [--full]
+    cairn know --unused [--days 30]  facts no search or read has returned lately
     cairn verify <slug>            it is still true — clears the stale mark
     cairn replay                   send writes put aside while the server was down
-    cairn relearn <slug> --body -  correct it  [--allow-dangling]
+    cairn relearn <slug> --body -  correct it  [--reason "why"] [--allow-dangling]
                                    --project K | --entity E | --global  re-scope it
-    cairn unlearn <slug> [--superseded-by <slug>]
+                                   --files a,b  the files it is about (replaces those named before)
+    cairn unlearn <slug> [--superseded-by <slug> [--reason "why"]]
     cairn session list             recent sessions
     cairn session end --id <id>    write the episodic record, checkpoint what is held
     cairn reconcile                release your own claims that went quiet
@@ -1995,6 +2000,23 @@ const commands = {
   async claim() {
     const ref = need(positional[0], 'usage: cairn claim <ref>')
     emit(await request('POST', `/api/v1/tasks/${ref}/claim`, {}))
+
+    // What already bears on it, at the moment it is picked up (CAIRN-268). A
+    // recall nobody remembers to run is one that does not happen, and the case
+    // it exists for — a closure elsewhere saying "do not read this as
+    // permission for <this task>" — is exactly the one the claimer does not
+    // know to look for. stderr, and soft: the claim has already succeeded.
+    if (FORMAT !== 'tsv') return
+    const r = await request('GET', `/api/v1/tasks/${ref}/recall?decisions=3&knowledge=3`, undefined, { soft: true })
+    const decisions = Array.isArray(r?.decisions) ? r.decisions : []
+    const facts = Array.isArray(r?.knowledge) ? r.knowledge : []
+    if (decisions.length === 0 && facts.length === 0) return
+    const lines = [`bears on this — cairn recall ${ref}:`]
+    for (const d of decisions) {
+      lines.push(`  ${d.ref} ${d.kind} (${d.why.join(', ')}): ${truncate(d.text, 140)}`)
+    }
+    if (facts.length) lines.push(`  knowledge: ${facts.map((k) => k.slug + (k.stale ? ' [stale]' : '')).join(', ')}`)
+    process.stderr.write(`${lines.join('\n')}\n`)
   },
   async beat() {
     emit(await request('POST', `/api/v1/tasks/${need(positional[0], 'usage: cairn beat <ref>')}/beat`, {}))
@@ -2088,6 +2110,8 @@ const commands = {
     if (entities.length) payload.entities = entities
     if (flags.slug) payload.slug = flags.slug
     if (flags.task) payload.sourceTaskRef = flags.task
+    // Files it is about beyond the paths its body names (CAIRN-269).
+    if (flags.files) payload.files = splitList(flags.files)
     if (flags.verified) payload.verified = true
     // The write refuses a [[reference]] whose fact the store already holds
     // under another slug, and names it. That refusal is the point, so this
@@ -2195,6 +2219,90 @@ const commands = {
     // related entries and not the target, with nothing to say it had missed.
     // The server normalises the spelling on lookup; this only has to stop
     // ruling the reference out before asking.
+    /**
+     * Facts nobody was given in a month (CAIRN-270): dead, or titled so that
+     * no search finds them. Either way worth a look — link it, retitle it,
+     * verify it, or unlearn it. The count leaves out the session briefing,
+     * which records nothing, and the output says so.
+     */
+    if (flags.unused) {
+      const days = flags.days ?? (flags.unused === true ? '30' : flags.unused)
+      const params = new URLSearchParams({ unused: String(days), limit: flags.limit ?? '50' })
+      const data = await request('GET', `/api/v1/knowledge?${params}`)
+      if (FORMAT === 'json') return emit(data)
+      emit(data, {
+        rows: (d) =>
+          d.results.map((u) => ({
+            slug: u.slug,
+            'last recalled': u.lastRecalled ? u.lastRecalled.slice(0, 10) : 'never',
+            written: u.createdAt.slice(0, 10),
+            title: truncate(u.title, 60),
+          })),
+        columns: ['slug', 'last recalled', 'written', 'title'],
+      })
+      if (FORMAT === 'tsv') {
+        process.stderr.write(`not recalled in ${data.days} days — ${data.counted}\n`)
+      }
+      return
+    }
+
+    /**
+     * What it used to say (CAIRN-266). One row per version, newest first, each
+     * saying how it came to be: written, or which edit produced it, by whom and
+     * why. `--full` prints the bodies, which is the part worth comparing.
+     */
+    if (flags.history) {
+      const slug = need(subject, 'usage: cairn know <slug> --history [--full]')
+      const h = await request('GET', `/api/v1/knowledge/${slug}/history`)
+      if (FORMAT === 'json') return emit(h)
+
+      const versions = [
+        {
+          version: `${h.version} (live)`,
+          change: h.revisions[0]?.change ?? 'learned',
+          by: h.revisions[0]?.edited_by ?? h.author ?? '',
+          at: (h.revisions[0]?.edited_at ?? h.createdAt ?? '').slice(0, 16).replace('T', ' '),
+          reason: h.revisions[0]?.reason ?? '',
+          title: h.title,
+        },
+        ...h.revisions.map((r, i) => {
+          const older = h.revisions[i + 1]
+          return {
+            version: String(r.revision),
+            change: older?.change ?? 'learned',
+            by: older?.edited_by ?? (r.revision === 1 ? h.author ?? '' : ''),
+            at: (older?.edited_at ?? (r.revision === 1 ? h.createdAt : '') ?? '').slice(0, 16).replace('T', ' '),
+            reason: older?.reason ?? '',
+            title: r.title,
+          }
+        }),
+      ]
+
+      if (flags.full) {
+        const bodies = [{ revision: h.version, body: null }, ...h.revisions]
+        for (const [i, v] of versions.entries()) {
+          process.stdout.write(`## v${v.version} · ${v.change} · ${v.by} · ${v.at}\n`)
+          if (v.reason) process.stdout.write(`reason: ${v.reason}\n`)
+          process.stdout.write(`# ${v.title}\n\n`)
+          if (i > 0) process.stdout.write(`${bodies[i].body}\n\n`)
+          else process.stdout.write('(the live body — cairn know ' + h.slug + ')\n\n')
+        }
+        return
+      }
+
+      emit(
+        { count: versions.length, results: versions },
+        {
+          rows: (d) => d.results.map((v) => ({ ...v, reason: truncate(v.reason, 50), title: truncate(v.title, 60) })),
+          columns: ['version', 'change', 'by', 'at', 'reason', 'title'],
+        },
+      )
+      if (FORMAT === 'tsv' && h.revisions.length === 0) {
+        process.stderr.write('never revised: this is the version first written\n')
+      }
+      return
+    }
+
     if (subject && /^[a-z0-9]+([_-][a-z0-9]+)*$/i.test(subject)) {
       const hit = await request('GET', `/api/v1/knowledge/${subject}`, undefined, { soft: true })
       if (hit) {
@@ -2282,10 +2390,14 @@ const commands = {
             ? r.entities.join(',')
             : 'global',
         verified: r.verified ? 'yes' : '',
+        // Searches that returned it and direct reads, last 30 days (CAIRN-270).
+        recalled: String(r.recalled ?? ''),
         tokens: `~${r.tokens}`,
         title: truncate(r.title, 70),
       })),
-      columns: ['slug', 'scope', 'verified', 'tokens', 'title'],
+      // `recalled` last: a column appended at the end is one no reader of this
+      // table sees move.
+      columns: ['slug', 'scope', 'verified', 'tokens', 'title', 'recalled'],
     })
   },
 
@@ -2294,6 +2406,7 @@ const commands = {
     if (flags['superseded-by']) {
       return emit(await request('PATCH', `/api/v1/knowledge/${slug}`, {
         supersededBy: flags['superseded-by'],
+        ...(typeof flags.reason === 'string' ? { reason: flags.reason } : {}),
       }))
     }
     emit(await request('DELETE', `/api/v1/knowledge/${slug}`))
@@ -2358,6 +2471,10 @@ const commands = {
     // refuses to do: an answer that looks like it took your argument and did
     // not.
     if (flags['allow-dangling']) patch.allowUnresolvedRefs = true
+    // Why it changed, kept on the version this replaces (CAIRN-266).
+    if (typeof flags.reason === 'string') patch.reason = flags.reason
+    // Replaces the explicitly named files; `--files ''` clears them (CAIRN-269).
+    if (flags.files !== undefined) patch.files = flags.files === true ? [] : splitList(flags.files)
 
     const result = await request('PATCH', `/api/v1/knowledge/${slug}`, patch)
     emit(result)
@@ -2452,6 +2569,42 @@ const commands = {
   },
 
   // --- the briefing ------------------------------------------------------
+
+  /**
+   * What already bears on one task (CAIRN-268): decisions on the tasks around
+   * it and the knowledge that applies, each line saying why it was picked. Run
+   * it when picking a task up — it is the question `check` answers from a
+   * phrase, asked from the task instead.
+   */
+  async recall() {
+    const ref = need(positional[0], 'usage: cairn recall <ref> [--limit N]')
+    const params = new URLSearchParams()
+    if (flags.limit) {
+      params.set('decisions', flags.limit)
+      params.set('knowledge', flags.limit)
+    }
+    const r = await request('GET', `/api/v1/tasks/${ref}/recall${String(params) ? `?${params}` : ''}`)
+    if (FORMAT !== 'tsv') return emit(r)
+
+    const out = [`# ${r.ref} — ${r.title}`, '']
+    out.push(r.decisions.length ? 'decisions' : 'decisions: none recorded on related tasks')
+    for (const d of r.decisions) {
+      out.push(`  ${d.ref}  ${d.kind} · ${d.why.join(', ')} · ${d.by ?? '?'} · ${d.at.slice(0, 10)}  [${d.status}]`)
+      out.push(`    ${d.text}`)
+    }
+    out.push('')
+    out.push(r.knowledge.length ? 'knowledge' : 'knowledge: nothing linked or matching')
+    for (const k of r.knowledge) {
+      const marks = [k.stale ? 'stale' : '', k.verified ? 'verified' : ''].filter(Boolean).join(', ')
+      out.push(`  ${k.slug}${marks ? `  [${marks}]` : ''}`)
+      out.push(`    ${k.title} — ${k.why.join('; ')}`)
+    }
+    const more = []
+    if (r.omitted.decisions) more.push(`${r.omitted.decisions} more decision(s)`)
+    if (r.omitted.knowledge) more.push(`${r.omitted.knowledge} more fact(s)`)
+    if (more.length) out.push('', `${more.join(', ')} — cairn recall ${ref} --limit 30`)
+    process.stdout.write(`${out.join('\n')}\n`)
+  },
 
   async context() {
     const cwd = flags.cwd ?? process.cwd()

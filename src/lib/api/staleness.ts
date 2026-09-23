@@ -1,4 +1,5 @@
 import { admin } from '@/lib/db/client'
+import { linkedFiles } from './knowledge'
 
 /**
  * Facts do not stay true, and nothing about a stale one looks any different.
@@ -18,10 +19,11 @@ import { admin } from '@/lib/db/client'
 /**
  * The files a fact is about, taken from the paths it names.
  *
- * `file_touches.knowledge_id` exists and nothing has ever written to it, so
- * the body is the only statement of what a fact covers. Backticked paths are
- * the convention in these entries and the one signal precise enough to use:
- * bare prose mentions "the client" and means a file nobody can name.
+ * Backticked paths are the convention in these entries and the one signal
+ * precise enough to use: bare prose mentions "the client" and means a file
+ * nobody can name. `knowledge_paths_in` in migration 060 restates this rule so
+ * the database can keep `knowledge_files` from it; the knowledge-files
+ * integration test holds the two to the same answers.
  */
 export const filesNamedIn = (body: string): string[] => {
   const found = new Set<string>()
@@ -130,11 +132,20 @@ export const stalenessFor = async (
   const out = new Map<string, Staleness>()
   const byPath = new Map<string, AgeableEntry[]>()
 
-  const sourceFiles = await filesFromSource(userId, entries)
+  const [sourceFiles, linked] = await Promise.all([
+    filesFromSource(userId, entries),
+    linkedFiles(entries.map((e) => e.id)),
+  ])
 
   for (const entry of entries) {
     const files = [
-      ...new Set([...filesNamedIn(entry.body ?? ''), ...(sourceFiles.get(entry.id) ?? [])]),
+      ...new Set([
+        ...filesNamedIn(entry.body ?? ''),
+        ...(sourceFiles.get(entry.id) ?? []),
+        // Stored links (CAIRN-269): the same two sources normalised, plus any
+        // file named explicitly with `--files`.
+        ...(linked.get(entry.id) ?? []),
+      ]),
     ]
     out.set(entry.id, { files, touches: 0, sessions: 0, lastTouchedAt: null, stale: false })
     for (const path of files) {

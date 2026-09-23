@@ -1,4 +1,5 @@
 import { admin } from '@/lib/db/client'
+import { mentionsOf } from './mentions'
 
 /** Roughly four characters per token. Order-of-magnitude, on purpose. */
 const tokens = (text: string | null | undefined) => Math.ceil((text?.length ?? 0) / 4)
@@ -9,6 +10,9 @@ const tokens = (text: string | null | undefined) => Math.ceil((text?.length ?? 0
  * 90th percentile is 5KB, so passing it through whole would save nothing.
  */
 const BODY_BUDGET = 800
+
+/** Mentions shown in a digest. The rest are one request away. */
+const MENTION_BUDGET = 5
 
 /**
  * A cheap read of an expensive task.
@@ -37,7 +41,7 @@ const refOf = async (id: unknown): Promise<string | null> => {
 }
 
 export const buildDigest = async (task: Record<string, unknown>) => {
-  const [{ data: notes }, { count: childCount }, { count: childClosed }, duplicateOf, parent] =
+  const [{ data: notes }, { count: childCount }, { count: childClosed }, duplicateOf, parent, mentioned] =
     await Promise.all([
       admin()
         .from('task_notes')
@@ -55,6 +59,7 @@ export const buildDigest = async (task: Record<string, unknown>) => {
         .in('status', ['done', 'cancelled']),
       refOf(task.duplicate_of),
       refOf(task.parent_id),
+      mentionsOf(task.id as string, MENTION_BUDGET),
     ])
 
   const all = (notes ?? []) as { kind: string; note: string; actor_id: string; created_at: string }[]
@@ -103,6 +108,20 @@ export const buildDigest = async (task: Record<string, unknown>) => {
     duplicateOf,
     parent,
     children: childCount ? { total: childCount, closed: childClosed ?? 0 } : null,
+
+    // Where other tasks named this one, decisions and findings first
+    // (CAIRN-267). The case it exists for: a closure elsewhere that says "do
+    // not read this as permission for <this task>", which nothing here
+    // mentioned before.
+    mentionedIn: mentioned.mentions.map((m) => ({
+      ref: m.ref,
+      status: m.status,
+      source: m.kind ? `${m.source}:${m.kind}` : m.source,
+      by: m.by,
+      at: m.at,
+      excerpt: m.excerpt,
+    })),
+    mentionedInTotal: mentioned.total,
 
     /** What this view withheld, and what asking for it costs. */
     omitted: {

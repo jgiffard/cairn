@@ -894,8 +894,23 @@ export const openapiSpec = () => ({
             schema: { type: 'boolean', default: false },
           },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
+          {
+            name: 'unused',
+            in: 'query',
+            description:
+              'Instead of the index: current entries no search returned and no direct read ' +
+              'fetched in this many days, never-recalled first, leaving out entries younger ' +
+              'than the window. The session briefing and `cairn recall` record nothing and are ' +
+              'not counted; `counted` in the response says so.',
+            schema: { type: 'integer', minimum: 1, maximum: 365 },
+          },
         ],
-        responses: { '200': okResponse('Knowledge index.') },
+        responses: {
+          '200': okResponse(
+            'Knowledge index. Each row carries `recalled`: searches that returned it plus direct ' +
+              'reads in the last `recallWindowDays` days.',
+          ),
+        },
       },
       post: {
         summary: 'Record what we now know',
@@ -952,6 +967,54 @@ export const openapiSpec = () => ({
         },
       },
       delete: { summary: 'Forget it', responses: { '200': okResponse('Deleted.'), '404': errorResponse } },
+    },
+    '/tasks/{ref}/recall': {
+      parameters: [
+        { name: 'ref', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'decisions', in: 'query', schema: { type: 'integer', default: 8, maximum: 30 } },
+        { name: 'knowledge', in: 'query', schema: { type: 'integer', default: 8, maximum: 30 } },
+      ],
+      get: {
+        summary: 'What already bears on this task',
+        description:
+          'Two lists, each line with `why` it was picked. `decisions`: resolutions and ' +
+          'decision/finding notes on related tasks — ones that name this task (and the note ' +
+          'that does), ones it names, its parent, sub-tasks, blockers, and answered tasks with ' +
+          'a similar title. `knowledge`: current entries linked to files this task touched, ' +
+          'learned on it or a related task, or matching its terms within its project, with ' +
+          'their stale mark. `omitted` says how many lines each limit cut.',
+        responses: { '200': okResponse('{ ref, title, decisions, knowledge, omitted }.'), '404': errorResponse },
+      },
+    },
+    '/tasks/{ref}/mentions': {
+      parameters: [
+        { name: 'ref', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
+      ],
+      get: {
+        summary: 'Where other tasks named this one',
+        description:
+          'Every note, comment, description and resolution on another task that writes this ' +
+          'task\'s ref — through a retired key too — with the text around it. Decisions, ' +
+          'findings and resolutions first, then handoffs and descriptions, then the rest; ' +
+          'newest first within each. Indexed from what was written, not guessed: a mention is ' +
+          'something somebody wrote. The digest carries the first five as `mentionedIn`.',
+        responses: { '200': okResponse('{ total, mentions }.'), '404': errorResponse },
+      },
+    },
+    '/knowledge/{slug}/history': {
+      parameters: [
+        { name: 'slug', in: 'path', required: true, schema: { type: 'string' } },
+      ],
+      get: {
+        summary: 'What it used to say',
+        description:
+          'Every version an edit replaced, newest first: its title, body, labels and scope as ' +
+          'they stood, and who replaced it, when, and why. `version` is the live row\'s ' +
+          'number, so revision N is version N and the live row is `version`. A `verified` ' +
+          'alone, or a PATCH that changes nothing, is not a new version.',
+        responses: { '200': okResponse('The versions.'), '404': errorResponse },
+      },
     },
     '/entities': {
       get: {

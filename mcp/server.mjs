@@ -91,6 +91,24 @@ const TOOLS = [
     run: (a) => ['show', a.ref],
   },
   {
+    name: 'cairn_recall',
+    description:
+      'What already bears on one task: resolutions, decision and finding notes on the tasks ' +
+      'around it (ones that name it, ones it names, parent, sub-tasks, blockers, similar ' +
+      'titles) and the knowledge that applies (linked to files it touched, learned on it or ' +
+      'a related task, or matching its terms). Every line says why it was picked. Use it when ' +
+      'picking a task up, before starting the work.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ref: { type: 'string', description: 'e.g. CAI-42' },
+        limit: { type: 'number', description: 'Lines per section, default 8, at most 30.' },
+      },
+      required: ['ref'],
+    },
+    run: (a) => ['recall', a.ref, ...(a.limit !== undefined ? ['--limit', String(a.limit)] : [])],
+  },
+  {
     name: 'cairn_know',
     description:
       'Read what is known. With a slug, returns that entry; with a phrase, searches ' +
@@ -105,13 +123,29 @@ const TOOLS = [
           description: 'A slug to read, or a phrase to search. Omit to list what applies here.',
         },
         project: { type: 'string', description: 'Optional project key, e.g. CAI.' },
+        history: {
+          type: 'boolean',
+          description:
+            'With a slug: every version of the entry, who changed it and why, instead of ' +
+            'the current text.',
+        },
+        unusedDays: {
+          type: 'number',
+          description:
+            'Instead: current entries no search or direct read returned in this many days — ' +
+            'dead, or titled so nothing finds them. The session briefing is not counted.',
+        },
       },
     },
-    run: (a) => [
-      'know',
-      ...(a.subject ? [a.subject] : []),
-      ...(a.project ? ['--project', a.project] : []),
-    ],
+    run: (a) =>
+      a.unusedDays !== undefined
+        ? ['know', '--unused', '--days', String(a.unusedDays)]
+        : [
+            'know',
+            ...(a.subject ? [a.subject] : []),
+            ...(a.project ? ['--project', a.project] : []),
+            ...(a.history ? ['--history'] : []),
+          ],
   },
   {
     name: 'cairn_gaps',
@@ -155,6 +189,12 @@ const TOOLS = [
         global: { type: 'boolean', description: 'True everywhere. Say so on purpose.' },
         label: { type: 'string', description: 'Comma-separated labels.' },
         task: { type: 'string', description: 'The task it was learned on, e.g. CAI-42.' },
+        files: {
+          type: 'string',
+          description:
+            'Comma-separated paths it is about, beyond the backticked ones its body names. ' +
+            'Linked so a later lookup by file finds it, and so it ages when they change.',
+        },
         allowDangling: {
           type: 'boolean',
           description:
@@ -173,6 +213,7 @@ const TOOLS = [
       ...(a.global ? ['--global'] : []),
       ...(a.label ? ['--label', a.label] : []),
       ...(a.task ? ['--task', a.task] : []),
+      ...(a.files ? ['--files', a.files] : []),
       ...(a.allowDangling ? ['--allow-dangling'] : []),
     ],
   },
@@ -202,6 +243,16 @@ const TOOLS = [
             'Keep a [[reference]] the store cannot resolve. An edit runs the same check as ' +
             'a write, so a correction can be refused the same way.',
         },
+        reason: {
+          type: 'string',
+          description: 'Why it changed. Kept with the version this replaces.',
+        },
+        files: {
+          type: 'string',
+          description:
+            'Comma-separated paths it is about. Replaces those named explicitly before; ' +
+            'paths in the body are linked on their own.',
+        },
       },
       required: ['slug'],
     },
@@ -213,6 +264,8 @@ const TOOLS = [
       ...(a.entity ? ['--entity', a.entity] : []),
       ...(a.global ? ['--global'] : []),
       ...(a.allowDangling ? ['--allow-dangling'] : []),
+      ...(a.reason ? ['--reason', a.reason] : []),
+      ...(a.files ? ['--files', a.files] : []),
     ],
   },
   {
@@ -226,12 +279,14 @@ const TOOLS = [
       properties: {
         slug: { type: 'string' },
         supersededBy: { type: 'string', description: 'Slug of the entry that replaces it.' },
+        reason: { type: 'string', description: 'Why it was superseded. Needs supersededBy.' },
       },
       required: ['slug'],
     },
     run: (a) => [
       'unlearn', a.slug,
       ...(a.supersededBy ? ['--superseded-by', a.supersededBy] : []),
+      ...(a.supersededBy && a.reason ? ['--reason', a.reason] : []),
     ],
   },
   {

@@ -152,10 +152,19 @@ you do not know in advance which one holds the answer.
 cairn check "flaky auth redirect"   # index. cheap.
 cairn show ACME-42                   # digest: the answer, findings, a clipped body
 cairn show ACME-42 --full            # everything, when the digest is not enough
+cairn recall ACME-42                 # picking it up: the decisions and facts that bear on it
 cairn note ACME-42 "..."             # act, and record it
 ```
 
 Never pull bodies in bulk to browse them. That is what the index is for.
+
+`recall` starts from the task rather than a phrase. It returns resolutions and
+decision/finding notes on the tasks around it — ones that name it, ones it names, its parent,
+sub-tasks, blockers, similar closed work — and the knowledge that applies: linked to files it
+touched, learned on it or a related task, or matching its terms. Each line says why it was
+picked. `claim` prints the top of it for you; read it before you start, because the line that
+says "do not read that closure as permission for this" is the one you would not know to look
+for.
 
 ## 3. Record as you go
 
@@ -169,6 +178,12 @@ cairn note ACME-42 "staying on supavisor; direct conns break PgBouncer" --kind d
 
 **Write down dead ends.** "Tried X, made no difference" saves the next agent an hour and
 is as valuable as a fix. Notes are deduplicated, so a retry after a timeout is safe.
+
+**Name the other task when it is affected.** A ref written in a note, comment, description
+or resolution — `ACME-31` — shows up on `cairn show ACME-31` under `mentionedIn`, decisions
+and findings first. So when something you decided here constrains or contradicts other work,
+write its ref in a `decision` or `finding` note: whoever picks that task up sees it without
+having to know to look. No link command needed; the ref in prose is the link.
 
 Use `cairn comment` instead when you are addressing the human rather than the next agent.
 
@@ -367,6 +382,7 @@ at something nobody has written.
 ### What is not connected
 
 ```bash
+cairn know --unused      # entries no search or read has returned in 30 days
 cairn know --gaps        # the shape of the memory: islands, orphans, dead references
 cairn know --orphans     # entries nothing links to, that link to nothing
 cairn know --dangling    # references pointing at entries nobody ever wrote
@@ -427,11 +443,22 @@ accumulation without correction — two contradictory claims, equally findable, 
 tell which one is current.
 
 ```bash
-cairn relearn <slug> --body -                        # it changed
+cairn relearn <slug> --body - --reason "why"         # it changed
 cairn relearn <slug> --global                        # it is true more widely than filed
 cairn unlearn <old-slug> --superseded-by <new-slug>  # it was wrong
 cairn verify <slug>                                  # still true; you checked
+cairn know <slug> --history                          # what it used to say, and who changed it
 ```
+
+A fact is linked to the files it is about — the backticked paths in its body, the files its
+source task touched, and any you name with `--files a,b` — so `cairn context --file <path>`
+finds it, and it is marked stale when those files are reworked. Name the files when the body
+does not.
+
+A correction keeps what it corrected: every `relearn`, re-scope and supersession stores the
+version it replaced, with who replaced it and the `--reason` if you gave one. Give one — "the
+default was 15, not the cap" is what makes the old version readable as a mistake rather than
+as a second opinion. A `verify` is not a new version.
 
 `relearn` takes the scope flags too — `--project`, `--entity`, `--global` — so a fact filed
 against this directory's project can be widened once you find it is true elsewhere.

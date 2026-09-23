@@ -1,4 +1,4 @@
-import { admin } from '@/lib/db/client'
+import { admin, pool } from '@/lib/db/client'
 
 /**
  * The file index: which sessions, tasks and knowledge concern a given path.
@@ -143,10 +143,43 @@ export const contextForFile = async (_userId: string, rawPath: string): Promise<
     }
   }
 
+  // What is known about the file comes from the links (CAIRN-269). The embed
+  // above reads `file_touches.knowledge_id`, which nothing writes; it stays for
+  // any row that ever does, and these come first because they are the answer.
+  const linked = new Map((await knowledgeLinkedTo(path, basename)).map((k) => [k.slug, k]))
+  for (const [slug, known] of knowledge) if (!linked.has(slug)) linked.set(slug, known)
+  knowledge.clear()
+  for (const [slug, known] of linked) knowledge.set(slug, known)
+
   return {
     path,
     tasks: [...tasks.values()].slice(0, 6),
     knowledge: [...knowledge.values()].slice(0, 6),
     sessions,
   }
+}
+
+/**
+ * Current entries linked to a path, falling back to its basename for the same
+ * reason the touches do: the caller's working directory is rarely the root the
+ * link was recorded from.
+ */
+const knowledgeLinkedTo = async (path: string, basename: string) => {
+  const run = async (exact: boolean) => {
+    const { rows } = await pool().query(
+      `select distinct on (k.id) k.slug, k.title, k.updated_at
+         from knowledge_files f
+         join knowledge k on k.id = f.knowledge_id
+        where k.superseded_by is null
+          and ${exact ? 'f.path = $1' : `split_part(f.path, '/', -1) = $1`}
+        order by k.id, k.updated_at desc
+        limit 20`,
+      [exact ? path : basename],
+    )
+    return (rows as { slug: string; title: string; updated_at: string }[])
+      .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))
+      .map(({ slug, title }) => ({ slug, title }))
+  }
+  const exact = await run(true)
+  return exact.length > 0 || basename === path ? exact : run(false)
 }

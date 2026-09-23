@@ -10,6 +10,7 @@ import {
 } from '@/lib/api/knowledge-graph'
 import { knowledgeCreate, slugify } from '@/schemas/knowledge'
 import { liveProjectKey } from '@/lib/api/project-keys'
+import { COUNTED, RECALL_WINDOW_DAYS, recallCounts, unusedKnowledge } from '@/lib/api/knowledge-use'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,8 @@ const listQuery = z.object({
   label: z.string().max(40).optional(),
   superseded: z.coerce.boolean().default(false),
   limit: z.coerce.number().int().min(1).max(200).default(50),
+  /** Instead of a list: current entries nobody was given in this many days (CAIRN-270). */
+  unused: z.coerce.number().int().min(1).max(365).optional(),
 })
 
 /**
@@ -31,7 +34,13 @@ export const GET = route({
     const parsed = listQuery.safeParse(Object.fromEntries(url.searchParams))
     if (!parsed.success) return fail('validation_failed', 'Bad filters.', { issues: parsed.error.issues })
 
-    const { entity, label, superseded, limit } = parsed.data
+    const { entity, label, superseded, limit, unused } = parsed.data
+
+    if (unused !== undefined) {
+      const results = await unusedKnowledge(unused, limit)
+      return ok({ count: results.length, days: unused, counted: COUNTED, results })
+    }
+
     // Normalised here so every scope below — the project's own rows AND the
     // entities it belongs to — is looked up under the key the project has now.
     const { key: project, renamed } = await liveProjectKey(parsed.data.project)
@@ -55,8 +64,11 @@ export const GET = route({
       return fail('validation_failed', message)
     }
 
+    const use = await recallCounts(rows.map((r) => r.id))
+
     return ok({
       count: rows.length,
+      recallWindowDays: RECALL_WINDOW_DAYS,
       results: rows.map((r) => ({
         slug: r.slug,
         title: r.title,
@@ -74,6 +86,8 @@ export const GET = route({
         superseded: Boolean(r.superseded_by),
         updatedAt: r.updated_at,
         tokens: Math.ceil((r.body?.length ?? 0) / 4),
+        // Searches that returned it plus direct reads, in the window.
+        recalled: (use.get(r.id)?.returned ?? 0) + (use.get(r.id)?.read ?? 0),
       })),
       ...(renamed ? { renamed_from: renamed } : {}),
     })

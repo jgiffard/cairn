@@ -11,6 +11,66 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **How often each fact is actually recalled** (CAIRN-270). 053 recorded which entries every
+  search returned and every direct read by slug, and nothing read either per entry.
+  `knowledge_recall_counts` (migration 061) does: `cairn know` lists gain a `recalled` column
+  (last column, 30 days), the knowledge page says "recalled N× in 30 days", and `cairn know
+  --unused [--days N]` (`?unused=N`, MCP `cairn_know unusedDays`) lists current entries nobody
+  was given in that window, never-recalled first — dead, or titled so no search finds them.
+  The session briefing and `cairn recall` record nothing, so they are not counted, and every
+  surface says so. `--unused` reads `knowledge_recall_state` (migration 062), kept current by
+  triggers on the telemetry tables and backfilled once; a recall never writes a knowledge row,
+  so it never changes `updated_at`. The query merges two index-driven halves, never-recalled
+  and least-recently-recalled, each cut at the limit. Its cost grows with the number of current
+  entries in the worst case (when nearly all have been recalled, finding the never-recalled ones
+  walks the corpus), never with recorded search and read history.
+
+- **`cairn recall <ref>`: what already bears on this task, and why** (CAIRN-268). `check`
+  answers from a phrase; this starts from the task. Decisions: resolutions and
+  decision/finding notes on tasks that name it (with the note that does, excerpted around the
+  name), tasks it names, its parent, sub-tasks, blockers, and answered tasks with a similar
+  title. Knowledge: current entries linked to files it touched, learned on it or a related
+  task, or matching its terms within its project, with their stale mark. Every line carries
+  `why`. `GET /api/v1/tasks/{ref}/recall`, MCP `cairn_recall`, and `cairn claim` now prints
+  the top three of each on stderr — the recall an agent does not think to run is the one that
+  catches a closure elsewhere saying "do not read this as permission for this task". Built on
+  the mentions of CAIRN-267 and the file links of CAIRN-269.
+
+- **Which files a fact is about is stored, and can be asked backwards** (CAIRN-269).
+  Staleness worked out a fact's files at read time and nowhere else, and "what do we know
+  about this file" read `file_touches.knowledge_id`, which nothing ever wrote — so `cairn
+  context --file` never returned knowledge. `knowledge_files` (migration 060) now holds the
+  links: backticked paths in the body and the files the source task or session touched, both
+  kept by trigger and backfilled, plus files named with `cairn learn --files a,b` / `relearn
+  --files` (`files` on the API, `files` on the MCP tools). `context --file` finds knowledge
+  by path or basename, and staleness ages a fact on its explicit files too. Links are not
+  written to `file_touches`: that table is a log of touches, and an anchor there would read as
+  every other fact about the same file having been reworked.
+
+- **A task knows where else it was named** (CAIRN-267). Agents write refs into notes all the
+  time, and they only ever pointed one way: BB-343's finding said its closure must not be
+  read as permission for BB-333, and `cairn show BB-333` said nothing about it. Every
+  resolvable ref in a note, comment, description or resolution is now indexed in
+  `task_mentions` (migration 059, filled by triggers and backfilled from everything already
+  written), through retired keys too. `cairn show` carries the first five as `mentionedIn`
+  — decisions, findings and resolutions first — `show --full` adds `mentioned_in`, `GET
+  /api/v1/tasks/{ref}/mentions` lists them all, and the task page shows a "Mentioned in"
+  section. Only refs that resolve to a task count, so `UTF-8` and `HTTP-404` do not; a task
+  naming itself does not either. An edited description stops claiming a ref it dropped.
+
+- **A knowledge correction keeps what it corrected** (CAIRN-266). `relearn` was a plain
+  UPDATE: the previous title, body, labels and scope were gone for good, `actor_id` went on
+  naming the first author, and the feed credited every later correction to them. Each edit
+  that changes an entry's content, scope or supersession now stores the version it replaced
+  in `knowledge_revisions` (migration 058), with who replaced it, when, and an optional
+  reason — `cairn relearn --reason`, `cairn unlearn --superseded-by X --reason`, and
+  `reason` on `PATCH /api/v1/knowledge/{slug}`. Read it back with `cairn know <slug>
+  --history [--full]`, `GET /api/v1/knowledge/{slug}/history`, the MCP `cairn_know
+  history` flag, or the "earlier versions" list on the knowledge page. A `verify`, and a save
+  that changes nothing, are not new versions. The feed now shows a revised entry as written
+  by its author and then each correction by its editor; entries never revised read exactly
+  as before.
+
 - **A project key rename is told, not only resolved** (CAIRN-264). AC was renamed HOL and
   ACC HOLC on 2026-09-22. CAIRN-125 had already made the old refs resolve, and they did —
   which is the problem: `cairn show AC-113` printed HOL-113 and said nothing, so an agent

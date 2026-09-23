@@ -17,6 +17,8 @@ import { CommentsPanel } from './comments-panel'
 import { AttachmentsPanel } from './attachments-panel'
 import { ActivityPanel } from './activity-panel'
 import { ChildrenPanel } from './children-panel'
+import { MentionsPanel } from './mentions-panel'
+import { mentionsOf } from '@/lib/api/mentions'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { RedirectNotice } from '@/components/redirect-notice'
 import { listFormerKeyRecords } from '@/lib/data'
@@ -60,7 +62,7 @@ const TaskPage = async ({
 
   const [
     notes, comments, attachments, relations, duplicateOf, activity, children, parent,
-    alsoProjects, allProjects,
+    alsoProjects, allProjects, mentioned,
   ] = await Promise.all([
     listNotes(task.id),
     listComments(task.id),
@@ -72,6 +74,7 @@ const TaskPage = async ({
     task.parent_id ? getParent(task.parent_id) : Promise.resolve(null),
     listAlsoProjects(task.id),
     listProjects(user.id),
+    mentionsOf(task.id, 8),
   ])
 
   // What this task used to be called. An alias that only resolves is half an
@@ -217,6 +220,7 @@ const TaskPage = async ({
                 what a reader wants next: the split, then the evidence, then
                 the conversation, then the audit trail. */}
             <div className="divide-border flex flex-col divide-y [&>*]:py-5">
+              <MentionsPanel total={mentioned.total} mentions={mentioned.mentions} />
               <ChildrenPanel
                 taskRef={`${task.project.key}-${task.number}`}
                 projectKey={task.project.key}
