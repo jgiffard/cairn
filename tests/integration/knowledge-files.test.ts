@@ -148,7 +148,7 @@ describe('knowledge_files', () => {
     const exact = await contextForFile(ownerId, `src/${unique}/renamed.ts`)
     expect(exact.knowledge.map((k) => k.slug)).toContain(SLUG)
 
-    const fromElsewhere = await contextForFile(ownerId, `/Users/someone/repo/src/${unique}/touched.ts`)
+    const fromElsewhere = await contextForFile(ownerId, `/srv/checkout/src/${unique}/touched.ts`)
     expect(fromElsewhere.knowledge.map((k) => k.slug)).toContain(SOURCED)
   })
 
