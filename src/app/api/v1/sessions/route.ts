@@ -55,6 +55,9 @@ export const POST = route({
       const { session, checkpointed } = await upsertSession(actor, body)
       return ok({ id: session.id, endedAt: session.ended_at, checkpointed })
     } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'PZ001') {
+        return fail('conflict', error.message)
+      }
       return fail('validation_failed', error instanceof Error ? error.message : 'Could not record.')
     }
   },

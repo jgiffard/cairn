@@ -6,7 +6,7 @@ import type { SessionUpsert } from '@/schemas/session'
 import { recordFiles } from './files'
 
 /**
- * Sessions: the episodic record, written at the end of one.
+ * Sessions: the episodic record, checkpointed during and written at the end of one.
  *
  * This is the half of memory an agent cannot be trusted to write on purpose,
  * so nothing here depends on it choosing to. A session-end hook posts what the
@@ -237,7 +237,7 @@ export const upsertSession = async (actor: Actor, input: SessionUpsert) => {
     cwd: input.cwd ?? null,
     project_id: projectId,
     started_at: input.startedAt ?? null,
-    ended_at: input.endedAt ?? new Date().toISOString(),
+    ended_at: input.ongoing ? null : (input.endedAt ?? new Date().toISOString()),
     request: input.request ?? null,
     learned: input.learned ?? null,
     completed: input.completed ?? null,
@@ -254,7 +254,9 @@ export const upsertSession = async (actor: Actor, input: SessionUpsert) => {
     .select(COLUMNS)
     .single<SessionRow>()
 
-  if (error) throw new Error(error.message)
+  // Preserve the database guard's SQLSTATE so the route can return 409 rather
+  // than classifying a late checkpoint as malformed input.
+  if (error) throw Object.assign(new Error(error.message), { code: error.code })
 
   await recordFiles(actor.userId, {
     paths: input.files,
@@ -262,7 +264,7 @@ export const upsertSession = async (actor: Actor, input: SessionUpsert) => {
     projectId,
   })
 
-  const checkpointed = input.checkpointHeld ? await checkpointHeldTasks(actor, data) : []
+  const checkpointed = !input.ongoing && input.checkpointHeld ? await checkpointHeldTasks(actor, data) : []
 
   return { session: data, checkpointed }
 }

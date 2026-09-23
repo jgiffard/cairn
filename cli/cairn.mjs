@@ -1390,6 +1390,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    --project K | --entity E | --global  re-scope it
     cairn unlearn <slug> [--superseded-by <slug>]
     cairn session list             recent sessions
+    cairn session checkpoint --id <id>  upsert ongoing session, do not checkpoint held tasks
     cairn session end --id <id>    write the episodic record, checkpoint what is held
     cairn reconcile                release your own claims that went quiet
     cairn vitals [--hours 24] [--all]   is the memory still being written
@@ -2664,9 +2665,9 @@ const commands = {
   async session() {
     const verb = positional.shift() ?? 'list'
 
-    if (verb === 'end') {
+    if (verb === 'end' || verb === 'checkpoint') {
       const payload = {
-        externalId: need(flags.id, 'usage: cairn session end --id <session-id>'),
+        externalId: need(flags.id, `usage: cairn session ${verb} --id <session-id>`),
         platformSource: flags.platform ?? 'claude',
         cwd: flags.cwd ?? process.cwd(),
         files: splitList(flags.files),
@@ -2682,6 +2683,10 @@ const commands = {
       if (flags['tool-calls']) payload.toolCalls = Number(flags['tool-calls'])
       if (flags['no-checkpoint']) payload.checkpointHeld = false
       if (flags.scheduled) payload.scheduled = true
+      if (verb === 'checkpoint') {
+        payload.ongoing = true
+        payload.checkpointHeld = false
+      }
       return emit(await request('POST', '/api/v1/sessions', payload))
     }
 
@@ -2706,7 +2711,7 @@ const commands = {
       })
     }
 
-    die(`unknown session verb "${verb}" — try: end, list`)
+    die(`unknown session verb "${verb}" — try: checkpoint, end, list`)
   },
 }
 

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 /**
  * A session is the episodic record: what was asked, what was learned, where it
- * was left. One row per agent session, written at the end of it.
+ * was left. One row per agent session, checkpointed while live or at its end.
  *
  * Everything except the four prose fields is extracted from the transcript
  * without a model — which is what makes this affordable where the store it
@@ -24,6 +24,8 @@ export const sessionUpsert = z.object({
   project: z.string().max(10).optional(),
   startedAt: z.string().datetime().optional(),
   endedAt: z.string().datetime().optional(),
+  /** A live checkpoint, not a session end. Omitted remains the legacy end path. */
+  ongoing: z.boolean().default(false),
 
   request: z.string().max(4_000).optional(),
   learned: z.string().max(20_000).optional(),
@@ -44,8 +46,11 @@ export const sessionUpsert = z.object({
    * This is the discipline mechanism: whatever the agent did or did not
    * record, the claim it is holding stops being a phantom.
    */
-  checkpointHeld: z.boolean().default(true),
-})
+  checkpointHeld: z.boolean().optional(),
+}).refine(
+  (input) => !input.ongoing || (!input.endedAt && input.checkpointHeld !== true),
+  { message: 'An ongoing session cannot have endedAt or checkpointHeld.', path: ['ongoing'] },
+).transform((input) => ({ ...input, checkpointHeld: input.checkpointHeld ?? !input.ongoing }))
 
 export type SessionUpsert = z.infer<typeof sessionUpsert>
 export type PlatformSource = z.infer<typeof platformSource>
