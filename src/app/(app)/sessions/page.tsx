@@ -3,7 +3,7 @@ import { LiveUpdates } from '@/components/live-updates'
 import { redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { currentUser, listProjects } from '@/lib/data'
-import { listSessionAgents, listSessions, projectKeysById } from '@/lib/api/sessions'
+import { listSessionAgents, listSessions, projectKeysById, sessionCursor } from '@/lib/api/sessions'
 import { groupByDay } from '@/lib/session-grouping'
 import { isMachinePrompt } from '@/lib/session-title'
 import { MobileNavButton } from '@/components/mobile-nav-context'
@@ -83,15 +83,15 @@ const SessionsPage = async ({
   const visible = showScheduled ? items : items.filter((i) => !isScheduled(i))
 
   const groups = groupByDay(visible)
-  const oldest = rows.at(-1)?.ended_at
+  const lastRow = rows.at(-1)
   const hasMore = rows.length === PAGE_SIZE
 
   const nextHref = (() => {
-    if (!hasMore || !oldest) return null
+    if (!hasMore || !lastRow) return null
     const params = new URLSearchParams()
     if (project) params.set('project', project)
     if (agent) params.set('agent', agent)
-    params.set('before', oldest)
+    params.set('before', sessionCursor(lastRow))
     return `/sessions?${params.toString()}`
   })()
 

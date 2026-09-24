@@ -215,6 +215,22 @@ This is the part that makes the rest hold. Installed by `node scripts/install-ho
 | a file is read | what Cairn knows about *that file*, if anything; silence if not |
 | session end | the session is recorded, and any task still held is checkpointed |
 
+An integration can persist progress without ending a session:
+
+```bash
+cairn session checkpoint --id agent:example --platform other --agent example-agent \
+  --project DEMO --cwd "$HOME/projects/demo" \
+  --request 'Work on a feature' --completed 'Implementation in progress'
+```
+
+`session checkpoint` upserts on `(platform, id)`, leaves `ended_at` null, and never
+checkpoints held tasks. Repeat it with updated fields as work progresses; finish with
+`cairn session end --id agent:example --platform other` (and the desired summary
+flags). A late checkpoint after an end is refused rather than reopening the session.
+Sparse updates preserve earlier non-null prose, project, path, start time, and nonempty
+file/task lists; send an empty string to clear a prose field. Empty file/task lists
+cannot clear previously recorded lists.
+
 Every hook fails silent and non-blocking. A memory system must never be the reason a
 session cannot start or close. `CAIRN_HOOK_DEBUG=1` when that silence is itself the
 problem.

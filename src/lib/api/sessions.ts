@@ -4,9 +4,10 @@ import type { Actor } from './auth'
 import { actorLabel } from './actor'
 import type { SessionUpsert } from '@/schemas/session'
 import { recordFiles } from './files'
+import { normalizeDatabaseValue, pool } from '@/lib/db/client'
 
 /**
- * Sessions: the episodic record, written at the end of one.
+ * Sessions: the episodic record, checkpointed during and written at the end of one.
  *
  * This is the half of memory an agent cannot be trusted to write on purpose,
  * so nothing here depends on it choosing to. A session-end hook posts what the
@@ -25,6 +26,8 @@ const COLUMNS =
 
 export type SessionRow = {
   id: string
+  /** Full DB timestamp precision for keyset pagination (JS Date loses microseconds). */
+  cursor_ended_at?: string | null
   external_id: string
   platform_source: string
   agent_id: string | null
@@ -237,7 +240,7 @@ export const upsertSession = async (actor: Actor, input: SessionUpsert) => {
     cwd: input.cwd ?? null,
     project_id: projectId,
     started_at: input.startedAt ?? null,
-    ended_at: input.endedAt ?? new Date().toISOString(),
+    ended_at: input.ongoing ? null : (input.endedAt ?? new Date().toISOString()),
     request: input.request ?? null,
     learned: input.learned ?? null,
     completed: input.completed ?? null,
@@ -254,7 +257,9 @@ export const upsertSession = async (actor: Actor, input: SessionUpsert) => {
     .select(COLUMNS)
     .single<SessionRow>()
 
-  if (error) throw new Error(error.message)
+  // Preserve the database guard's SQLSTATE so the route can return 409 rather
+  // than classifying a late checkpoint as malformed input.
+  if (error) throw Object.assign(new Error(error.message), { code: error.code })
 
   await recordFiles(actor.userId, {
     paths: input.files,
@@ -262,9 +267,35 @@ export const upsertSession = async (actor: Actor, input: SessionUpsert) => {
     projectId,
   })
 
-  const checkpointed = input.checkpointHeld ? await checkpointHeldTasks(actor, data) : []
+  const checkpointed = !input.ongoing && input.checkpointHeld ? await checkpointHeldTasks(actor, data) : []
 
   return { session: data, checkpointed }
+}
+
+/** A total-order cursor; NULL (ongoing) rows precede ended rows. */
+export const sessionCursor = (row: Pick<SessionRow, 'ended_at' | 'id' | 'cursor_ended_at'>): string =>
+  Buffer.from(JSON.stringify([row.cursor_ended_at ?? row.ended_at, row.id])).toString('base64url')
+
+const parseSessionCursor = (value: string): { endedAt: string | null; id: string } => {
+  // Links issued before keyset pagination carried only the end timestamp.
+  // The zero UUID preserves their old strictly-before behavior.
+  if (/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(value)) {
+    return { endedAt: value, id: '00000000-0000-0000-0000-000000000000' }
+  }
+  let decoded: unknown
+  try {
+    decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+  } catch {
+    throw new Error('Invalid session cursor')
+  }
+  if (!Array.isArray(decoded) || decoded.length !== 2 ||
+    !(decoded[0] === null || (typeof decoded[0] === 'string' &&
+      /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(decoded[0]))) ||
+    typeof decoded[1] !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded[1])) {
+    throw new Error('Invalid session cursor')
+  }
+  return { endedAt: decoded[0], id: decoded[1] }
 }
 
 export const listSessions = async (
@@ -278,26 +309,38 @@ export const listSessions = async (
     before?: string
   },
 ): Promise<SessionRow[]> => {
-  let query = admin()
-    .from('sessions')
-    .select(COLUMNS)
-    .order('ended_at', { ascending: false, nullsFirst: false })
-    .limit(filters.limit)
-
-  if (filters.cwd) query = query.eq('cwd', filters.cwd)
-  if (filters.agent) query = query.eq('agent_id', filters.agent)
-  // Strictly before, not <=: the cursor is the last row already shown, and
-  // <= would repeat it (or, worse, drop every other row sharing its instant).
-  if (filters.before) query = query.lt('ended_at', filters.before)
+  const clauses: string[] = []
+  const values: unknown[] = []
+  const bind = (value: unknown) => {
+    values.push(value)
+    return `$${values.length}`
+  }
+  if (filters.cwd) clauses.push(`cwd = ${bind(filters.cwd)}`)
+  if (filters.agent) clauses.push(`agent_id = ${bind(filters.agent)}`)
   if (filters.project) {
     const projectId = await projectIdForKey(_userId, filters.project)
     if (!projectId) return []
-    query = query.eq('project_id', projectId)
+    clauses.push(`project_id = ${bind(projectId)}`)
+  }
+  if (filters.before) {
+    const cursor = parseSessionCursor(filters.before)
+    if (cursor.endedAt === null) {
+      // All remaining live rows, then the entire ended portion of the timeline.
+      clauses.push(`((ended_at is null and id < ${bind(cursor.id)}) or ended_at is not null)`)
+    } else {
+      const ended = bind(cursor.endedAt)
+      const id = bind(cursor.id)
+      clauses.push(`(ended_at < ${ended} or (ended_at = ${ended} and id < ${id}))`)
+    }
   }
 
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
-  return (data ?? []) as unknown as SessionRow[]
+  const where = clauses.length ? ` where ${clauses.join(' and ')}` : ''
+  const { rows } = await pool().query<SessionRow>(
+    `select ${COLUMNS}, to_char(ended_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as cursor_ended_at
+     from sessions${where} order by ended_at desc nulls first, id desc limit ${bind(filters.limit)}`,
+    values,
+  )
+  return normalizeDatabaseValue(rows) as SessionRow[]
 }
 
 /** Distinct agent ids seen, for the sessions timeline's filter. */

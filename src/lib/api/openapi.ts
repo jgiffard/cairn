@@ -1044,15 +1044,17 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('Sessions.') },
       },
       post: {
-        summary: 'Record a finished session',
+        summary: 'Checkpoint an ongoing session or record a finished session',
         description:
-          'Written by a session-end hook, not by hand. Idempotent on ' +
+          'Set `ongoing: true` for an in-progress checkpoint: `ended_at` stays null, ' +
+          'held tasks are not checkpointed, and a closed session cannot be reopened (409). ' +
+          'Omit `ongoing` for the existing session-end behavior. Idempotent on ' +
           '(platformSource, externalId), which is a correctness requirement rather than a ' +
           'nicety: Codex has no session-end event so its writer runs on Stop, which fires ' +
           'every turn. `checkpointHeld` also checkpoints any task the agent still holds, ' +
           'so a claim it walked away from stops looking like live work.',
         requestBody: body(json(sessionUpsert)),
-        responses: { '200': okResponse('Recorded.') },
+        responses: { '200': okResponse('Recorded.'), '409': errorResponse },
       },
     },
     '/next': {
