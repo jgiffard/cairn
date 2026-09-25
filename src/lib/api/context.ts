@@ -83,6 +83,10 @@ const TASK_SELECT =
 /** Held tasks also carry what a recent rename is measured against. */
 const HELD_SELECT = `${TASK_SELECT}, project_id, created_at`
 
+export class ContextScopeError extends Error {
+  constructor() { super('project scope requires a resolved project') }
+}
+
 /** How long a key change stays worth mentioning beside a held ref. */
 export const RECENT_RENAME_DAYS = 30
 
@@ -167,7 +171,7 @@ const projectForRepo = async (_userId: string, remote: string): Promise<string |
 
 export const buildContext = async (
   actor: Actor,
-  input: { cwd?: string; project?: string; file?: string; repo?: string },
+  input: { cwd?: string; project?: string; file?: string; repo?: string; scope?: 'all' | 'project' },
 ): Promise<ContextPayload> => {
   // A key given explicitly may be one the project no longer has — every
   // checkout mapped before a rename sends it — so it is resolved to the live
@@ -177,14 +181,18 @@ export const buildContext = async (
     asked?.key ??
     (input.repo ? await projectForRepo(actor.userId, input.repo) : null) ??
     (input.cwd ? await projectForCwd(actor.userId, input.cwd) : null)
+  const scopedProject = input.scope === 'project' ? project : null
+  if (input.scope === 'project' && !scopedProject) throw new ContextScopeError()
 
   // --- what this agent is still holding ---------------------------------
   const held: ContextPayload['held'] = []
   if (actor.actorId) {
-    const { data, error } = await admin()
+    let query = admin()
       .from('tasks')
       .select(HELD_SELECT)
       .eq('claimed_by', actor.actorId)
+    if (scopedProject) query = query.eq('projects.key', scopedProject)
+    const { data, error } = await query
       .order('claimed_at', { ascending: true })
       .limit(10)
     if (error) throw new Error(error.message)
@@ -244,11 +252,13 @@ export const buildContext = async (
   if (input.cwd || project) {
     let query = admin()
       .from('sessions')
-      .select('ended_at, request, next_steps, agent_id, cwd, project_id')
+      .select('ended_at, request, next_steps, agent_id, cwd, project_id' +
+        (scopedProject ? ', project:projects!project_id!inner(key)' : ''))
       .order('ended_at', { ascending: false, nullsFirst: false })
       .limit(1)
 
     query = input.cwd ? query.eq('cwd', input.cwd) : query
+    if (scopedProject) query = query.eq('projects.key', scopedProject)
 
     const { data, error } = await query.maybeSingle()
     if (error) throw new Error(error.message)
@@ -299,11 +309,13 @@ export const buildContext = async (
 
   // --- claims nobody is acting on ---------------------------------------
   const cutoff = new Date(Date.now() - LEASE_MINUTES * 60_000).toISOString()
-  const { data: staleData, error: staleError } = await admin()
+  let staleQuery = admin()
     .from('tasks')
     .select(TASK_SELECT)
     .not('claimed_by', 'is', null)
     .lt('heartbeat_at', cutoff)
+  if (scopedProject) staleQuery = staleQuery.eq('projects.key', scopedProject)
+  const { data: staleData, error: staleError } = await staleQuery
     .order('heartbeat_at', { ascending: true })
     .limit(5)
   if (staleError) throw new Error(staleError.message)
