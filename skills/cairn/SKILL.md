@@ -532,7 +532,9 @@ and a `git worktree` resolve without being mapped again.
 By default, held work and stale claims can still span projects: the briefing helps you see
 everything you are responsible for. Use `--scope project` to restrict those sections and
 the last session to the resolved project. If no project resolves, it fails rather than
-returning a cross-project briefing that looks filtered. Shared/global knowledge remains
+returning a cross-project briefing that looks filtered. An unknown `--project` key returns
+404. Tasks linked to the project only through `--also-project` are excluded: the filter
+uses their home project, as "In flight here" already does. Shared/global knowledge remains
 available; this is a relevance filter, not an authorization boundary.
 
 A project's key can change (`cairn project rekey AC HOL`). Old refs and `--project AC`

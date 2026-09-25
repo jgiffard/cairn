@@ -48,6 +48,10 @@ vi.mock('@/lib/db/client', () => ({
 }))
 vi.mock('./project-keys', () => ({
   liveProjectKey: async (key: string) => ({ key: key === 'OLD' ? 'MES' : key, renamed: null }),
+  resolveProject: async (key: string) => key === 'TYPO' ? null : {
+    project: { id: 'project-id', key: key === 'OLD' ? 'MES' : key },
+    renamed: key === 'OLD' ? { key: 'OLD', to: 'MES', at: '2020-01-01T00:00:00Z', by: null } : null,
+  },
   formerKeysByProject: async () => new Map(),
   formerRefsOf: () => [],
 }))
@@ -112,6 +116,7 @@ describe('context project scope', () => {
     db.sessions = [session('MES', '/mes', '2020-01-01T00:00:00Z'), session('CAL', '/cal', '2020-01-02T00:00:00Z')]
     const context = await buildContext(actor, { project: 'OLD', scope: 'project' })
     expect(context.project).toBe('MES')
+    expect(context.projectRenamed).toMatchObject({ key: 'OLD', to: 'MES' })
     expect(context.held.map((item) => item.ref)).toEqual(['MES-1'])
     expect(context.lastSession?.request).toBe('MES request')
   })
@@ -119,6 +124,14 @@ describe('context project scope', () => {
   it('rejects an unresolved project rather than returning an unfiltered briefing', async () => {
     db.tasks = [task('CAL', 1, '2020-01-01T00:00:00Z')]
     await expect(buildContext(actor, { scope: 'project' })).rejects.toThrow('project scope requires a resolved project')
+    expect(db.calls).toEqual([])
+  })
+
+  it('rejects an unknown explicit key instead of showing an empty project briefing', async () => {
+    db.tasks = [task('MES', 1, '2020-01-01T00:00:00Z')]
+    db.sessions = [session('MES', '/repo', '2020-01-02T00:00:00Z')]
+    await expect(buildContext(actor, { scope: 'project', project: 'TYPO', cwd: '/repo' }))
+      .rejects.toThrow('Project not found')
     expect(db.calls).toEqual([])
   })
 })

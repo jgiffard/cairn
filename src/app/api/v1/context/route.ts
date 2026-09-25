@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
-import { buildContext, ContextScopeError } from '@/lib/api/context'
+import { buildContext, ContextProjectNotFoundError, ContextScopeError } from '@/lib/api/context'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +31,7 @@ export const GET = route({
     try {
       return ok(await buildContext(actor, parsed.data))
     } catch (error) {
+      if (error instanceof ContextProjectNotFoundError) return fail('not_found', error.message)
       if (error instanceof ContextScopeError) return fail('validation_failed', error.message)
       throw error
     }

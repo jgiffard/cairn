@@ -1369,9 +1369,9 @@ const HELP = `cairn — agent-first task tracker and shared memory
 
   memory
     cairn context [--scope project|all] [--project K]
-                                  what you hold, what is in flight,
-                                  where the last session here stopped, what is known;
-                                  project scope filters tasks and sessions (default: all)
+                                   what you hold, what is in flight,
+                                   where the last session here stopped, what is known;
+                                   project scope filters tasks and sessions (default: all)
     cairn learn "<title>" --body - record what we now know
                                    --allow-dangling  keep a [[ref]] the store cannot resolve
                                    --files a,b  files it is about, beyond those its body names

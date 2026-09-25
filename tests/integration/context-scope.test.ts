@@ -61,3 +61,9 @@ it('scopes real joined queries for held work, stale claims, and the last session
   expect(unscoped.held.map((item) => item.title)).toEqual(['Other work', 'Current work'])
   expect(unscoped.lastSession?.request).toBe('Unclassified session')
 })
+
+it('rejects an unknown explicit project key even with a matching cwd', async () => {
+  const unknownKey = `X${owner.slice(0, 7).toUpperCase()}`
+  await expect(buildContext(actor, { cwd, project: unknownKey, scope: 'project' }))
+    .rejects.toThrow('Project not found')
+})

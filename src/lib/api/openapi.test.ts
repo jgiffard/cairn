@@ -81,6 +81,7 @@ describe('openapi spec', () => {
     expect(context.parameters.find((parameter) => parameter.name === 'scope')?.schema.enum)
       .toEqual(['all', 'project'])
     expect(context.responses).toHaveProperty('400')
+    expect(context.responses).toHaveProperty('404')
   })
 
   const routesOnDisk = (): string[] => {

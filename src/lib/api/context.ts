@@ -4,7 +4,7 @@ import { listKnowledge } from './knowledge'
 import { stalenessFor } from './staleness'
 import { contextForFile, type FileContext } from './files'
 import { normaliseRemote, projectKeyFromEmbed, projectKeyFromRepoRows, type RepoRow } from './repos'
-import { formerKeysByProject, formerRefsOf, liveProjectKey, type FormerKey, type KeyRename } from './project-keys'
+import { formerKeysByProject, formerRefsOf, liveProjectKey, resolveProject, type FormerKey, type KeyRename } from './project-keys'
 
 /**
  * The briefing a session opens with.
@@ -85,6 +85,10 @@ const HELD_SELECT = `${TASK_SELECT}, project_id, created_at`
 
 export class ContextScopeError extends Error {
   constructor() { super('project scope requires a resolved project') }
+}
+
+export class ContextProjectNotFoundError extends Error {
+  constructor() { super('Project not found') }
 }
 
 /** How long a key change stays worth mentioning beside a held ref. */
@@ -176,7 +180,13 @@ export const buildContext = async (
   // A key given explicitly may be one the project no longer has — every
   // checkout mapped before a rename sends it — so it is resolved to the live
   // key rather than matched as a string that no row carries any more.
-  const asked = input.project ? await liveProjectKey(input.project) : null
+  const resolved = input.scope === 'project' && input.project
+    ? await resolveProject(input.project)
+    : null
+  if (input.scope === 'project' && input.project && !resolved) throw new ContextProjectNotFoundError()
+  const asked = input.project
+    ? resolved ? { key: resolved.project.key, renamed: resolved.renamed } : await liveProjectKey(input.project)
+    : null
   const project =
     asked?.key ??
     (input.repo ? await projectForRepo(actor.userId, input.repo) : null) ??
