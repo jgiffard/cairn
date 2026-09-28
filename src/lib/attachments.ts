@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { dirname, posix, resolve } from 'node:path'
+import type { S3Client } from '@aws-sdk/client-s3'
 
 export const MAX_BYTES = Number(process.env.CAIRN_ATTACHMENT_MAX_BYTES || 10_485_760)
 const attachmentRoot = () => resolve(/* turbopackIgnore: true */ process.env.CAIRN_ATTACHMENT_DIR || '/data/attachments')
@@ -120,15 +121,68 @@ export const verifyAttachmentToken = (storagePath: string, expires: number, down
   }
 }
 
+/**
+ * Where the bytes live: a directory by default, or an S3 bucket when
+ * CAIRN_ATTACHMENT_BUCKET is set — for a platform whose containers have no
+ * persistent disk (App Runner, Fargate without EFS). Either way the app serves
+ * the file itself through the signed /api/files route, so a bucket stays
+ * private and nothing about access changes. Credentials come from the
+ * platform's role through the SDK's default chain; there is no key setting.
+ *
+ * The storage path is the same string in both, so a store can move between
+ * them by copying files to keys.
+ */
+const attachmentBucket = () => process.env.CAIRN_ATTACHMENT_BUCKET?.trim() || null
+const objectKey = (storagePath: string) => {
+  const key = posix.normalize(storagePath)
+  if (key.startsWith('/') || key === '..' || key.startsWith('../')) throw new Error('Invalid attachment path')
+  const prefix = process.env.CAIRN_ATTACHMENT_PREFIX?.replace(/^\/+|\/+$/g, '')
+  return prefix ? `${prefix}/${key}` : key
+}
+
+let client: Promise<{ s3: S3Client; sdk: typeof import('@aws-sdk/client-s3') }> | null = null
+// Loaded on first use, so a filesystem deployment never pays for the SDK. The
+// region is passed rather than left to the SDK: not every container platform
+// sets AWS_REGION, and without it the first upload fails, not the start-up.
+const s3 = () => (client ??= import('@aws-sdk/client-s3').then((sdk) => ({
+  sdk,
+  s3: new sdk.S3Client({
+    region: process.env.CAIRN_ATTACHMENT_REGION || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
+  }),
+})))
+
 export const writeAttachment = async (storagePath: string, bytes: Buffer) => {
+  const bucket = attachmentBucket()
+  if (bucket) {
+    const { sdk, s3: c } = await s3()
+    // IfNoneMatch is the bucket's `flag: 'wx'`: an upload never replaces a file.
+    await c.send(new sdk.PutObjectCommand({ Bucket: bucket, Key: objectKey(storagePath), Body: bytes, IfNoneMatch: '*' }))
+    return
+  }
   const target = absolutePath(storagePath)
   await mkdir(dirname(target), { recursive: true })
   await writeFile(target, bytes, { flag: 'wx', mode: 0o600 })
 }
 
-export const readAttachment = (storagePath: string) => readFile(/* turbopackIgnore: true */ absolutePath(storagePath))
+export const readAttachment = async (storagePath: string): Promise<Buffer<ArrayBuffer>> => {
+  const bucket = attachmentBucket()
+  if (bucket) {
+    const { sdk, s3: c } = await s3()
+    const object = await c.send(new sdk.GetObjectCommand({ Bucket: bucket, Key: objectKey(storagePath) }))
+    if (!object.Body) throw new Error('Attachment not found')
+    return Buffer.from(await object.Body.transformToByteArray())
+  }
+  return readFile(/* turbopackIgnore: true */ absolutePath(storagePath))
+}
 
 export const removeAttachments = async (paths: string[]) => {
+  const bucket = attachmentBucket()
+  if (bucket) {
+    const { sdk, s3: c } = await s3()
+    // Deleting a key that is not there succeeds, like the ENOENT below.
+    await Promise.all(paths.map((path) => c.send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key: objectKey(path) }))))
+    return
+  }
   await Promise.all(paths.map((path) => unlink(/* turbopackIgnore: true */ absolutePath(path)).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== 'ENOENT') throw error
   })))

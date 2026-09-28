@@ -18,7 +18,10 @@ export const dynamic = 'force-dynamic'
  * would mean a second, partial implementation of every view.
  */
 const POLL_MS = 4000
-const MAX_LIFETIME_MS = 10 * 60 * 1000
+// Ten minutes, unless the platform cuts requests sooner: App Runner ends any
+// request at 120s, so there CAIRN_SSE_MAX_SECONDS=100 closes the stream first
+// and the browser's EventSource reconnects cleanly instead of on an error.
+const MAX_LIFETIME_MS = (Number(process.env.CAIRN_SSE_MAX_SECONDS) || 600) * 1000
 
 export const GET = async (req: Request) => {
   const actor = await authenticate(req)

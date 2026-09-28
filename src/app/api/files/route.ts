@@ -16,7 +16,13 @@ export const GET = async (request: Request) => {
     const headers = new Headers({ 'cache-control': 'private, max-age=300', 'content-type': mime })
     if (download) headers.set('content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(download)}`)
     return new NextResponse(bytes, { headers })
-  } catch {
+  } catch (error) {
+    // Missing is the common case; anything else (a bucket permission, a
+    // region, the network) would otherwise be indistinguishable from it.
+    const missing = (error as { code?: string; name?: string })
+    if (missing.code !== 'ENOENT' && missing.name !== 'NoSuchKey') {
+      console.error(`attachment read failed for ${path}:`, error)
+    }
     return NextResponse.json({ error: 'Attachment not found.' }, { status: 404 })
   }
 }

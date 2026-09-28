@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
   // so the file arrives over budget and the failure lands on whichever PR is
   // unlucky enough to be next — for a reason that appears nowhere in its diff.
   agentRules: false,
+  // Loaded only when attachments live in S3. The SDK's credential chain
+  // requires optional providers at runtime, which bundling breaks; kept
+  // external, it is copied into the standalone node_modules as it is.
+  serverExternalPackages: ['@aws-sdk/client-s3'],
 }
 
 export default nextConfig

@@ -566,6 +566,28 @@ Then add members and issue per-user agent keys from **Users**. All active identi
 the workspace; administrator privileges are required only for membership, roles, password
 resets and key management.
 
+### Without a disk or a shell: App Runner and similar
+
+A platform that runs the container and nothing else — no volume, no one-off task, a request
+time limit — needs five settings instead of the compose file's extra services:
+
+| Setting | Replaces |
+|---|---|
+| `CAIRN_ATTACHMENT_BUCKET` (and optional `CAIRN_ATTACHMENT_PREFIX`, `CAIRN_ATTACHMENT_REGION` where the platform sets no `AWS_REGION`) | the attachments directory. Files go to a private S3 bucket through the platform's role; the app still serves them through signed links, so the bucket never needs to be public |
+| `CAIRN_MIGRATE_ON_START=1` | the `migrate` service. The container applies migrations before it serves, under an advisory lock, so several starting at once apply each file once |
+| `CAIRN_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` / `_NAME` | `npm run operator:create`. The first administrator is created on start only while there is none, and a later start never resets its password; remove them after the first deploy |
+| `NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem` with `?sslmode=verify-full` | trusting the database. The image carries Amazon RDS's certificate authorities |
+| `CAIRN_SSE_MAX_SECONDS=100` | nothing — App Runner ends every request at 120s, so live-update streams close first and reconnect cleanly |
+
+Behind a proxy, rate limits key on the address the nearest proxy appended to
+`X-Forwarded-For` — never the first entry, which the client writes. Set
+`CAIRN_TRUSTED_PROXY_HOPS` if more than one proxy appends. Failed logins are also capped per
+account (30 in 15 minutes, looser than the per-address 8 so a known email cannot be locked
+out cheaply), which no address can get around. With a pooler in front of Postgres, use session
+mode (RDS Proxy pins automatically): migrations hold an advisory lock and a transaction per
+file, which transaction pooling would split. Keep a single replica, or accept that those limits
+and a few caches are per replica.
+
 ### Secrets
 
 `.env*` is gitignored except `.env.example`, and `docker-compose.override.yml` /

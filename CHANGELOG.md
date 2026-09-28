@@ -9,6 +9,35 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **Runs on a platform with no disk and no shell** (CAIRN-304) — App Runner, or Fargate
+  without a volume. Attachments can live in a private S3 bucket (`CAIRN_ATTACHMENT_BUCKET`),
+  still served through the app's signed links. `CAIRN_MIGRATE_ON_START=1` migrates before
+  serving, under an advisory lock so containers starting together apply each file once, and
+  `CAIRN_BOOTSTRAP_ADMIN_*` creates the first administrator only while there is none, under a
+  lock of its own so containers starting together take turns. The
+  image carries Amazon RDS's certificate authorities for `sslmode=verify-full`, and
+  `CAIRN_SSE_MAX_SECONDS` closes live updates before a platform's request limit.
+
+### Changed
+
+- **The runtime image starts through `scripts/start.mjs`.** With none of the new variables set
+  it is `node server.js`, as before. The migration and operator scripts are plain JavaScript
+  now (`npm run db:migrate` and `npm run operator:create` are unchanged), so the runtime image
+  can run them without a TypeScript loader.
+- **The VPS deploy workflow runs only in `montytorr/cairn`**, so a mirror that deploys its own
+  way does not queue a job for a runner it does not have.
+
+### Fixed
+
+- **The login limiter trusted an address the client wrote.** It keyed on the first
+  `X-Forwarded-For` entry, which behind an ALB or App Runner is whatever the client sent, so
+  every attempt could claim a fresh address. It now uses the entry the nearest proxy appended
+  (`CAIRN_TRUSTED_PROXY_HOPS`), and failures are also capped per account — at 30 in 15
+  minutes, looser than the 8 per address, so knowing someone's email is not enough to lock them
+  out cheaply.
+
 ## [0.7.0] — 2026-09-26
 
 ### Added

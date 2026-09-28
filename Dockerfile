@@ -36,9 +36,9 @@ RUN npm run build
 FROM base AS migrator
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json* ./
-COPY scripts/migrate.ts ./scripts/migrate.ts
+COPY scripts/migrate.mjs ./scripts/migrate.mjs
 COPY migrations ./migrations
-CMD ["npm", "run", "db:migrate"]
+CMD ["node", "scripts/migrate.mjs"]
 
 # --- runtime ---------------------------------------------------------------
 FROM base AS runner
@@ -58,9 +58,21 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Next 16 standalone still reads this metadata from the root .next at runtime.
 COPY --from=builder --chown=nextjs:nodejs /app/.next/required-server-files.json ./.next/
+# Migrations and the first administrator, for a platform that cannot run the
+# `migrator` target as a one-off (scripts/start.mjs; off unless asked for).
+# pg and bcryptjs are already in the standalone node_modules: the server uses both.
+COPY --from=builder --chown=nextjs:nodejs /app/migrations ./migrations
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/start.mjs /app/scripts/migrate.mjs /app/scripts/create-operator.mjs ./scripts/
+
+# Amazon RDS's certificate authorities, so a verified TLS connection to a
+# managed database needs only NODE_EXTRA_CA_CERTS pointing here and
+# `sslmode=verify-full` in DATABASE_URL. Node trusts nothing extra by default.
+# Fetched at build time like the npm packages above; unused, and harmless,
+# on a deployment that talks to its own Postgres container.
+ADD --chmod=644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
 
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 
-CMD ["node", "server.js"]
+CMD ["node", "scripts/start.mjs"]
