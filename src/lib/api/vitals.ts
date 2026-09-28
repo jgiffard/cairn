@@ -1,4 +1,3 @@
-import { unstable_cache } from 'next/cache'
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
 
@@ -657,11 +656,27 @@ export const readVitals = async (actor: Actor, hours = 24): Promise<VitalsReport
  * The same read, cached, for the pages that show it.
  *
  * The aggregate takes ~45ms, which is fine once and wasteful on every
- * navigation — and a health summary five minutes stale is still a health
- * summary. The API route deliberately does not use this: a monitor asking the
- * question deserves the current answer.
+ * navigation — and a health summary a minute stale is still a health summary.
+ * The API route deliberately does not use this: a monitor asking the question
+ * deserves the current answer.
+ *
+ * A plain memo that refreshes *before* answering once it is stale, not Next's
+ * `unstable_cache`. That one serves the stale entry and revalidates after the
+ * response has gone: App Runner throttles an instance's CPU between requests,
+ * and a read-only root cannot persist the entry at all, so the banner kept
+ * showing an alarm the database had already cleared (CAIRN-303). Per process,
+ * which for a minute-old health summary is fine.
  */
-export const cachedVitals = (userId: string, hours = 24) =>
-  unstable_cache(() => readVitalsFor(userId, hours), ['cairn-vitals', userId, String(hours)], {
-    revalidate: 300,
-  })()
+const VITALS_TTL_MS = 60_000
+const vitalsMemo = new Map<string, { at: number; value: Promise<Vitals> }>()
+
+export const cachedVitals = (userId: string, hours = 24): Promise<Vitals> => {
+  const key = `${userId}:${hours}`
+  const hit = vitalsMemo.get(key)
+  if (hit && Date.now() - hit.at < VITALS_TTL_MS) return hit.value
+  const value = readVitalsFor(userId, hours)
+  vitalsMemo.set(key, { at: Date.now(), value })
+  // A failed read is not remembered: the next page tries again.
+  value.catch(() => vitalsMemo.delete(key))
+  return value
+}
