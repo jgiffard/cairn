@@ -9,6 +9,14 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A stale session cookie no longer loops between `/` and `/login`.** After a password change,
+  an expiry or a revoked session the browser still sends the cookie; the app layout found it
+  invalid and redirected to `/login`, and the middleware — which only checks that a cookie is
+  present — sent `/login` straight back to `/`. The login page now decides, against the
+  database: a real session goes to the app, anything else gets the form.
+
 ## [0.8.1] — 2026-09-28
 
 ### Fixed

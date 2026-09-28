@@ -129,3 +129,9 @@ jobs:
             -H 'origin: http://127.0.0.1:3102' \
             -d '{"email":"ci@example.test","password":"a-long-ci-password"}' | grep -q '"ok":true' \
             || { echo '::error::the bootstrapped administrator cannot sign in'; exit 1; }
+          # A stale session cookie (password changed, expired, revoked) must
+          # land on the login form, not bounce between / and /login for ever.
+          code=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -H 'cookie: cairn_session=stale' http://127.0.0.1:3102/)
+          echo "/ with a stale cookie: $code"; case "$code" in 307*/login*) ;; *) echo '::error::/ should redirect a stale session to /login'; exit 1;; esac
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H 'cookie: cairn_session=stale' http://127.0.0.1:3102/login)
+          echo "/login with a stale cookie: $code"; [ "$code" = 200 ] || { echo '::error::/login bounced a stale session instead of showing the form'; exit 1; }

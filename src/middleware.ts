@@ -34,12 +34,11 @@ export const middleware = async (req: NextRequest) => {
     return NextResponse.redirect(url)
   }
 
-  if (hasSession && isLoginRoute) {
-    const url = req.nextUrl.clone()
-    url.pathname = '/'
-    url.search = ''
-    return NextResponse.redirect(url)
-  }
+  // No "has a cookie, so leave /login" here: a cookie is not a session. After a
+  // password change, an expiry or a revoked session the browser still sends
+  // one, the app layout finds it invalid and sends it to /login, and this used
+  // to send it straight back to / — a redirect loop with no way out but
+  // clearing cookies. The login page decides, against Postgres.
 
   return NextResponse.next({ request: req })
 }
