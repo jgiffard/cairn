@@ -17,18 +17,20 @@
  */
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { migrate } from './migrate.mjs'
-import { ensureOperator } from './create-operator.mjs'
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const url = process.env.DATABASE_URL
 
+// Each chore is imported only when it is asked for, so a start with neither
+// set loads nothing but the server — exactly what the image ran before.
 if (process.env.CAIRN_MIGRATE_ON_START === '1') {
+  const { migrate } = await import('./migrate.mjs')
   await migrate(url, { dir: join(root, 'migrations'), log: (line) => console.log(`[migrate] ${line}`) })
 }
 
 const bootstrapEmail = process.env.CAIRN_BOOTSTRAP_ADMIN_EMAIL?.trim()
 if (bootstrapEmail) {
+  const { ensureOperator } = await import('./create-operator.mjs')
   const outcome = await ensureOperator({
     url,
     email: bootstrapEmail,

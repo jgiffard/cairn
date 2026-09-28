@@ -13,7 +13,10 @@ const nextConfig: NextConfig = {
   // Loaded only when attachments live in S3. The SDK's credential chain
   // requires optional providers at runtime, which bundling breaks; kept
   // external, it is copied into the standalone node_modules as it is.
-  serverExternalPackages: ['@aws-sdk/client-s3'],
+  // pg and bcryptjs: scripts/start.mjs runs migrations and the first
+  // administrator outside the bundle, so they must exist as packages in the
+  // standalone node_modules rather than only inside bundled server chunks.
+  serverExternalPackages: ['@aws-sdk/client-s3', 'pg', 'bcryptjs'],
 }
 
 export default nextConfig

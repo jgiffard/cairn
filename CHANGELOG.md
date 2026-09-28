@@ -31,6 +31,12 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **The image failed to start after the App Runner changes** (CAIRN-304). `scripts/start.mjs`
+  imported the first-administrator code on every start, and `bcryptjs` exists only inside
+  Next's bundled server chunks, so the container exited before serving; the VPS deploy rolled
+  it back. The chores are now imported only when asked for, `pg` and `bcryptjs` stay packages
+  in the standalone output, and CI builds the image and starts it both ways — plain, and
+  migrating and bootstrapping on start — then signs in as the administrator it created.
 - **The login limiter trusted an address the client wrote.** It keyed on the first
   `X-Forwarded-For` entry, which behind an ALB or App Runner is whatever the client sent, so
   every attempt could claim a fresh address. It now uses the entry the nearest proxy appended
