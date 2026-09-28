@@ -29,7 +29,7 @@ const serve = (seen: Seen) =>
       req.on('data', (c) => { body += c })
       req.on('end', () => {
         res.writeHead(200, { 'content-type': 'application/json' })
-        if (req.url === '/api/v1/projects?archived=1') {
+        if (req.url === '/api/v1/projects') {
           res.end(JSON.stringify({ success: true, data: [] }))
           return
         }

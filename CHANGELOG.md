@@ -11,6 +11,11 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **An archived project no longer claims its refs for instance routing.** When a project
+  moves to another instance, the copy left behind is archived; its key still sat in that
+  instance's routing cache, so a bare `cairn show HM-716` became ambiguous and fell back to the
+  default instead of going where the project now lives. The cache holds active projects and
+  the keys they used to have.
 - **Security headers no longer depend on a proxy.** HSTS, `X-Frame-Options: DENY`,
   `nosniff` and a referrer policy were added by Traefik on the compose deployment; on a
   platform that terminates TLS itself, such as App Runner, the same image went out without them.
