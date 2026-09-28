@@ -1,3 +1,5 @@
+import type { Metadata } from 'next'
+import { cache } from 'react'
 import Link from 'next/link'
 import { LiveUpdates } from '@/components/live-updates'
 import { notFound, redirect } from 'next/navigation'
@@ -18,12 +20,27 @@ import { KnowledgeDetail } from './knowledge-detail'
 
 export const dynamic = 'force-dynamic'
 
+// Deduped against the page's own lookup below (React cache(), same request).
+const cachedKnowledge = cache(getKnowledge)
+
+export const generateMetadata = async ({
+  params,
+}: {
+  params: Promise<{ slug: string }>
+}): Promise<Metadata> => {
+  const { slug } = await params
+  const user = await currentUser()
+  if (!user) return { title: slug }
+  const row = await cachedKnowledge(user.id, slug)
+  return { title: row ? row.title : slug }
+}
+
 const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string }> }) => {
   const { slug } = await params
   const user = await currentUser()
   if (!user) redirect('/login')
 
-  const row = await getKnowledge(user.id, slug)
+  const row = await cachedKnowledge(user.id, slug)
   if (!row) notFound()
 
   const firstProject = (row.projects ?? [])[0]

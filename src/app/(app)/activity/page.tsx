@@ -1,6 +1,8 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PendingLink } from '@/components/pending-link'
 import { LiveUpdates } from '@/components/live-updates'
+import { BrandName } from '@/components/brand'
 import { redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { currentUser, listProjects } from '@/lib/data'
@@ -10,6 +12,8 @@ import { ActivityList } from './activity-list'
 import { ActivityControls } from './activity-controls'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Activity' }
 
 const PAGE = 80
 
@@ -63,7 +67,7 @@ const ActivityPage = async ({
       <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <Link href="/" className="text-fg-muted hover:text-fg hidden text-[0.8125rem] sm:block">
-          Cairn
+          <BrandName />
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
         <span className="text-fg text-[0.8125rem]">Activity</span>

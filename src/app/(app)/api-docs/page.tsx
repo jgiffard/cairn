@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { ApiReference } from './api-reference'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'API' }
 
 /**
  * The generated OpenAPI document, rendered by Scalar.

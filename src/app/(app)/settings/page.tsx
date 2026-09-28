@@ -1,18 +1,26 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { admin } from '@/lib/db/client'
 import { currentUser } from '@/lib/data'
+import { getBranding } from '@/lib/branding'
 import { PasswordSection } from './password-section'
 import { LabelsSection, type LabelRow } from './labels-section'
 import { EntitiesSection, type EntityRow } from './entities-section'
+import { BrandingSection } from './branding-section'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Settings' }
 
 const SettingsPage = async () => {
   const user = await currentUser()
   if (!user) redirect('/login')
 
-  const { data: labels } = await admin().rpc('list_labels', { p_owner: user.id })
+  const [{ data: labels }, branding] = await Promise.all([
+    admin().rpc('list_labels', { p_owner: user.id }),
+    getBranding(),
+  ])
 
   const [{ data: entityRows }, { data: projectRows }] = await Promise.all([
     admin()
@@ -78,6 +86,11 @@ const SettingsPage = async () => {
               allProjects={allProjects}
               unassigned={unassigned}
             />
+            {user.role === 'admin' ? (
+              <BrandingSection
+                initial={{ name: branding.name, accent: branding.accent }}
+              />
+            ) : null}
           </div>
         </div>
       </div>

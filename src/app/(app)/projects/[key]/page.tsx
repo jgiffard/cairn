@@ -1,3 +1,5 @@
+import type { Metadata } from 'next'
+import { cache } from 'react'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
@@ -12,11 +14,27 @@ import { ProjectIcon } from '@/components/icons'
 import { ViewSwitch } from './view-switch'
 import { parseProjectView, viewCookieName } from '@/lib/project-view'
 import { LiveUpdates } from '@/components/live-updates'
+import { BrandName } from '@/components/brand'
 import { ProjectMenu } from './project-menu'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { PendingLink } from '@/components/pending-link'
 
 export const dynamic = 'force-dynamic'
+
+// Deduped against the page's own lookup below (React cache(), same request).
+const cachedProject = cache(getProject)
+
+export const generateMetadata = async ({
+  params,
+}: {
+  params: Promise<{ key: string }>
+}): Promise<Metadata> => {
+  const { key } = await params
+  const user = await currentUser()
+  if (!user) return { title: key.toUpperCase() }
+  const project = await cachedProject(user.id, key)
+  return { title: project ? project.title : key.toUpperCase() }
+}
 
 const ProjectPage = async ({
   params,
@@ -31,7 +49,7 @@ const ProjectPage = async ({
   if (!user) redirect('/login')
 
   const [project, formerKeys] = await Promise.all([
-    getProject(user.id, key),
+    cachedProject(user.id, key),
     listFormerKeyRecords(),
   ])
 
@@ -71,7 +89,7 @@ const ProjectPage = async ({
           href="/"
           className="text-fg-muted hover:text-fg hidden text-[0.8125rem] transition-colors sm:block"
         >
-          Cairn
+          <BrandName />
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
         <span className="text-fg-muted flex min-w-0 items-center gap-1.5 text-[0.8125rem]">

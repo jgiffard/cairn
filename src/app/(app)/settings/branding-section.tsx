@@ -1,0 +1,194 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Button, Input } from '@/components/ui/control'
+import { mutate } from '@/lib/api/mutate'
+import { HEX, STOCK_MARK, paletteFor, type AccentTokens } from '@/lib/brand-colour'
+import { cn } from '@/lib/utils'
+
+export type BrandingValue = { name: string; accent: string | null }
+
+const STOCK_ACCENT = '#5e6ad2'
+
+/** A handful of starting points; any hex works. */
+const PRESETS = ['#5e6ad2', '#01519b', '#0e7490', '#15803d', '#b45309', '#be123c', '#7c3aed', '#3f3f46']
+
+const STOCK_TOKENS: Record<'light' | 'dark', AccentTokens> = {
+  light: { accent: '#5e6ad2', accentFg: '#ffffff', accentSubtle: '#eceefb', ring: '#5e6ad2' },
+  dark: { accent: '#7b86e8', accentFg: '#ffffff', accentSubtle: '#23253a', ring: '#5e6ad2' },
+}
+
+/**
+ * One theme of the preview, drawn with the tokens saving would produce —
+ * computed here by the same function the server uses, so what is shown is
+ * what everyone gets.
+ */
+const Preview = ({
+  theme,
+  tokens,
+  mark,
+  name,
+}: {
+  theme: 'light' | 'dark'
+  tokens: AccentTokens
+  mark: string
+  name: string
+}) => {
+  const ground = theme === 'light' ? { bg: '#ffffff', fg: '#0d0e10', muted: '#61656c', border: '#e6e7e9' } : { bg: '#08090a', fg: '#f7f8f8', muted: '#9aa0a9', border: '#1f2023' }
+  return (
+    <div
+      className="flex flex-1 flex-col gap-3 rounded-lg border p-3"
+      style={{ background: ground.bg, color: ground.fg, borderColor: ground.border }}
+    >
+      <div className="flex items-center gap-2 text-[0.8125rem] font-semibold tracking-tight">
+        <svg viewBox="0 0 32 32" className="size-5 rounded-[5px]" aria-hidden>
+          <rect width="32" height="32" rx="7" fill="#08090a" />
+          <g fill={mark}>
+            <rect x="10" y="5.75" width="12" height="5.5" rx="2.75" />
+            <rect x="6" y="13.25" width="20" height="5.5" rx="2.75" />
+            <rect x="9" y="20.75" width="14" height="5.5" rx="2.75" />
+          </g>
+        </svg>
+        <span className="truncate">{name}</span>
+      </div>
+      <div className="rounded-md px-2 py-1 text-[0.75rem]" style={{ background: tokens.accentSubtle }}>
+        All tasks
+      </div>
+      <p className="text-[0.75rem]" style={{ color: ground.muted }}>
+        Nothing in progress. <span style={{ color: tokens.accent }}>See the backlog</span>
+      </p>
+      <span
+        className="inline-flex h-7 w-fit items-center rounded-md px-3 text-[0.75rem] font-medium"
+        style={{ background: tokens.accent, color: tokens.accentFg }}
+      >
+        New task
+      </span>
+    </div>
+  )
+}
+
+/**
+ * What this instance is called and looks like, for everyone who uses it.
+ * Admins only — the page does not render it for anyone else, and the API
+ * refuses them regardless.
+ */
+export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
+  const router = useRouter()
+  const [name, setName] = useState(initial.name === 'Cairn' ? '' : initial.name)
+  const [accent, setAccent] = useState(initial.accent ?? '')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
+
+  const valid = accent === '' || HEX.test(accent)
+  const palette = useMemo(() => (accent && HEX.test(accent) ? paletteFor(accent) : null), [accent])
+  const shownName = name.trim() || 'Cairn'
+
+  const save = async (reset = false) => {
+    setBusy(true)
+    setMessage(null)
+    const result = await mutate('/api/v1/branding', {
+      method: 'PUT',
+      body: reset ? { name: null, accent: null } : { name: name.trim() || null, accent: accent || null },
+    })
+    setBusy(false)
+    if (!result.ok) {
+      setMessage({ tone: 'error', text: result.error })
+      return
+    }
+    if (reset) {
+      setName('')
+      setAccent('')
+    }
+    setMessage({ tone: 'ok', text: 'Saved. Everyone sees it on their next page load.' })
+    router.refresh()
+  }
+
+  return (
+    <section>
+      <h2 className="text-fg text-[0.8125rem] font-medium">Branding</h2>
+      <p className="text-fg-subtle mt-1 text-[0.75rem]">
+        What this instance is called and its colour, for everyone who signs in: the sidebar, tab titles,
+        the login page, the favicon and link previews. The mark stays the cairn, drawn in the accent, so
+        someone who uses more than one Cairn can tell at a glance which one this is.
+      </p>
+
+      <div className="mt-4 flex flex-col gap-4">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-fg-muted text-xs font-medium">Name</span>
+          <Input
+            value={name}
+            maxLength={60}
+            placeholder="Cairn"
+            onChange={(e) => setName(e.target.value)}
+            className="max-w-xs"
+          />
+        </label>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-fg-muted text-xs font-medium">Accent</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setAccent(preset === STOCK_ACCENT ? '' : preset)}
+                aria-label={preset === STOCK_ACCENT ? 'Stock indigo' : preset}
+                title={preset === STOCK_ACCENT ? 'Stock indigo' : preset}
+                className={cn(
+                  'size-6 rounded-full border border-black/10 transition-transform hover:scale-110',
+                  (accent || STOCK_ACCENT) === preset && 'ring-fg ring-2 ring-offset-2 ring-offset-bg',
+                )}
+                style={{ background: preset }}
+              />
+            ))}
+            <input
+              type="color"
+              value={valid && accent ? accent : STOCK_ACCENT}
+              onChange={(e) => setAccent(e.target.value)}
+              aria-label="Pick any colour"
+              className="border-border size-6 cursor-pointer rounded-full border bg-transparent p-0"
+            />
+            <Input
+              value={accent}
+              onChange={(e) => setAccent(e.target.value.trim())}
+              placeholder={STOCK_ACCENT}
+              aria-invalid={!valid}
+              className={cn('w-28 font-mono', !valid && 'border-danger')}
+            />
+          </div>
+          <p className="text-fg-subtle text-[0.6875rem]">
+            Each theme gets a variant of it that stays readable on its background, so the colour may come out
+            a little lighter in dark mode.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Preview theme="light" tokens={palette?.light ?? STOCK_TOKENS.light} mark={palette?.dark.accent ?? STOCK_MARK} name={shownName} />
+          <Preview theme="dark" tokens={palette?.dark ?? STOCK_TOKENS.dark} mark={palette?.dark.accent ?? STOCK_MARK} name={shownName} />
+        </div>
+
+        {message ? (
+          <p
+            role={message.tone === 'error' ? 'alert' : 'status'}
+            className={cn(
+              'rounded-md px-3 py-2 text-xs',
+              message.tone === 'error' ? 'text-danger bg-danger-subtle' : 'text-fg-muted bg-surface-raised',
+            )}
+          >
+            {message.text}
+          </p>
+        ) : null}
+
+        <div className="flex items-center gap-2">
+          <Button variant="primary" onClick={() => void save()} disabled={busy || !valid}>
+            {busy ? 'Saving…' : 'Save branding'}
+          </Button>
+          <Button variant="ghost" onClick={() => void save(true)} disabled={busy}>
+            Reset to stock
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}

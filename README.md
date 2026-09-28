@@ -915,6 +915,14 @@ name their instance: `CAIRN_NOTIFY_VITALS=personal:CAIRN-107,work:OPS-3`. See
 [Scheduled maintenance](#scheduled-maintenance--optional); re-run its installer after adding
 instances. The MCP server routes by the directory it was started in, like any other command.
 
+**Telling them apart in the browser.** An administrator can give each instance its own name
+and accent colour under **Settings → Branding**. The name replaces "Cairn" in the sidebar, the
+breadcrumbs, every tab title (`Board · Work Cairn`), the login page and link previews; the
+accent recolours the interface and the mark, so the favicon is the same cairn in that
+instance's colour. Each theme gets a variant of the colour that stays readable on its ground,
+so a dark navy comes out a brighter blue in dark mode. It is stored in the database, not the
+environment, and needs no rebuild.
+
 ### Integrating a runtime that is not listed above
 
 The runtimes above are the ones this is used with. Nothing here is specific to them, and
