@@ -123,7 +123,7 @@ export const verifyAttachmentToken = (storagePath: string, expires: number, down
 
 /**
  * Where the bytes live: a directory by default, or an S3 bucket when
- * CAIRN_ATTACHMENT_BUCKET is set — for a platform whose containers have no
+ * CAIRN_ATTACHMENT_S3_BUCKET is set — for a platform whose containers have no
  * persistent disk (App Runner, Fargate without EFS). Either way the app serves
  * the file itself through the signed /api/files route, so a bucket stays
  * private and nothing about access changes. Credentials come from the
@@ -132,11 +132,15 @@ export const verifyAttachmentToken = (storagePath: string, expires: number, down
  * The storage path is the same string in both, so a store can move between
  * them by copying files to keys.
  */
-const attachmentBucket = () => process.env.CAIRN_ATTACHMENT_BUCKET?.trim() || null
+// `_S3_` on purpose. CAIRN_ATTACHMENT_BUCKET was the Supabase storage bucket
+// in .env.example until 2026-09-11 (`=attachments`), so every install older
+// than that still carries it, and reading it switched those installs to S3 —
+// where they have no bucket, no region and no credentials (CAIRN-303).
+const attachmentBucket = () => process.env.CAIRN_ATTACHMENT_S3_BUCKET?.trim() || null
 const objectKey = (storagePath: string) => {
   const key = posix.normalize(storagePath)
   if (key.startsWith('/') || key === '..' || key.startsWith('../')) throw new Error('Invalid attachment path')
-  const prefix = process.env.CAIRN_ATTACHMENT_PREFIX?.replace(/^\/+|\/+$/g, '')
+  const prefix = process.env.CAIRN_ATTACHMENT_S3_PREFIX?.replace(/^\/+|\/+$/g, '')
   return prefix ? `${prefix}/${key}` : key
 }
 
@@ -147,7 +151,7 @@ let client: Promise<{ s3: S3Client; sdk: typeof import('@aws-sdk/client-s3') }> 
 const s3 = () => (client ??= import('@aws-sdk/client-s3').then((sdk) => ({
   sdk,
   s3: new sdk.S3Client({
-    region: process.env.CAIRN_ATTACHMENT_REGION || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
+    region: process.env.CAIRN_ATTACHMENT_S3_REGION || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
   }),
 })))
 

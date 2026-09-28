@@ -11,6 +11,13 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **Attachments broke on installs older than 2026-09-11** (CAIRN-303). The S3 backend in 0.8.0
+  was switched on by `CAIRN_ATTACHMENT_BUCKET`, a name `.env.example` had used for the Supabase
+  storage bucket (`=attachments`) until the move to native PostgreSQL. Those installs still
+  carry it, so every upload, download and project delete went to an S3 bucket they do not have
+  (`Region is missing`). The S3 settings are now `CAIRN_ATTACHMENT_S3_BUCKET`, `_S3_PREFIX` and
+  `_S3_REGION`, and the old name is ignored. **If you set up S3 under 0.8.0, rename the
+  variables.**
 - **A sentence like "…changes the password: update-service without…" is no longer refused as a
   credential.** The prose exemption covered a single word after the key, not a hyphenated one,
   so an agent's handoff note was rejected with `secret_detected`. A hyphenated value alone on
