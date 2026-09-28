@@ -11,6 +11,12 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **The header's health banner no longer sticks on a cleared alarm.** It read vitals through
+  Next's `unstable_cache`, which serves a stale entry and refreshes it after the response; on App
+  Runner, whose instances get no CPU between requests, and on a read-only root, where the entry
+  cannot be written, that refresh did not land, and the banner kept "No session recorded" long
+  after the database said otherwise. It is now a per-process memo that re-reads before answering
+  once it is a minute old.
 - **A stale session cookie no longer loops between `/` and `/login`.** After a password change,
   an expiry or a revoked session the browser still sends the cookie; the app layout found it
   invalid and redirected to `/login`, and the middleware — which only checks that a cookie is
