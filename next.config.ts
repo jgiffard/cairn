@@ -17,6 +17,21 @@ const nextConfig: NextConfig = {
   // administrator outside the bundle, so they must exist as packages in the
   // standalone node_modules rather than only inside bundled server chunks.
   serverExternalPackages: ['@aws-sdk/client-s3', 'pg', 'bcryptjs'],
+  // Set by the app rather than left to a proxy: Traefik added these on the
+  // compose deployment, and a platform that terminates TLS itself (App
+  // Runner) adds none, so the same image was served without them there.
+  // Behind Traefik they are simply set twice, to the same values.
+  headers: async () => [
+    {
+      source: '/:path*',
+      headers: [
+        { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+        { key: 'X-Frame-Options', value: 'DENY' },
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      ],
+    },
+  ],
 }
 
 export default nextConfig

@@ -108,6 +108,8 @@ jobs:
             --read-only --tmpfs /tmp cairn:ci
           for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:3101/api/v1/health && break; sleep 2; done
           curl -fsS http://127.0.0.1:3101/api/v1/health || { docker logs plain; exit 1; }
+          curl -fsS -D - -o /dev/null http://127.0.0.1:3101/api/v1/health | grep -qi '^x-frame-options: DENY' \
+            || { echo '::error::security headers missing'; exit 1; }
       - name: start it the way App Runner does — migrate and bootstrap on start
         run: |
           docker run -d --name managed --network host -e PORT=3102 \

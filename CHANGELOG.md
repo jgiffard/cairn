@@ -9,6 +9,14 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Security headers no longer depend on a proxy.** HSTS, `X-Frame-Options: DENY`,
+  `nosniff` and a referrer policy were added by Traefik on the compose deployment; on a
+  platform that terminates TLS itself, such as App Runner, the same image went out without them.
+  The app now sets them. The README also notes that App Runner overrides `HOSTNAME`, which has
+  to be set back to `0.0.0.0` on the service.
+
 ## [0.8.0] — 2026-09-28
 
 ### Added

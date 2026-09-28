@@ -578,6 +578,7 @@ time limit — needs five settings instead of the compose file's extra services:
 | `CAIRN_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` / `_NAME` | `npm run operator:create`. The first administrator is created on start only while there is none, and a later start never resets its password; remove them after the first deploy |
 | `NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem` with `?sslmode=verify-full` | trusting the database. The image carries Amazon RDS's certificate authorities |
 | `CAIRN_SSE_MAX_SECONDS=100` | nothing — App Runner ends every request at 120s, so live-update streams close first and reconnect cleanly |
+| `HOSTNAME=0.0.0.0` | nothing — the image sets it, but App Runner overrides `HOSTNAME` with the instance's name, so Next listens on one interface and the health check fails. Set it again on the service |
 
 Behind a proxy, rate limits key on the address the nearest proxy appended to
 `X-Forwarded-For` — never the first entry, which the client writes. Set
