@@ -130,8 +130,10 @@ export const detectSecret = (text: string): SecretHit | null => {
       (/[a-z][A-Z]/.test(value) || /[.[]/.test(value))
     )
       continue
-    // `token: stored in the vault` is a sentence about a token, not one.
-    const prose = /^[A-Za-z]+$/.test(strip(value)) && /\S/.test(match[3] ?? '')
+    // `token: stored in the vault` is a sentence about a token, not one — and
+    // so is `changes the password: update-service without …`, whose first word
+    // is hyphenated. A word, or words joined by hyphens, with more on the line.
+    const prose = /^[A-Za-z]+(?:-[A-Za-z]+)*$/.test(strip(value)) && /\S/.test(match[3] ?? '')
     if (!prose && !looksLikePlaceholder(value)) {
       consider('credential_assignment', `a value assigned to "${key}"`, match.index ?? 0)
       break

@@ -50,6 +50,8 @@ describe('detectSecret: credential assignments', () => {
     'token: abc  pwd=Winter2026',
     '(password: hunter2x)',
     'password: hunter2x, then log in',
+    // Hyphenated words are prose only with more on the line; alone, a value.
+    'password: correct-horse-battery',
     'https://proxy.example.io/v1/?api_key=a1b2c3d4e5f6a7b8&url=https://example.com',
   ])('refuses %s', (text) => {
     expect(detectSecret(text)?.pattern).toBe('credential_assignment')
@@ -72,6 +74,8 @@ describe('detectSecret: credential assignments', () => {
     'password: [redacted]',
     'password: see 1Password',
     'token: stored in the vault',
+    // A handoff note refused as "a value assigned to password" (CAIRN-303).
+    '1. After Cal signs in and changes the password: update-service without the bootstrap settings.',
     'max_tokens: 4096',
     'tokens: 500',
     'secrets: inherit',
