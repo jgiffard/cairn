@@ -11,6 +11,10 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **A sentence like "…changes the password: update-service without…" is no longer refused as a
+  credential.** The prose exemption covered a single word after the key, not a hyphenated one,
+  so an agent's handoff note was rejected with `secret_detected`. A hyphenated value alone on
+  its line (`password: correct-horse-battery`) is still refused.
 - **An archived project no longer claims its refs for instance routing.** When a project
   moves to another instance, the copy left behind is archived; its key still sat in that
   instance's routing cache, so a bare `cairn show HM-716` became ambiguous and fell back to the
