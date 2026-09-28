@@ -573,7 +573,7 @@ time limit — needs five settings instead of the compose file's extra services:
 
 | Setting | Replaces |
 |---|---|
-| `CAIRN_ATTACHMENT_BUCKET` (and optional `CAIRN_ATTACHMENT_PREFIX`, `CAIRN_ATTACHMENT_REGION` where the platform sets no `AWS_REGION`) | the attachments directory. Files go to a private S3 bucket through the platform's role; the app still serves them through signed links, so the bucket never needs to be public |
+| `CAIRN_ATTACHMENT_S3_BUCKET` (and optional `CAIRN_ATTACHMENT_S3_PREFIX`, `CAIRN_ATTACHMENT_S3_REGION` where the platform sets no `AWS_REGION`) | the attachments directory. Files go to a private S3 bucket through the platform's role; the app still serves them through signed links, so the bucket never needs to be public |
 | `CAIRN_MIGRATE_ON_START=1` | the `migrate` service. The container applies migrations before it serves, under an advisory lock, so several starting at once apply each file once |
 | `CAIRN_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` / `_NAME` | `npm run operator:create`. The first administrator is created on start only while there is none, and a later start never resets its password; remove them after the first deploy |
 | `NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem` with `?sslmode=verify-full` | trusting the database. The image carries Amazon RDS's certificate authorities |

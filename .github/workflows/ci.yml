@@ -117,7 +117,7 @@ jobs:
             -e CAIRN_MIGRATE_ON_START=1 \
             -e CAIRN_BOOTSTRAP_ADMIN_EMAIL=ci@example.test \
             -e CAIRN_BOOTSTRAP_ADMIN_PASSWORD=a-long-ci-password \
-            -e CAIRN_ATTACHMENT_BUCKET=unused-in-ci -e AWS_REGION=eu-west-3 \
+            -e CAIRN_ATTACHMENT_S3_BUCKET=unused-in-ci -e AWS_REGION=eu-west-3 \
             --read-only --tmpfs /tmp cairn:ci
           for _ in $(seq 1 60); do curl -fsS http://127.0.0.1:3102/api/v1/health && break; sleep 2; done
           docker logs managed

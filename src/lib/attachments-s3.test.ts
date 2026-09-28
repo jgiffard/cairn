@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * CAIRN_ATTACHMENT_BUCKET moves attachments from a directory to S3, for a
+ * CAIRN_ATTACHMENT_S3_BUCKET moves attachments from a directory to S3, for a
  * platform whose containers have no disk that survives them.
  */
 const sent: { name: string; input: Record<string, unknown> }[] = []
@@ -25,11 +25,12 @@ vi.mock('@aws-sdk/client-s3', () => {
 beforeEach(() => {
   sent.length = 0
   vi.resetModules()
-  process.env.CAIRN_ATTACHMENT_BUCKET = 'cairn-attachments'
+  process.env.CAIRN_ATTACHMENT_S3_BUCKET = 'cairn-attachments'
 })
 afterEach(() => {
+  delete process.env.CAIRN_ATTACHMENT_S3_BUCKET
+  delete process.env.CAIRN_ATTACHMENT_S3_PREFIX
   delete process.env.CAIRN_ATTACHMENT_BUCKET
-  delete process.env.CAIRN_ATTACHMENT_PREFIX
 })
 
 describe('attachments in an S3 bucket', () => {
@@ -50,7 +51,7 @@ describe('attachments in an S3 bucket', () => {
   })
 
   it('puts keys under a prefix when one is set', async () => {
-    process.env.CAIRN_ATTACHMENT_PREFIX = '/cairn/'
+    process.env.CAIRN_ATTACHMENT_S3_PREFIX = '/cairn/'
     const { writeAttachment } = await import('./attachments')
     await writeAttachment('p1/x.txt', Buffer.from('x'))
     expect(sent[0]?.input.Key).toBe('cairn/p1/x.txt')
@@ -60,6 +61,20 @@ describe('attachments in an S3 bucket', () => {
     const { readAttachment } = await import('./attachments')
     await expect(readAttachment('../../etc/passwd')).rejects.toThrow('Invalid attachment path')
     await expect(readAttachment('/etc/passwd')).rejects.toThrow('Invalid attachment path')
+    expect(sent).toEqual([])
+  })
+
+  /**
+   * CAIRN_ATTACHMENT_BUCKET=attachments sat in .env.example until the move off
+   * Supabase, so older installs still have it. Read as "use S3", it broke every
+   * attachment on those installs the day this backend shipped.
+   */
+  it('ignores the old CAIRN_ATTACHMENT_BUCKET, which older installs still carry', async () => {
+    delete process.env.CAIRN_ATTACHMENT_S3_BUCKET
+    process.env.CAIRN_ATTACHMENT_BUCKET = 'attachments'
+    const { writeAttachment } = await import('./attachments')
+    // The directory backend: fails on the missing root here, but never calls S3.
+    await writeAttachment('p1/x.txt', Buffer.from('x')).catch(() => {})
     expect(sent).toEqual([])
   })
 })
