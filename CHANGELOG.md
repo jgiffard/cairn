@@ -22,6 +22,10 @@ out under **Breaking** with what to do about it.
 
 ### Changed
 
+- **The family's type, everywhere** (CAIRN-307). Headings in Inter Tight at Cairn Cloud's
+  weight and tracking, text in the system sans, refs and code in the system mono — the same three
+  stacks as the site. Instrument Serif and IBM Plex are gone, and with them the italic serif
+  headlines the family site had already dropped (MTC-2). Only Inter Tight is downloaded.
 - **A new login page.** A panel that says what Cairn is, beside the form, and copy that is
   true: it said "Cairn is single-user; self-service signup is disabled", which stopped being
   the case when administrators could add people. A password can be shown while typing.

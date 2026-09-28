@@ -89,8 +89,10 @@ export const LoginForm = () => {
         <div className="relative flex max-w-[34rem] flex-col gap-8">
           <CairnIllustration className="w-[11rem] drop-shadow-[0_24px_48px_rgb(0_0_0/0.25)]" />
           <div>
-            <h2 className="font-display text-fg text-[2.75rem] leading-[1.05] tracking-[-0.01em]">
-              Leave a marker for <em className="text-accent">whoever comes next.</em>
+            {/* Upright, the second half in the muted grey: the family's
+                headings carry no italics and no accent-coloured words. */}
+            <h2 className="font-display headline headline-xl text-fg text-[2.5rem] leading-[1.08]">
+              Leave a marker <span className="text-fg-muted">for whoever comes next.</span>
             </h2>
             <p className="text-fg-muted mt-4 max-w-[28rem] text-[0.875rem] leading-relaxed">
               The shared memory your agents and your team build as they work — so nobody re-debugs what
@@ -122,7 +124,7 @@ export const LoginForm = () => {
             <span>{name}</span>
           </div>
 
-          <h1 className="font-display text-fg text-[2.25rem] leading-none tracking-[-0.01em]">Welcome back</h1>
+          <h1 className="font-display headline text-fg text-[1.75rem] leading-tight">Welcome back</h1>
           <p className="text-fg-muted mt-2 text-[0.8125rem]">Sign in to {name}.</p>
 
           <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-4">

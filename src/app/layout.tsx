@@ -3,7 +3,7 @@ import { ThemeProvider } from 'next-themes'
 import { BrandProvider } from '@/components/brand'
 import { paletteCss } from '@/lib/brand-colour'
 import { getBranding } from '@/lib/branding'
-import { display, mono, sans } from './fonts'
+import { display } from './fonts'
 import './globals.css'
 
 /**
@@ -69,7 +69,7 @@ const RootLayout = async ({ children }: { children: React.ReactNode }) => {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${sans.variable} ${mono.variable} ${display.variable}`}
+      className={display.variable}
     >
       <body>
         {/* Every value is re-serialised from parsed numbers, never an admin's
