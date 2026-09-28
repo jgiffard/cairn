@@ -29,7 +29,7 @@ import { MobileNavButton } from '@/components/mobile-nav-context'
 import { RedirectNotice } from '@/components/redirect-notice'
 import { listFormerKeyRecords } from '@/lib/data'
 import { formerRefsOf, renameLine, renamesOf, taskRedirectNotice } from '@/lib/project-rename'
-import { GLASS, LABEL } from './styles'
+import { LABEL, PANE } from './styles'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,9 +56,9 @@ export const generateMetadata = async ({
 }
 
 /**
- * A note set above the body. The stripe is the trail marker in the note's own
- * colour, and the face carries a faint wash of it from the left, so a blocked
- * task, a duplicate and an answer are told apart before a word is read.
+ * A note set above the body: a flat panel with a solid stripe down its left
+ * edge in the note's own colour, so a blocked task, a duplicate and an answer
+ * are told apart before a word is read.
  */
 const Callout = ({
   tone,
@@ -69,21 +69,8 @@ const Callout = ({
   className?: string
   children: React.ReactNode
 }) => (
-  <div
-    className={cn('surface-card relative mb-5 overflow-hidden py-2 pr-3 pl-3.5', className)}
-    style={{
-      borderColor: `color-mix(in oklab, ${tone} 22%, var(--border))`,
-      backgroundImage: `linear-gradient(90deg, color-mix(in oklab, ${tone} 7%, transparent), transparent 55%), linear-gradient(180deg, var(--card-top), var(--surface) 70%)`,
-    }}
-  >
-    <span
-      aria-hidden
-      className="absolute inset-y-0 left-0 w-[2px]"
-      style={{
-        backgroundColor: tone,
-        boxShadow: `0 0 10px color-mix(in oklab, ${tone} 55%, transparent)`,
-      }}
-    />
+  <div className={cn('surface-card relative mb-5 overflow-hidden py-2 pr-3 pl-3.5', className)}>
+    <span aria-hidden className="absolute inset-y-0 left-0 w-[2px]" style={{ backgroundColor: tone }} />
     {children}
   </div>
 )
@@ -236,7 +223,7 @@ const TaskPage = async ({
             {/* The ref and the project, quiet above the title rather than
                 competing with it: the title is the page's one voice. */}
             <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5">
-              <span className="border-border bg-surface-raised/60 text-fg-muted inline-flex h-[1.25rem] shrink-0 items-center rounded-md border px-1.5 font-mono text-[0.6875rem] shadow-[var(--highlight)]">
+              <span className="border-border bg-surface-raised text-fg-muted inline-flex h-[1.25rem] shrink-0 items-center rounded-md border px-1.5 font-mono text-[0.6875rem]">
                 {ref}
               </span>
               <Link
@@ -278,7 +265,7 @@ const TaskPage = async ({
 
             {/* Above the body on purpose: when a future agent opens a closed
                 task, the answer is what it came for — so it is the one card on
-                the page that carries its status's light. */}
+                the page edged in its status's colour. */}
             {task.resolution ? (
               <Callout tone={`var(--status-${task.status})`} className="mb-6 py-3 pr-4 pl-[1.125rem]">
                 <p className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.6875rem]">
@@ -324,9 +311,8 @@ const TaskPage = async ({
                 was most of the dead space on this page; a divider does the
                 same job of separating them and reads as structure. Ordered by
                 what a reader wants next: the split, then the evidence, then
-                the conversation, then the audit trail. The rule fades out at
-                both ends, as the header's does. */}
-            <div className="flex flex-col [&>*]:py-5 [&>*+*]:bg-[linear-gradient(90deg,transparent,var(--border-strong)_8%,var(--border-strong)_92%,transparent)] [&>*+*]:bg-[length:100%_1px] [&>*+*]:bg-no-repeat">
+                the conversation, then the audit trail. */}
+            <div className="[&>*+*]:border-border flex flex-col [&>*]:py-5 [&>*+*]:border-t">
               <MentionsPanel total={mentioned.total} mentions={mentioned.mentions} />
               <ChildrenPanel
                 taskRef={`${task.project.key}-${task.number}`}
@@ -342,7 +328,7 @@ const TaskPage = async ({
           </div>
         </div>
 
-        <div className="hidden overflow-y-auto lg:block" style={GLASS}>
+        <div className={cn(PANE, 'hidden overflow-y-auto lg:block')}>
           <Properties
             task={task}
             project={task.project}

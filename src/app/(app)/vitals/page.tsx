@@ -114,10 +114,7 @@ const TONE: Record<Tone, string> = {
   bad: 'var(--danger)',
 }
 
-/**
- * A finding, as tinted glass: a wash of its tone from the left over whatever
- * the canvas is doing behind it, rather than a flat slab of colour.
- */
+/** A finding: a flat tint of its tone, with a hairline of the same hue. */
 const Banner = ({
   tone,
   icon: Icon,
@@ -129,15 +126,15 @@ const Banner = ({
 }) => (
   <div
     className={cn(
-      'flex items-start gap-2.5 rounded-lg border px-4 py-3 backdrop-blur-md',
-      'border-[color:color-mix(in_oklab,var(--tone)_30%,transparent)] shadow-[var(--shadow-sm),var(--highlight)]',
-      'bg-[linear-gradient(90deg,color-mix(in_oklab,var(--tone)_14%,transparent),color-mix(in_oklab,var(--tone)_5%,transparent)_75%)]',
+      'flex items-start gap-2.5 rounded-lg border px-4 py-3',
+      'border-[color:color-mix(in_oklab,var(--tone)_30%,transparent)]',
+      'bg-[color-mix(in_oklab,var(--tone)_8%,transparent)]',
     )}
     style={{ '--tone': TONE[tone] } as React.CSSProperties}
   >
     <Icon
       size={15}
-      className="mt-[2px] shrink-0 text-[color:var(--tone)] drop-shadow-[0_0_6px_color-mix(in_oklab,var(--tone)_55%,transparent)]"
+      className="mt-[2px] shrink-0 text-[color:var(--tone)]"
       aria-hidden
     />
     <div className="min-w-0">{children}</div>
@@ -227,14 +224,14 @@ const VitalsPage = async ({
       <header className="page-header border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <span className="text-fg text-[0.8125rem] font-medium">Vitals</span>
-        <span className="border-border bg-surface-raised/60 ml-auto flex items-center gap-0.5 rounded-md border p-0.5 shadow-[inset_0_1px_1px_rgb(0_0_0/0.08)]">
+        <span className="border-border bg-surface-raised ml-auto flex items-center gap-0.5 rounded-md border p-0.5">
           {WINDOWS.map((w) => (
             <PendingLink
               key={w.hours}
               href={w.hours === 24 ? '/vitals' : `/vitals?hours=${w.hours}`}
               className={cn(
                 'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[0.71875rem] transition-[color,background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',
-                w.hours === hours ? 'bg-surface text-fg raised-sm' : 'text-fg-muted hover:text-fg',
+                w.hours === hours ? 'bg-surface text-fg ring-border ring-1' : 'text-fg-muted hover:text-fg',
               )}
             >
               {w.label}
@@ -307,9 +304,7 @@ const VitalsPage = async ({
                             script and stands still under reduced motion. */}
                         <div
                           className={cn(
-                            'h-full origin-left scale-x-100 rounded-full starting:scale-x-0',
-                            'bg-[linear-gradient(90deg,color-mix(in_oklab,var(--accent)_45%,transparent),var(--accent))]',
-                            'shadow-[0_0_6px_var(--glow)]',
+                            'bg-accent h-full origin-left scale-x-100 rounded-full starting:scale-x-0',
                             'transition-transform duration-[var(--dur-3)] ease-[var(--ease-out)]',
                             'motion-safe:[transition-delay:calc(var(--i)*18ms+80ms)]',
                           )}

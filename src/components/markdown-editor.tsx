@@ -120,7 +120,7 @@ export const MarkdownEditor = ({
             baseline.current = initial
             setEditing(true)
           }}
-          className="text-fg-subtle hover:text-fg border-border hover:border-border-strong bg-surface-raised absolute -top-1 right-0 rounded-md border px-2 py-0.5 text-[0.6875rem] opacity-0 shadow-[var(--shadow-sm),var(--highlight)] transition-[opacity,color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)] group-hover:opacity-100 focus-visible:opacity-100"
+          className="text-fg-subtle hover:text-fg border-border hover:border-border-strong bg-surface-raised absolute -top-1 right-0 rounded-md border px-2 py-0.5 text-[0.6875rem] opacity-0 transition-[opacity,color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)] group-hover:opacity-100 focus-visible:opacity-100"
         >
           Edit
         </button>
@@ -136,8 +136,8 @@ export const MarkdownEditor = ({
       <div
         className={cn(
           'surface-card p-3 transition-[border-color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]',
-          'focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--ring)_22%,transparent),var(--shadow-sm)]',
-          state === 'error' && 'border-danger focus-within:border-danger',
+          'focus-within:border-accent focus-within:ring-1 focus-within:ring-accent',
+          state === 'error' && 'border-danger focus-within:border-danger focus-within:ring-danger',
         )}
       >
         <EditorContent editor={editor} />

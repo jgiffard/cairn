@@ -81,9 +81,7 @@ export const ResolutionDialog = ({
       onClick={onCancel}
     >
       <div
-        // The lit edge: a line of the accent's glow along the top, where the
-        // light from above would catch the panel.
-        className="bg-surface border-border enter-sheet relative w-full max-w-md rounded-xl border p-4 raised-lg before:pointer-events-none before:absolute before:inset-x-10 before:-top-px before:h-px before:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]"
+        className="bg-surface border-border enter-sheet relative w-full max-w-md rounded-xl border p-4 raised-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-sm font-semibold">

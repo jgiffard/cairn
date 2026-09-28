@@ -253,7 +253,7 @@ export const Properties = ({
 
       {task.external_ref && (
         <Section title="Imported from" className="hidden lg:flex">
-          <code className="border-border bg-surface-raised/60 text-fg-muted self-start rounded-md border px-1.5 py-px font-mono text-[0.75rem]">
+          <code className="border-border bg-surface-raised text-fg-muted self-start rounded-md border px-1.5 py-px font-mono text-[0.75rem]">
             {task.external_ref}
           </code>
         </Section>

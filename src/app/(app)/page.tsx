@@ -86,15 +86,14 @@ const Home = async ({ searchParams }: { searchParams: Promise<{ closed?: string 
           projects={projects.map((p) => ({ key: p.key, title: p.title }))}
         />
 
-        {/* The same fading hairline the page header ends on, not a table rule. */}
-        <section className="relative mt-6 px-4 py-4 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--border-strong)_12%,var(--border-strong)_88%,transparent)]">
+        <section className="border-border mt-6 border-t px-4 py-4">
           <h2 className="text-fg-muted mb-2 text-[0.6875rem] font-medium">Projects</h2>
           <ul className="flex flex-wrap gap-1.5">
             {projects.map((p) => (
               <li key={p.id}>
                 <Link
                   href={`/projects/${p.key}`}
-                  className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg hover:border-border-strong flex h-[1.625rem] items-center gap-1.5 rounded-md border px-2 text-[0.75rem] shadow-[var(--highlight)] transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
+                  className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg hover:border-border-strong flex h-[1.625rem] items-center gap-1.5 rounded-md border px-2 text-[0.75rem] transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
                 >
                   <ProjectIcon size={12} projectKey={p.key} />
                   {p.title}

@@ -185,7 +185,7 @@ const LaneBoard = ({
   tasks: BoardTask[]
 }) => (
   <div className="w-max min-w-full pb-3">
-    <div className="bg-bg/80 sticky top-0 z-10 flex gap-2.5 px-3 pt-3 pb-2 backdrop-blur-md">
+    <div className="bg-bg sticky top-0 z-10 flex gap-2.5 px-3 pt-3 pb-2">
       {columns.map((col) => (
         <div
           key={col.value}

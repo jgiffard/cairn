@@ -82,13 +82,13 @@ const KnowledgeGraphPage = async () => {
         <span className="text-fg text-[0.8125rem]">Map</span>
       </header>
 
-      {/* Five instruments over the map: glass, so the page's light passes
-          through them, each a label, a reading and what the reading means. */}
+      {/* Five instruments over the map: flat tiles, each a label, a reading
+          and what the reading means. */}
       <dl className="grid shrink-0 grid-cols-2 gap-1.5 px-2.5 py-2 sm:grid-cols-3 md:px-4 lg:grid-cols-5">
         {figures.map(([value, label, note]) => (
           <div
             key={label}
-            className="border-border bg-surface/55 min-w-0 rounded-lg border px-3 py-1.5 shadow-[var(--shadow-sm),var(--highlight)] backdrop-blur-md"
+            className="border-border bg-surface min-w-0 rounded-lg border px-3 py-1.5"
           >
             <dt className="text-fg-subtle truncate text-[0.625rem] font-medium tracking-[0.08em] uppercase">
               {label}

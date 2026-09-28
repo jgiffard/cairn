@@ -77,9 +77,9 @@ export const LabelEditor = ({
         }}
         aria-label={`Labels on ${taskRef}`}
         aria-expanded={open}
-        className={`text-fg-subtle hover:text-fg grid size-[1.125rem] place-items-center rounded hover:bg-[color-mix(in_oklab,var(--fg)_7%,transparent)] transition-[opacity,scale,color,background-color] duration-[var(--dur-2)] ease-[var(--ease-out)] ${
+        className={`text-fg-subtle hover:text-fg grid size-[1.125rem] place-items-center rounded hover:bg-[color-mix(in_oklab,var(--fg)_7%,transparent)] transition-[opacity,color,background-color] duration-[var(--dur-2)] ease-[var(--ease-out)] ${
           labels.length === 0 && !open
-            ? 'scale-90 opacity-0 group-hover:scale-100 group-hover:opacity-100 focus-visible:scale-100 focus-visible:opacity-100'
+            ? 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
             : 'opacity-100'
         }`}
       >

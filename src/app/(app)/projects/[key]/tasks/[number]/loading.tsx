@@ -1,8 +1,9 @@
-import { GLASS } from './styles'
+import { cn } from '@/lib/utils'
+import { PANE } from './styles'
 
 /**
  * Skeleton for a task page. Mirrors the real two-column layout — the chips and
- * title over the body, the work log's composer, and the glass properties
+ * title over the body, the work log's composer, and the properties
  * column — so nothing jumps into place when the page arrives.
  */
 const Loading = () => (
@@ -32,7 +33,7 @@ const Loading = () => (
           </div>
         </div>
       </div>
-      <div className="hidden w-[13.75rem] shrink-0 flex-col gap-5 px-4 py-5 lg:flex" style={GLASS}>
+      <div className={cn(PANE, 'hidden w-[13.75rem] shrink-0 flex-col gap-5 px-4 py-5 lg:flex')}>
         {[3, 1, 2].map((rows, i) => (
           <div key={i} className="flex flex-col gap-1.5">
             <span className="skeleton h-1.5 w-14 rounded-full" />

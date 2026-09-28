@@ -38,7 +38,7 @@ export const QuickSelect = <T extends string>({
       // on a row that is itself already hovered.
       'hover:bg-[color-mix(in_oklab,var(--fg)_7%,transparent)]',
       // The select is invisible, so its focus has to be drawn on the badge.
-      'has-[select:focus-visible]:shadow-[0_0_0_2px_color-mix(in_oklab,var(--ring)_40%,transparent)]',
+      'has-[select:focus-visible]:ring-ring/50 has-[select:focus-visible]:ring-2',
       className,
     )}
   >

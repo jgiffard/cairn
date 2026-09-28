@@ -22,25 +22,25 @@ out under **Breaking** with what to do about it.
 
 ### Changed
 
-- **One pass over the whole interface** (CAIRN-308): depth, light and motion, with the density
-  unchanged.
-  - *Material.* The page is lit from above by the instance's own accent, over a film grain too fine
-    to read as texture. The sidebar is a lifted material, and cards (board, vitals, settings, the
-    resolution) have a lit top edge and a contact shadow. Page bars end in a hairline that fades at
-    both ends.
-  - *Motion.* Every movement settles, the way a stone comes to rest:
+- **One pass over the whole interface, flat** (CAIRN-308).
+  - *Surfaces.* Solid surfaces and one hairline between regions, with no glow, glass, gradient or
+    shadow on anything that sits on the page. Only menus, dialogs and toasts float.
+    - Cards, board lanes (with a 2px status-colour top line) and the resolution card are flat
+      panels.
+    - Status and day bands are solid, marked by a 2px edge in their colour.
+    - The controls are flat, with a crisp accent rim on focus.
+  - *Motion.* Quick and quiet:
     - pages fade in and the first rows of a list settle one after another;
-    - the sidebar's active marker and the view tabs slide to the new choice;
-    - status icons animate when a task changes state;
-    - pop-ups and dialogs rise over a blurred backdrop.
-  - Everything stands still under reduced motion.
-  - *Signatures.* The activity feed is a trail: a dotted line with a stone per event and a small
-    cairn where each day begins. The work log on a task is the same trail. Empty states are three
-    stones settling, the top one in the accent.
-  - *Details.* Status group headers are washed in their colour. Selected rows and hovered rows
-    carry the 2px accent edge. Controls have a soft focus halo, and the destructive buttons stay red.
-    Loading screens shimmer instead of pulsing. The command palette, toasts, menus and the bulk bar
-    are glass.
+    - the sidebar's active marker and the view tabs slide;
+    - status icons animate between states;
+    - pop-ups rise;
+    - everything stands still under reduced motion.
+  - *Signatures.* The activity feed and a task's work log are trails, a dotted line with a stone
+    per event. Empty states are three stones settling, the top one in the accent. The login page's
+    cairn is drawn flat in the mark's own geometry.
+  - *Fixed along the way.* `ring-ring/*` focus rings rendered nothing, because the colour was
+    never registered with Tailwind. A dialog opened from a list row could be trapped inside it.
+    The change-key dialog now renders to the page body.
 - **The family's type, everywhere** (CAIRN-307). Headings in Inter Tight at Cairn Cloud's
   weight and tracking, text in the system sans, refs and code in the system mono — the same three
   stacks as the site. Instrument Serif and IBM Plex are gone, and with them the italic serif

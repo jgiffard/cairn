@@ -40,7 +40,7 @@ const Prose = ({ label, body }: { label: string; body: string | null }) => {
 /** A count on the right of a row: present, legible, and never louder than the title. */
 const Count = ({ icon, n, title }: { icon: React.ReactNode; n: number; title: string }) => (
   <span
-    className="border-border/80 bg-surface/60 text-fg-subtle inline-flex h-[1.125rem] items-center gap-1 rounded-full border px-1.5 tabular-nums"
+    className="border-border bg-surface text-fg-subtle inline-flex h-[1.125rem] items-center gap-1 rounded-full border px-1.5 tabular-nums"
     title={title}
   >
     {icon}
@@ -157,7 +157,7 @@ const Row = ({ item }: { item: SessionItem }) => {
                             key={ref}
                             href={href}
                             prefetch
-                            className="border-border bg-surface text-fg-muted hover:border-accent hover:text-accent rounded-full border px-2 py-0.5 font-mono text-[0.6875rem] transition-[color,border-color,transform] duration-[var(--dur-2)] ease-[var(--ease-out)] hover:-translate-y-px"
+                            className="border-border bg-surface text-fg-muted hover:border-accent hover:text-accent rounded-full border px-2 py-0.5 font-mono text-[0.6875rem] transition-[color,border-color] duration-[var(--dur-2)] ease-[var(--ease-out)]"
                           >
                             {ref}
                           </Link>
@@ -179,7 +179,7 @@ const Row = ({ item }: { item: SessionItem }) => {
                     <h3 className="text-fg-subtle mb-1.5 text-[0.6875rem] font-medium tracking-wide uppercase">
                       Files <span className="tabular-nums">({item.files.length})</span>
                     </h3>
-                    <div className="border-border bg-bg/50 max-h-[11.25rem] overflow-y-auto rounded-md border shadow-[inset_0_1px_2px_rgb(0_0_0/0.12)]">
+                    <div className="border-border bg-bg max-h-[11.25rem] overflow-y-auto rounded-md border">
                       <ul className="divide-border divide-y">
                         {item.files.map((f) => (
                           <li key={f} className="text-fg-muted truncate px-2.5 py-1 font-mono text-[0.71875rem]">

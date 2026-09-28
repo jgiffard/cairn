@@ -10,7 +10,7 @@ const NotFound = () => (
       action={
         <Link
           href="/"
-          className="border-border bg-surface text-fg hover:bg-surface-raised hover:border-border-strong inline-flex h-8 items-center rounded-md border px-3.5 text-[0.8125rem] font-medium shadow-[var(--shadow-sm),var(--highlight)] transition-[color,background-color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)]"
+          className="border-border bg-surface text-fg hover:bg-surface-raised hover:border-border-strong inline-flex h-8 items-center rounded-md border px-3.5 text-[0.8125rem] font-medium shadow-[var(--shadow-sm)] transition-[color,background-color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)]"
         >
           Back to all tasks
         </Link>

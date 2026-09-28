@@ -314,10 +314,7 @@ export const ProjectsManager = ({
         >
           <div className="scrim absolute inset-0" aria-hidden />
           <div
-            className={cn(
-              'border-border bg-surface/85 raised-lg enter-sheet relative flex w-full max-w-[26rem] flex-col overflow-hidden rounded-xl border backdrop-blur-xl backdrop-saturate-150',
-              'before:pointer-events-none before:absolute before:inset-x-10 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,color-mix(in_oklab,var(--danger)_55%,transparent),transparent)]',
-            )}
+            className="border-border bg-surface raised-lg enter-sheet relative flex w-full max-w-[26rem] flex-col overflow-hidden rounded-xl border"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="border-border text-fg border-b px-4 py-3 text-[0.875rem] font-medium">

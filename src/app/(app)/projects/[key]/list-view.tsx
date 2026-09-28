@@ -124,11 +124,10 @@ export const useSlidingPill = (active: string, from?: string | null) => {
   return { track, pill }
 }
 
-/** The pill itself: raised, lit along its top, with the accent at its foot. */
+/** The pill itself: a solid fill that slides between the tabs. */
 export const PILL_CLASS = cn(
-  'bg-surface-raised raised-sm pointer-events-none absolute inset-y-0 left-0 rounded-md opacity-0',
+  'bg-surface-raised pointer-events-none absolute inset-y-0 left-0 rounded-md opacity-0',
   'transition-[transform,width,opacity] duration-[var(--dur-3)] ease-[var(--ease-out)]',
-  'after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]',
 )
 
 // The rows of one group settle in one after another (`stagger`, globals.css).
@@ -174,11 +173,9 @@ const Row = ({
         'select-none',
         // A selected row gets an edge as well as a tint. On a list of three
         // hundred, a background one step off the ground is easy to lose
-        // track of when scrolling; the 2px rule is not. It is the hover's
-        // trail marker at full strength, with a little of its light spilling
-        // into the row — one marker, two intensities.
+        // track of when scrolling; the 2px rule is not.
         selected
-          ? 'bg-accent-subtle shadow-[inset_2px_0_0_var(--accent),inset_18px_0_18px_-18px_var(--glow)] transition-[background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease)]'
+          ? 'bg-accent-subtle shadow-[inset_2px_0_0_var(--accent)] transition-[background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease)]'
           : 'row-hover',
       )}
     >
@@ -227,9 +224,9 @@ const Row = ({
         <span
           className={cn(
             'grid size-[0.875rem] place-items-center rounded-[0.25rem] border',
-            'transition-[background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',
+            'transition-[background-color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)]',
             selected
-              ? 'border-accent bg-accent text-accent-fg shadow-[0_0_6px_-1px_var(--glow)]'
+              ? 'border-accent bg-accent text-accent-fg'
               : 'border-border-strong bg-surface hover:border-accent',
           )}
         >

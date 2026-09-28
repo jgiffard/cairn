@@ -39,7 +39,7 @@ const Preview = ({
   const ground = theme === 'light' ? { bg: '#ffffff', fg: '#0d0e10', muted: '#61656c', border: '#e6e7e9' } : { bg: '#08090a', fg: '#f7f8f8', muted: '#9aa0a9', border: '#1f2023' }
   return (
     <div
-      className="flex flex-1 flex-col gap-3 rounded-md border p-3 shadow-[0_1px_2px_rgb(0_0_0/0.12)] transition-colors duration-[var(--dur-2)] ease-[var(--ease-out)]"
+      className="flex flex-1 flex-col gap-3 rounded-md border p-3 transition-colors duration-[var(--dur-2)] ease-[var(--ease-out)]"
       style={{ background: ground.bg, color: ground.fg, borderColor: ground.border }}
     >
       <div className="flex items-center gap-2 text-[0.8125rem] font-semibold tracking-tight">
@@ -164,9 +164,11 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
                 aria-label={preset === STOCK_ACCENT ? 'Stock indigo' : preset}
                 title={preset === STOCK_ACCENT ? 'Stock indigo' : preset}
                 className={cn(
-                  'size-6 rounded-full shadow-[inset_0_0_0_1px_rgb(0_0_0/0.12),inset_0_1px_0_rgb(255_255_255/0.25)]',
-                  'transition-transform duration-[var(--dur-2)] ease-[var(--ease-spring)] hover:scale-110',
-                  (accent || STOCK_ACCENT) === preset && 'ring-fg ring-offset-surface ring-2 ring-offset-2',
+                  'inset-ring-black/12 size-6 rounded-full inset-ring',
+                  'transition-[box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',
+                  (accent || STOCK_ACCENT) === preset
+                    ? 'ring-fg ring-offset-surface ring-2 ring-offset-2'
+                    : 'hover:ring-border-strong hover:ring-offset-surface hover:ring-2 hover:ring-offset-2',
                 )}
                 style={{ background: preset }}
               />
@@ -194,7 +196,7 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
 
         {/* The live preview, in a well of its own so it reads as a picture of
             the product rather than a piece of this page. */}
-        <div className="border-border bg-surface-raised/40 flex flex-col gap-2 rounded-lg border p-2 shadow-[inset_0_1px_2px_rgb(0_0_0/0.08)] sm:flex-row">
+        <div className="border-border bg-bg-elevated flex flex-col gap-2 rounded-lg border p-2 sm:flex-row">
           <Preview theme="light" tokens={palette?.light ?? STOCK_TOKENS.light} mark={palette?.dark.accent ?? STOCK_MARK} name={shownName} />
           <Preview theme="dark" tokens={palette?.dark ?? STOCK_TOKENS.dark} mark={palette?.dark.accent ?? STOCK_MARK} name={shownName} />
         </div>

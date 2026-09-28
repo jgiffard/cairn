@@ -78,16 +78,13 @@ export const LoginForm = () => {
     <main className="bg-bg grid min-h-dvh lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
       {/* The story, on a screen wide enough to tell it. */}
       <section className="border-border bg-bg-elevated relative hidden flex-col justify-between overflow-hidden border-r p-12 lg:flex">
-        <div aria-hidden className="login-glow" />
-        <div aria-hidden className="login-dots" />
-
         <div className="relative flex items-center gap-2.5 text-[0.9375rem] font-semibold tracking-tight">
           <BrandMark size={26} className="rounded-[6px]" />
           <span>{name}</span>
         </div>
 
         <div className="relative flex max-w-[34rem] flex-col gap-8">
-          <CairnIllustration className="w-[11rem] drop-shadow-[0_24px_48px_rgb(0_0_0/0.25)]" />
+          <CairnIllustration className="w-[10rem]" />
           <div>
             {/* Upright, the second half in the muted grey: the family's
                 headings carry no italics and no accent-coloured words. */}
@@ -115,9 +112,6 @@ export const LoginForm = () => {
       </section>
 
       <section className="relative flex items-center justify-center px-6 py-12">
-        {/* On a phone the story panel is gone; a little of its light stays. */}
-        <div aria-hidden className="login-glow lg:hidden" />
-
         <div className="relative w-full max-w-[21rem]">
           <div className="mb-10 flex items-center gap-2.5 text-[0.9375rem] font-semibold tracking-tight lg:hidden">
             <BrandMark size={26} className="rounded-[6px]" />

@@ -213,9 +213,9 @@ export const EntitiesSection = ({
                           aria-pressed={member}
                           className={cn(
                             'rounded-md border px-1.5 py-0.5 font-mono text-[0.6875rem]',
-                            'transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',
+                            'transition-[color,background-color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)]',
                             member
-                              ? 'border-accent/60 bg-accent-subtle text-accent shadow-[0_0_8px_-2px_var(--glow)]'
+                              ? 'border-accent/60 bg-accent-subtle text-accent'
                               : 'border-border text-fg-subtle hover:border-border-strong hover:text-fg',
                           )}
                         >

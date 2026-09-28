@@ -170,7 +170,7 @@ const KnowledgePage = async ({
             is. */}
         <Link
           href="/knowledge/graph"
-          className="border-border bg-surface text-fg-muted hover:text-fg hover:border-border-strong hover:bg-surface-raised ml-3 flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[0.75rem] shadow-[var(--shadow-sm),var(--highlight)] transition-colors duration-[var(--dur-1)]"
+          className="border-border bg-surface text-fg-muted hover:text-fg hover:border-border-strong hover:bg-surface-raised ml-3 flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[0.75rem] transition-colors duration-[var(--dur-1)]"
         >
           <Waypoints size={13} aria-hidden />
           Map

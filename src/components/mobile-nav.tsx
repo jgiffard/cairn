@@ -55,7 +55,7 @@ export const MobileNav = ({
             role="presentation"
           />
           <aside
-            className="app-sidebar enter-sheet relative flex w-[16.875rem] max-w-[82vw] flex-col raised-lg"
+            className="app-sidebar enter-sheet relative flex w-[16.875rem] max-w-[82vw] flex-col"
             /* Keyed on the path so a navigation rebuilds it collapsed, rather
                than leaving a filter box half-typed from the last visit. */
             key={pathname}

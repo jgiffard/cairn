@@ -157,9 +157,9 @@ export const BulkBar = ({
             a scroll container in both directions and clipped its own Status
             and Priority menus — which open *above* it — out of existence.
             The content is ~300px; it wraps rather than scrolls. */}
-        {/* Glass, floating: the list stays legible through it, and it rises
-            into place from below rather than appearing on top. */}
-        <div className="border-border bg-surface/85 enter-sheet pointer-events-auto relative flex max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-1 rounded-xl border px-2 py-1.5 backdrop-blur-xl raised-lg">
+        {/* Floating: it rises into place from below rather than appearing
+            on top. */}
+        <div className="border-border bg-surface enter-sheet pointer-events-auto relative flex max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-1 rounded-xl border px-2 py-1.5 raised-lg">
           <span className="text-fg tabular px-1.5 text-[0.75rem] font-medium">
             {progress === null
               ? `${ids.length} selected`
@@ -197,11 +197,11 @@ export const BulkBar = ({
             Clear
           </button>
 
-          {/* How far a run has got, as light along the bar's foot. */}
+          {/* How far a run has got, as a line along the bar's foot. */}
           {progress !== null && (
             <span
               aria-hidden
-              className="bg-accent pointer-events-none absolute inset-x-3 bottom-0 h-px origin-left shadow-[0_0_6px_var(--glow)] transition-transform duration-[var(--dur-3)] ease-[var(--ease-out)]"
+              className="bg-accent pointer-events-none absolute inset-x-3 bottom-0 h-px origin-left transition-transform duration-[var(--dur-3)] ease-[var(--ease-out)]"
               style={{ transform: `scaleX(${ids.length ? progress / ids.length : 0})` }}
             />
           )}

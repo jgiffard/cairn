@@ -44,7 +44,7 @@ const ViewToggle = ({
         'relative grid size-[1.375rem] place-items-center rounded',
         'transition-colors duration-[var(--dur-2)] ease-[var(--ease-out)]',
         view === value
-          ? 'bg-surface text-fg raised-sm group-data-[measured]/view:bg-transparent group-data-[measured]/view:shadow-none'
+          ? 'bg-surface text-fg ring-border ring-1 group-data-[measured]/view:bg-transparent group-data-[measured]/view:ring-0'
           : 'text-fg-subtle hover:text-fg',
       )}
     >
@@ -58,7 +58,7 @@ const ViewToggle = ({
         <span
           ref={pill}
           aria-hidden
-          className={cn(PILL_CLASS, 'bg-surface rounded after:hidden')}
+          className={cn(PILL_CLASS, 'bg-surface ring-border rounded ring-1')}
         />
         {button('list', List, 'List view')}
         {button('board', Columns3, 'Board view')}

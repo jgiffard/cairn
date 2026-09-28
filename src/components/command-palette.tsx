@@ -10,7 +10,6 @@ import type { TaskStatus, TaskType } from '@/schemas/task'
 import { useCreateTask } from '@/components/task-creation'
 import { EmptyState } from '@/components/empty-state'
 import { Spinner } from '@/components/spinner'
-import { cn } from '@/lib/utils'
 
 type Hit = {
   ref: string
@@ -40,13 +39,13 @@ const Keys = ({ keys }: { keys: string[] }) => (
 )
 
 // The selected row carries the trail marker: the accent-subtle fill and a
-// two-pixel edge of the accent at the left, lit rather than painted.
+// two-pixel edge of the accent at the left.
 const itemClass =
   'group relative flex h-[2.375rem] cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[0.8125rem] ' +
   'transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)] ' +
-  'data-[selected=true]:bg-accent-subtle/80 ' +
+  'data-[selected=true]:bg-accent-subtle ' +
   'before:absolute before:inset-y-2 before:left-0 before:w-[2px] before:rounded-full before:bg-accent ' +
-  'before:opacity-0 before:shadow-[0_0_8px_var(--glow)] before:transition-opacity before:duration-[var(--dur-1)] ' +
+  'before:opacity-0 before:transition-opacity before:duration-[var(--dur-1)] ' +
   'data-[selected=true]:before:opacity-100'
 
 const iconClass = 'text-fg-subtle transition-colors duration-[var(--dur-1)] group-data-[selected=true]:text-accent'
@@ -124,10 +123,7 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
     >
       <div className="scrim absolute inset-0" aria-hidden />
       <Command
-        className={cn(
-          'border-border bg-surface/85 raised-lg enter-pop relative w-full max-w-[35rem] overflow-hidden rounded-xl border backdrop-blur-xl backdrop-saturate-150',
-          'before:pointer-events-none before:absolute before:inset-x-12 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]',
-        )}
+        className="border-border bg-surface raised-lg enter-pop relative w-full max-w-[35rem] overflow-hidden rounded-xl border"
         style={{ '--origin': 'top' } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
         shouldFilter={!searchable}

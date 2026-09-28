@@ -43,7 +43,6 @@ export const TintPill = ({
     style={{
       borderColor: `color-mix(in oklab, ${color} 28%, transparent)`,
       backgroundColor: `color-mix(in oklab, ${color} 8%, transparent)`,
-      boxShadow: `inset 0 1px 0 color-mix(in oklab, ${color} 9%, transparent)`,
     }}
   >
     {children}
