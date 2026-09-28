@@ -41,9 +41,15 @@ export const brandingFrom = (row: Row | null): Branding => {
  * process for a short while rather than queried each time. Short, because the
  * service can run more than one instance and only the one that took the save
  * can drop its copy: the others catch up within the TTL.
+ *
+ * On globalThis rather than in a module variable: Next may bundle this file
+ * once for route handlers and again for pages, and a module-level copy would
+ * leave the save route clearing a memo the pages never read.
  */
 const TTL_MS = 30_000
-let memo: { at: number; value: Promise<Branding> } | null = null
+const MEMO = Symbol.for('cairn.branding')
+type Memo = { at: number; value: Promise<Branding> }
+const store = globalThis as typeof globalThis & { [MEMO]?: Memo }
 
 const read = async (): Promise<Branding> => {
   const { data, error } = await admin()
@@ -57,12 +63,13 @@ const read = async (): Promise<Branding> => {
 }
 
 export const getBranding = (): Promise<Branding> => {
-  if (memo && Date.now() - memo.at < TTL_MS) return memo.value
+  const hit = store[MEMO]
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.value
   const value = read().catch(() => STOCK)
-  memo = { at: Date.now(), value }
+  store[MEMO] = { at: Date.now(), value }
   return value
 }
 
 export const invalidateBranding = () => {
-  memo = null
+  delete store[MEMO]
 }
