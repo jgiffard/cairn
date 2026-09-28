@@ -76,3 +76,54 @@ jobs:
         run: npm run db:migrate
       - name: blocking integrity integration suite
         run: npm run test:integration
+
+  # The image as it ships, started as a platform would start it. Nothing else
+  # in CI builds the Dockerfile, so a start-up that only fails inside the
+  # image — a package the standalone output did not carry — reached the VPS
+  # deploy first, which rolled it back (CAIRN-304).
+  image:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: cairn
+          POSTGRES_DB: cairn_image
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cairn -d cairn_image"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: build the runtime image
+        run: docker build --target runner --build-arg GIT_SHA=${GITHUB_SHA::7} -t cairn:ci .
+      - name: start it the way the compose deployment does
+        run: |
+          docker run -d --name plain --network host -e PORT=3101 \
+            -e DATABASE_URL=postgresql://cairn@127.0.0.1:5432/cairn_image \
+            --read-only --tmpfs /tmp cairn:ci
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:3101/api/v1/health && break; sleep 2; done
+          curl -fsS http://127.0.0.1:3101/api/v1/health || { docker logs plain; exit 1; }
+      - name: start it the way App Runner does — migrate and bootstrap on start
+        run: |
+          docker run -d --name managed --network host -e PORT=3102 \
+            -e DATABASE_URL=postgresql://cairn@127.0.0.1:5432/cairn_image \
+            -e CAIRN_MIGRATE_ON_START=1 \
+            -e CAIRN_BOOTSTRAP_ADMIN_EMAIL=ci@example.test \
+            -e CAIRN_BOOTSTRAP_ADMIN_PASSWORD=a-long-ci-password \
+            -e CAIRN_ATTACHMENT_BUCKET=unused-in-ci -e AWS_REGION=eu-west-3 \
+            --read-only --tmpfs /tmp cairn:ci
+          for _ in $(seq 1 60); do curl -fsS http://127.0.0.1:3102/api/v1/health && break; sleep 2; done
+          docker logs managed
+          curl -fsS http://127.0.0.1:3102/api/v1/health
+          docker logs managed 2>&1 | grep -q '\[migrate\] applied'
+          docker logs managed 2>&1 | grep -q '\[bootstrap\] administrator ci@example.test created'
+          # The administrator it created can sign in.
+          curl -fsS -X POST http://127.0.0.1:3102/api/auth/login -H 'content-type: application/json' \
+            -H 'origin: http://127.0.0.1:3102' \
+            -d '{"email":"ci@example.test","password":"a-long-ci-password"}' | grep -q '"ok":true' \
+            || { echo '::error::the bootstrapped administrator cannot sign in'; exit 1; }
