@@ -22,7 +22,7 @@ const UsersPage = async () => {
         <header className="mb-8 flex items-start gap-2">
           <span className="-ml-1.5 md:hidden"><MobileNavButton /></span>
           <div>
-            <h1 className="font-display text-2xl leading-none">Users</h1>
+            <h1 className="font-display headline text-2xl leading-none">Users</h1>
             <p className="text-fg-subtle mt-2 max-w-2xl text-[0.75rem] leading-relaxed">
               Manage workspace access, roles, passwords, and each user&apos;s agent identities.
               Disabling a user revokes their browser sessions and active agent keys immediately.

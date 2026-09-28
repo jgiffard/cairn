@@ -186,16 +186,15 @@
   --radius-lg: 8px;
   --radius-sm: 4px;
 
-  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
-  /* Registered, because Tailwind v4 generates a utility only for a key it
-     knows. fonts.ts loaded Instrument Serif and layout.tsx put --font-display
-     on <html>, but this block never named it — so `font-display` was not a
-     class, the two headings that ask for it fell back to Plex Sans, and the
-     family was downloaded on every page for nothing. Nothing errored and
-     nothing looked broken, which is why it survived: a sans heading is a
-     perfectly reasonable thing for a heading to be (CAIRN-258). */
-  --font-display: var(--font-display), ui-serif, Georgia, serif;
+  /* Cairn Cloud's three stacks, so the app and the site that sells it are one
+     family (CAIRN-307). Only Inter Tight is downloaded (fonts.ts); the other
+     two are the platform's own. Registered here because Tailwind v4 emits a
+     utility only for a key it knows — an unregistered `font-display` once
+     rendered as the body face with the family downloaded for nothing
+     (CAIRN-258). */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  --font-display: var(--font-inter-tight), 'Inter Tight', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 @layer base {
@@ -228,7 +227,7 @@
   body {
     background-color: var(--bg);
     color: var(--fg);
-    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
     font-size: 0.8125rem;
     line-height: 1.5;
     letter-spacing: -0.0025em;
@@ -261,6 +260,18 @@
 }
 
 @layer utilities {
+  /* A heading, set as Cairn Cloud sets its own: with `font-display`, a book
+     weight between regular and medium, tracked in, and balanced so a
+     two-line heading never leaves one word alone on the second. The face
+     stays on the registered `font-display` key, which theme-keys.test.ts
+     guards. */
+  .headline {
+    font-weight: 480;
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+  .headline-xl { letter-spacing: -0.03em; }
+
   /* A keyboard hint, as it appears in the command palette. */
   .kbd {
     /* Not `display: inline-flex`: this class sits after Tailwind's utilities,
@@ -561,8 +572,8 @@
     color: var(--fg);
   }
 
-  /* Type rendering. Plex is drawn for small sizes; letting the browser
-     hint it heavily on a dark ground thickens it into mush. */
+  /* Type rendering. Heavy hinting on a dark ground thickens small text into
+     mush. */
   body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

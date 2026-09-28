@@ -1,35 +1,22 @@
-import { IBM_Plex_Mono, IBM_Plex_Sans, Instrument_Serif } from 'next/font/google'
+import { Inter_Tight } from 'next/font/google'
 
 /**
- * Self-hosted by next/font, so there is no CDN request and no layout shift.
+ * The family's type, as Cairn Cloud sets it: Inter Tight for headings, the
+ * system sans for everything you read, the system mono for refs and code.
  *
- * The pairing is deliberate. Instrument Serif is high-contrast and a little
- * odd — it gives the product a voice in the two or three places a voice
- * belongs, and nowhere else. Plex Sans carries every dense surface: it was
- * drawn for technical material and stays legible at 12px, which is most of
- * this interface. Plex Mono ties task refs and figures together so they read
- * as identifiers rather than prose.
+ * The app used to carry a voice of its own — Instrument Serif for display
+ * with italic accents, IBM Plex for text — and it read as a different product
+ * from the site that sells it. The serif and the italics are exactly what the
+ * family site dropped in MTC-2 for the same reason, and the login page brought
+ * them back at 50px (CAIRN-307).
  *
- * Explicitly not a system stack, and explicitly not Inter.
+ * Only the display face is downloaded: the body and mono stacks are the
+ * platform's own (SF Pro and SF Mono on a Mac), which are drawn for the 12-14px
+ * this interface mostly is. Self-hosted by next/font, variable, so headings
+ * can sit at a book weight between 400 and 500 as Cloud's do.
  */
-export const display = Instrument_Serif({
-  weight: '400',
-  style: ['normal', 'italic'],
-  subsets: ['latin'],
-  variable: '--font-display',
-  display: 'swap',
-})
-
-export const sans = IBM_Plex_Sans({
-  weight: ['400', '500', '600'],
-  subsets: ['latin'],
-  variable: '--font-sans',
-  display: 'swap',
-})
-
-export const mono = IBM_Plex_Mono({
-  weight: ['400', '500'],
-  subsets: ['latin'],
-  variable: '--font-mono',
+export const display = Inter_Tight({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-inter-tight',
   display: 'swap',
 })

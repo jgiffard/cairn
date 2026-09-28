@@ -11,7 +11,7 @@ import { STOCK_MARK } from '@/lib/brand-colour'
  * the same three solid stones as the favicon and home-screen icon — the card is the
  * third surface carrying one glyph, not a fourth piece of artwork.
  *
- * No webfont is fetched: next/og would have to pull IBM Plex over the network
+ * No webfont is fetched: next/og would have to pull Inter Tight over the network
  * on every cold render, and a card that sometimes fails is worse than a card
  * set in the default face.
  */
