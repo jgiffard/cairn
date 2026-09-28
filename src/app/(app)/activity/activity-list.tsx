@@ -71,6 +71,50 @@ export const titleFor = (row: ActivityRow): string => {
   return describe ? describe(row.project_key?.split(',')[0] ?? row.ref) : row.title
 }
 
+/**
+ * The trail: a dotted line down the feed, one stone on it per event, and a
+ * small cairn where each day begins. The dot sits level with the kind tile
+ * (row padding 0.5rem + the tile's 1px offset + half its 1.25rem), so the
+ * line reads as passing through the icons rather than beside them.
+ *
+ * Drawn per row rather than once per day, so the first stone of a day starts
+ * the line and the last one ends it — a trail that runs past its final cairn
+ * into empty space reads as unfinished.
+ */
+const STONE_Y = '1.1875rem'
+
+const Trail = ({ color }: { color: string }) => (
+  <span aria-hidden className="relative -my-2 w-2 shrink-0 self-stretch">
+    <span
+      className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[linear-gradient(to_bottom,var(--border-strong)_40%,transparent_0)] bg-[length:1px_5px] group-first:top-[var(--stone-y)] group-last:bottom-auto group-last:h-[var(--stone-y)] group-only:hidden"
+      style={{ '--stone-y': STONE_Y } as React.CSSProperties}
+    />
+    <span
+      className="absolute top-4 left-1/2 h-1.5 w-2 -translate-x-1/2 rounded-full"
+      style={{
+        backgroundColor: color,
+        boxShadow: `0 0 0 3px color-mix(in oklab, ${color} 16%, transparent), 0 0 6px color-mix(in oklab, ${color} 35%, transparent)`,
+      }}
+    />
+  </span>
+)
+
+/** A small cairn on the trail where a day begins: three stones, the top one lit. */
+const DayCairn = () => (
+  <span aria-hidden className="flex w-2 shrink-0 justify-center">
+    <svg viewBox="0 0 10 10" className="size-2.5 overflow-visible">
+      <rect x="0.5" y="7.2" width="9" height="2.3" rx="1.15" fill="var(--fg-subtle)" opacity="0.5" />
+      <rect x="1.8" y="4.3" width="6.4" height="2.3" rx="1.15" fill="var(--fg-subtle)" opacity="0.8" />
+      <rect x="3" y="1.4" width="4" height="2.3" rx="1.15" fill="var(--accent)" />
+    </svg>
+  </span>
+)
+
+// A hairline between events that starts at the kind tile, so it never cuts
+// across the trail: px-4 + time 2.375rem + gap + trail 0.5rem + gap.
+const ROW =
+  'group relative block after:pointer-events-none after:absolute after:right-0 after:bottom-0 after:left-[5.125rem] after:h-px after:bg-border/70 last:after:hidden'
+
 const Row = ({ row }: { row: ActivityGroup }) => {
   const { label, Icon, color } = KIND[row.kind]
   const href = hrefFor(row)
@@ -81,12 +125,19 @@ const Row = ({ row }: { row: ActivityGroup }) => {
       <span className="text-fg-subtle w-[2.375rem] shrink-0 pt-[2px] text-[0.6875rem] tabular-nums">
         {time}
       </span>
+
+      <Trail color={color} />
+
       {/* A tinted tile rather than a bare glyph: at 13px on a near-black
           ground a line icon has almost no presence, and the column is the
           only thing telling twelve identical-looking rows apart. */}
       <span
         className="mt-[1px] grid size-[1.25rem] shrink-0 place-items-center rounded-md"
-        style={{ backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`, color }}
+        style={{
+          backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`,
+          boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 22%, transparent)`,
+          color,
+        }}
         aria-hidden
       >
         <Icon size={12} />
@@ -131,11 +182,11 @@ const Row = ({ row }: { row: ActivityGroup }) => {
   )
 
   return href ? (
-    <Link href={href} className="hover:bg-surface-hover block transition-colors">
+    <Link href={href} className={cn(ROW, 'row-hover')}>
       {body}
     </Link>
   ) : (
-    <div>{body}</div>
+    <div className={ROW}>{body}</div>
   )
 }
 
@@ -152,7 +203,9 @@ export const ActivityList = ({ rows }: { rows: ActivityRow[] }) => {
     <div>
       {[...days].map(([day, items]) => (
         <section key={day}>
-          <h2 className="border-border bg-bg-elevated text-fg sticky top-0 z-10 border-y px-4 py-2 text-[0.75rem] font-medium">
+          <h2 className="group-band border-border text-fg sticky top-0 z-10 flex items-center gap-2.5 border-b px-4 py-2 text-[0.75rem] font-medium">
+            <span aria-hidden className="w-[2.375rem] shrink-0" />
+            <DayCairn />
             {new Date(`${day}T12:00:00Z`).toLocaleDateString('en-GB', {
               weekday: 'long',
               day: 'numeric',
@@ -161,7 +214,7 @@ export const ActivityList = ({ rows }: { rows: ActivityRow[] }) => {
               timeZone: 'Europe/Paris',
             })}
           </h2>
-          <div className="divide-border divide-y">
+          <div className="stagger">
             {items.map((row, i) => (
               <Row key={`${row.kind}:${row.ref}:${row.at}:${i}`} row={row} />
             ))}

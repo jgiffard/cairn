@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 /**
  * A fenced code block with its language named and a copy button.
@@ -34,8 +35,14 @@ export const CodeBlock = ({ children, ...rest }: React.ComponentProps<'pre'>) =>
   }
 
   return (
-    <div className="group border-border bg-surface-raised relative mb-3 overflow-hidden rounded-md border last:mb-0">
-      <div className="border-border/60 flex h-[1.75rem] items-center gap-2 border-b px-2.5">
+    // A card with its own lit edge: the accent catches the top rim faintly,
+    // the way light catches the edge of anything raised on this canvas.
+    <div className="group surface-card relative mb-3 overflow-hidden last:mb-0">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,color-mix(in_oklab,var(--accent)_35%,transparent)_30%,color-mix(in_oklab,var(--accent)_35%,transparent)_70%,transparent)]"
+      />
+      <div className="border-border/60 bg-surface-raised/40 flex h-[1.75rem] items-center gap-2 border-b px-2.5">
         <span className="text-fg-subtle font-mono text-[0.65625rem] tracking-wide">
           {language ?? 'text'}
         </span>
@@ -43,7 +50,11 @@ export const CodeBlock = ({ children, ...rest }: React.ComponentProps<'pre'>) =>
           type="button"
           onClick={copy}
           aria-label="Copy code"
-          className="text-fg-subtle hover:text-fg ml-auto flex items-center gap-1 text-[0.65625rem] opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          className={cn(
+            'hover:bg-surface-hover -mr-1 ml-auto flex h-5 items-center gap-1 rounded px-1.5 text-[0.65625rem]',
+            'opacity-0 transition-[opacity,color,background-color] duration-[var(--dur-1)] ease-[var(--ease-out)] group-hover:opacity-100 focus-visible:opacity-100',
+            copied ? 'text-accent opacity-100' : 'text-fg-subtle hover:text-fg',
+          )}
         >
           {copied ? <Check size={11} /> : <Copy size={11} />}
           {copied ? 'Copied' : 'Copy'}

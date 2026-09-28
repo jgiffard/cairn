@@ -2,7 +2,7 @@
 
 import { Spinner } from '@/components/spinner'
 
-import { InlineInput } from '@/components/ui/control'
+import { Button, InlineInput } from '@/components/ui/control'
 
 import { useRouter } from 'next/navigation'
 import { mutate } from '@/lib/api/mutate'
@@ -137,20 +137,27 @@ export const CreateTask = ({
 
   if (!open) return null
 
+  // The select inside each chip is invisible, so the chip shows its focus.
   const chip =
-    'relative flex h-[1.625rem] items-center gap-1.5 rounded-md border border-border px-2 text-[0.75rem] ' +
-    'text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg'
+    'relative flex h-[1.625rem] items-center gap-1.5 rounded-md border border-border bg-surface/60 px-2 text-[0.75rem] ' +
+    'text-fg-muted transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)] ' +
+    'hover:border-border-strong hover:bg-surface-hover hover:text-fg ' +
+    'focus-within:border-accent focus-within:text-fg focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--ring)_22%,transparent)]'
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-[12vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12vh]"
       onClick={onClose}
     >
+      <div className="scrim absolute inset-0" aria-hidden />
       <div
-        className="bg-surface border-border pop w-full max-w-[35rem] overflow-hidden rounded-lg border raised-lg"
+        className={cn(
+          'border-border bg-surface/85 raised-lg enter-sheet relative w-full max-w-[35rem] overflow-hidden rounded-xl border backdrop-blur-xl backdrop-saturate-150',
+          'before:pointer-events-none before:absolute before:inset-x-12 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]',
+        )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 px-4 pt-3.5">
+        <div className="border-border flex items-center gap-2 border-b px-4 py-2.5">
           <ProjectIcon size={12} projectKey={project || undefined} />
           <span className="text-fg-subtle text-[0.6875rem]">New task in {project || '—'}</span>
         </div>
@@ -166,7 +173,7 @@ export const CreateTask = ({
             }
           }}
           placeholder="Task title"
-          className="placeholder:text-fg-subtle w-full bg-transparent px-4 pt-2 pb-1 text-[1rem] outline-none"
+          className="placeholder:text-fg-subtle text-fg w-full bg-transparent px-4 pt-3 pb-1 text-[1rem] outline-none"
         />
 
         <textarea
@@ -178,7 +185,7 @@ export const CreateTask = ({
         />
 
         {visibleSimilar.length > 0 && (
-          <div className="border-border mx-4 mb-3 rounded-md border px-2.5 py-2">
+          <div className="border-border bg-surface-raised/50 enter-rise mx-4 mb-3 rounded-md border px-2.5 py-2">
             <p className="text-fg-subtle mb-1.5 text-[0.6875rem]">Similar work already exists</p>
             <ul className="flex flex-col gap-1">
               {visibleSimilar.map((s) => (
@@ -192,7 +199,7 @@ export const CreateTask = ({
           </div>
         )}
 
-        <div className="border-border flex flex-wrap items-center gap-1.5 border-t px-4 py-2.5">
+        <div className="border-border bg-surface-raised/40 flex flex-wrap items-center gap-1.5 border-t px-4 py-2.5">
           <label className={chip}>
             <ProjectIcon size={12} projectKey={project || undefined} />
             {project}
@@ -262,11 +269,12 @@ export const CreateTask = ({
             </datalist>
           </label>
 
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={submit}
             disabled={!title.trim() || !project || pending}
-            className="bg-accent text-accent-fg ml-auto h-[1.625rem] rounded-md px-3 text-[0.75rem] font-medium transition-opacity disabled:opacity-40"
+            className="ml-auto h-[1.625rem] px-3 text-[0.75rem]"
           >
             {pending ? (
               <span className="inline-flex items-center gap-1.5">
@@ -276,10 +284,14 @@ export const CreateTask = ({
             ) : (
               'Create'
             )}
-          </button>
+          </Button>
         </div>
 
-        {error && <p className="text-danger px-4 pb-3 text-[0.75rem]">{error}</p>}
+        {error && (
+          <p className="text-danger bg-danger-subtle/60 border-border enter-rise border-t px-4 py-2 text-[0.75rem]">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   )

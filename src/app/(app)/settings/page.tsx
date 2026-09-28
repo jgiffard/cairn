@@ -68,7 +68,7 @@ const SettingsPage = async () => {
     // added, and then simply clipped — no scrollbar, no overflow, the bottom of
     // the page just gone. The header bar is the one every other page has.
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
+      <header className="page-header border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <span className="text-fg text-[0.8125rem] font-medium">Settings</span>
         <span className="text-fg-subtle hidden text-[0.8125rem] sm:block">·</span>
@@ -78,7 +78,7 @@ const SettingsPage = async () => {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Centred at a form's measure, like vitals (e7e4f31). */}
         <div className="mx-auto max-w-2xl px-4 py-6 md:px-8 md:py-8">
-          <div className="flex flex-col gap-10">
+          <div className="flex flex-col gap-5">
             <PasswordSection />
             <LabelsSection labels={(labels ?? []) as LabelRow[]} />
             <EntitiesSection

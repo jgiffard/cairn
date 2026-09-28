@@ -1,8 +1,7 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { PendingLink } from '@/components/pending-link'
 import { redirect } from 'next/navigation'
-import { AlertTriangle, CheckCircle2, Info } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info, type LucideIcon } from 'lucide-react'
 import { currentUser } from '@/lib/data'
 import {
   assess,
@@ -15,6 +14,7 @@ import {
   type WorkShape,
 } from '@/lib/api/vitals'
 import { MobileNavButton } from '@/components/mobile-nav-context'
+import { EmptyState } from '@/components/empty-state'
 import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -46,13 +46,13 @@ const Stat = ({
   hint?: string
   tone?: 'good' | 'warn' | 'bad'
 }) => (
-  <div className="border-border bg-surface raised-sm flex flex-col gap-0.5 rounded-lg border px-3.5 py-3">
+  <div className="surface-card flex flex-col gap-0.5 px-3.5 py-3">
     <span className="text-fg-subtle text-[0.65625rem] font-medium tracking-[0.06em] uppercase">
       {label}
     </span>
     <span
       className={cn(
-        'tabular text-[1.625rem] leading-none font-semibold',
+        'font-display headline text-[1.625rem] leading-none tabular-nums',
         tone === 'bad' && 'text-danger',
         tone === 'warn' && 'text-status-doing',
         tone === 'good' && 'text-status-in-review',
@@ -75,8 +75,8 @@ const Panel = ({
   note?: string
   children: React.ReactNode
 }) => (
-  <section className="border-border bg-surface raised-sm overflow-hidden rounded-lg border">
-    <header className="border-border bg-bg-elevated flex items-baseline gap-2 border-b px-3.5 py-2">
+  <section className="surface-card overflow-hidden">
+    <header className="border-border flex items-baseline gap-2 border-b px-3.5 py-2">
       <h2 className="text-fg text-[0.75rem] font-semibold">{title}</h2>
       {note ? <span className="text-fg-subtle text-[0.6875rem]">{note}</span> : null}
     </header>
@@ -106,6 +106,44 @@ const Row = ({
   </div>
 )
 
+type Tone = 'good' | 'warn' | 'bad'
+
+const TONE: Record<Tone, string> = {
+  good: 'var(--status-in-review)',
+  warn: 'var(--status-doing)',
+  bad: 'var(--danger)',
+}
+
+/**
+ * A finding, as tinted glass: a wash of its tone from the left over whatever
+ * the canvas is doing behind it, rather than a flat slab of colour.
+ */
+const Banner = ({
+  tone,
+  icon: Icon,
+  children,
+}: {
+  tone: Tone
+  icon: LucideIcon
+  children: React.ReactNode
+}) => (
+  <div
+    className={cn(
+      'flex items-start gap-2.5 rounded-lg border px-4 py-3 backdrop-blur-md',
+      'border-[color:color-mix(in_oklab,var(--tone)_30%,transparent)] shadow-[var(--shadow-sm),var(--highlight)]',
+      'bg-[linear-gradient(90deg,color-mix(in_oklab,var(--tone)_14%,transparent),color-mix(in_oklab,var(--tone)_5%,transparent)_75%)]',
+    )}
+    style={{ '--tone': TONE[tone] } as React.CSSProperties}
+  >
+    <Icon
+      size={15}
+      className="mt-[2px] shrink-0 text-[color:var(--tone)] drop-shadow-[0_0_6px_color-mix(in_oklab,var(--tone)_55%,transparent)]"
+      aria-hidden
+    />
+    <div className="min-w-0">{children}</div>
+  </div>
+)
+
 /**
  * The answer to the only question this page exists for, said once and loudly.
  *
@@ -119,38 +157,26 @@ const Verdict = ({ findings }: { findings: Finding[] }) => {
 
   if (findings.length === 0) {
     return (
-      <div className="border-status-in-review/35 bg-status-in-review/8 flex items-start gap-2.5 rounded-lg border px-4 py-3.5">
-        <CheckCircle2 size={16} className="text-status-in-review mt-[1px] shrink-0" aria-hidden />
-        <div className="min-w-0">
-          <p className="text-fg text-[0.84375rem] font-medium">The memory is being written</p>
-          <p className="text-fg-muted mt-0.5 text-[0.78125rem] leading-relaxed">
-            Sessions are being recorded, work is being closed, and every agent that wrote last
-            week has written today.
-          </p>
-        </div>
-      </div>
+      <Banner tone="good" icon={CheckCircle2}>
+        <p className="text-fg text-[0.84375rem] font-medium">The memory is being written</p>
+        <p className="text-fg-muted mt-0.5 text-[0.78125rem] leading-relaxed">
+          Sessions are being recorded, work is being closed, and every agent that wrote last
+          week has written today.
+        </p>
+      </Banner>
     )
   }
 
   return (
     <div className="flex flex-col gap-2">
       {[...alarms, ...warnings].map((f) => (
-        <div
+        <Banner
           key={f.code}
-          className={cn(
-            'flex items-start gap-2.5 rounded-lg border px-4 py-3',
-            f.severity === 'alarm'
-              ? 'border-danger/40 bg-danger-subtle'
-              : 'border-status-doing/35 bg-status-doing/8',
-          )}
+          tone={f.severity === 'alarm' ? 'bad' : 'warn'}
+          icon={f.severity === 'alarm' ? AlertTriangle : Info}
         >
-          {f.severity === 'alarm' ? (
-            <AlertTriangle size={15} className="text-danger mt-[2px] shrink-0" aria-hidden />
-          ) : (
-            <Info size={15} className="text-status-doing mt-[2px] shrink-0" aria-hidden />
-          )}
-          <p className="text-fg min-w-0 text-[0.78125rem] leading-relaxed">{f.message}</p>
-        </div>
+          <p className="text-fg text-[0.78125rem] leading-relaxed">{f.message}</p>
+        </Banner>
       ))}
     </div>
   )
@@ -198,17 +224,17 @@ const VitalsPage = async ({
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
+      <header className="page-header border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <span className="text-fg text-[0.8125rem] font-medium">Vitals</span>
-        <span className="bg-surface-raised ml-auto flex items-center gap-0.5 rounded-md p-0.5">
+        <span className="border-border bg-surface-raised/60 ml-auto flex items-center gap-0.5 rounded-md border p-0.5 shadow-[inset_0_1px_1px_rgb(0_0_0/0.08)]">
           {WINDOWS.map((w) => (
             <PendingLink
               key={w.hours}
               href={w.hours === 24 ? '/vitals' : `/vitals?hours=${w.hours}`}
               className={cn(
-                'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[0.71875rem] transition-colors',
-                w.hours === hours ? 'bg-surface text-fg' : 'text-fg-muted hover:text-fg',
+                'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[0.71875rem] transition-[color,background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',
+                w.hours === hours ? 'bg-surface text-fg raised-sm' : 'text-fg-muted hover:text-fg',
               )}
             >
               {w.label}
@@ -226,10 +252,12 @@ const VitalsPage = async ({
             as two pages somebody forgot. */}
           <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-5 md:px-6">
           {failures.map((f) => (
-            <p key={f} className="text-danger text-[0.8125rem]">
-              {f}
-              {vitals ? ' — the rest of this page is still current.' : ''}
-            </p>
+            <Banner key={f} tone="bad" icon={AlertTriangle}>
+              <p className="text-danger text-[0.8125rem]">
+                {f}
+                {vitals ? ' — the rest of this page is still current.' : ''}
+              </p>
+            </Banner>
           ))}
 
           {vitals ? (
@@ -259,9 +287,9 @@ const VitalsPage = async ({
 
               <Panel title="Who wrote" note={`last ${window}, against the week before`}>
                 {vitals.agents.length === 0 ? (
-                  <p className="text-fg-muted py-2 text-[0.78125rem]">Nobody, either window.</p>
+                  <EmptyState compact title="Nobody, either window." />
                 ) : (
-                  vitals.agents.map((a) => (
+                  vitals.agents.map((a, i) => (
                     <div key={a.agent} className="border-border border-b py-2 last:border-0">
                       <div className="flex items-baseline justify-between gap-4">
                         <span className="text-fg text-[0.78125rem]">{a.agent}</span>
@@ -273,10 +301,24 @@ const VitalsPage = async ({
                       {/* Relative volume, which a column of numbers does not
                           show: one agent writing ten times another is the
                           shape of the week, not a detail. */}
-                      <div className="bg-surface-raised mt-1.5 h-[0.1875rem] overflow-hidden rounded-full">
+                      <div className="bg-surface-raised mt-1.5 h-[0.1875rem] rounded-full">
+                        {/* Fills from the left as the page arrives: a CSS
+                            transition from @starting-style, so it costs no
+                            script and stands still under reduced motion. */}
                         <div
-                          className="bg-accent h-full rounded-full"
-                          style={{ width: `${Math.max(2, (a.recent / busiest) * 100)}%` }}
+                          className={cn(
+                            'h-full origin-left scale-x-100 rounded-full starting:scale-x-0',
+                            'bg-[linear-gradient(90deg,color-mix(in_oklab,var(--accent)_45%,transparent),var(--accent))]',
+                            'shadow-[0_0_6px_var(--glow)]',
+                            'transition-transform duration-[var(--dur-3)] ease-[var(--ease-out)]',
+                            'motion-safe:[transition-delay:calc(var(--i)*18ms+80ms)]',
+                          )}
+                          style={
+                            {
+                              width: `${Math.max(2, (a.recent / busiest) * 100)}%`,
+                              '--i': Math.min(i, 14),
+                            } as React.CSSProperties
+                          }
                         />
                       </div>
                     </div>
@@ -290,7 +332,7 @@ const VitalsPage = async ({
                   note="never touched is filed and not edited since; stalled is in progress with nobody on it"
                 >
                   {work.projects.length === 0 ? (
-                    <p className="text-fg-muted py-2 text-[0.78125rem]">Nothing open.</p>
+                    <EmptyState compact title="Nothing open." />
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-[0.78125rem]">

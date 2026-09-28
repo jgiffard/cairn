@@ -10,6 +10,9 @@ import { isTerminal } from '@/schemas/task'
 import type { ChildTask } from '@/lib/data'
 import { mutate } from '@/lib/api/mutate'
 import { useMutate } from '@/lib/api/use-mutate'
+import { EmptyState } from '@/components/empty-state'
+import { cn } from '@/lib/utils'
+import { COUNT, LABEL } from './styles'
 
 /**
  * Direct children, with a rollup.
@@ -78,8 +81,9 @@ export const ChildrenPanel = ({
   return (
     <section>
       <div className="mb-2 flex items-center gap-2">
-        <h2 className="text-fg-subtle text-[0.6875rem] font-medium">
-          Sub-tasks{items.length > 0 ? ` · ${closed}/${items.length}` : ''}
+        <h2 className={cn(LABEL, 'flex items-center gap-2')}>
+          Sub-tasks
+          {items.length > 0 ? <span className={COUNT}>{closed}/{items.length}</span> : null}
         </h2>
         {items.length > 0 && (
           <div
@@ -90,22 +94,25 @@ export const ChildrenPanel = ({
             aria-valuemax={100}
             aria-label={`${pct}% closed`}
           >
-            <div className="bg-status-done h-full rounded-full" style={{ width: `${pct}%` }} />
+            <div
+              className="bg-status-done h-full rounded-full shadow-[0_0_6px_color-mix(in_oklab,var(--status-done)_60%,transparent)]"
+              style={{ width: `${pct}%` }}
+            />
           </div>
         )}
         <button
           type="button"
           onClick={() => setAdding((a) => !a)}
-          className="text-fg-subtle hover:text-fg ml-auto text-[0.6875rem] transition-colors"
+          className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 ml-auto rounded px-1.5 py-px text-[0.6875rem] transition-colors duration-[var(--dur-1)]"
         >
           {adding ? 'Cancel' : 'Add sub-task'}
         </button>
       </div>
 
       {items.length > 0 && (
-        <ul className="border-border divide-border divide-y rounded-md border">
+        <ul className="surface-card divide-border/70 divide-y overflow-hidden">
           {items.map((c) => (
-            <li key={c.id} className="group hover:bg-surface-hover flex h-[2rem] items-center gap-2 px-2.5">
+            <li key={c.id} className="group row-hover flex h-[2rem] items-center gap-2 px-2.5">
               <PriorityIcon priority={c.priority} />
               <StatusIcon status={c.status} size={13} />
               <Link
@@ -136,7 +143,7 @@ export const ChildrenPanel = ({
       )}
 
       {adding && (
-        <div className="mt-2 flex items-center gap-2">
+        <div className="enter-rise mt-2 flex items-center gap-2">
           <InlineInput
             autoFocus
             value={title}
@@ -169,9 +176,11 @@ export const ChildrenPanel = ({
       )}
 
       {items.length === 0 && !adding && (
-        <p className="text-fg-subtle text-[0.75rem]">
-          None. Split the work here when it is too big for one resolution.
-        </p>
+        <EmptyState
+          compact
+          title="None."
+          hint="Split the work here when it is too big for one resolution."
+        />
       )}
 
       {error && <p className="text-danger mt-1.5 text-[0.75rem]">{error}</p>}

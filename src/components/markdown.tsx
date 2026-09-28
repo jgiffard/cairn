@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import type { Components } from 'react-markdown'
+import type { Components, ExtraProps } from 'react-markdown'
 import type { PluggableList } from 'unified'
 import { cn } from '@/lib/utils'
 import { CodeBlock } from '@/components/code-block'
@@ -15,18 +15,75 @@ import { remarkTaskRefs } from '@/lib/markdown/task-refs'
 import { remarkKnowledgeRefs } from '@/lib/markdown/knowledge-refs'
 
 /**
+ * react-markdown hands every component the hast node it came from. Spread onto
+ * a DOM element with the rest of the props, it landed in the markup as
+ * node="[object Object]" on every paragraph.
+ */
+const dom = <T extends ExtraProps>(props: T): Omit<T, 'node'> => {
+  const rest = { ...props }
+  delete rest.node
+  return rest
+}
+
+/**
+ * A reading measure for running text. Code and tables keep the full column,
+ * since they are read across rather than along.
+ */
+const MEASURE = 'max-w-[75ch]'
+
+/** Links read as the accent, underlined a little below the baseline. */
+const LINK =
+  'text-accent decoration-accent/40 decoration-1 underline-offset-[3px] transition-[text-decoration-color] duration-[var(--dur-1)] hover:decoration-accent'
+
+/**
  * A hand-rolled component map rather than a prose plugin, so every element
  * inherits the same oklch tokens as the rest of the app and stays legible at
  * the density a tracker needs.
  */
 const components: Components = {
-  h1: (p) => <h1 className="mt-6 mb-2 text-lg font-semibold tracking-tight first:mt-0" {...p} />,
-  h2: (p) => <h2 className="mt-5 mb-2 text-base font-semibold tracking-tight first:mt-0" {...p} />,
-  h3: (p) => <h3 className="text-fg-muted mt-4 mb-1.5 text-sm font-semibold first:mt-0" {...p} />,
-  p: (p) => <p className="mb-3 text-sm leading-relaxed last:mb-0" {...p} />,
-  ul: (p) => <ul className="mb-3 ml-4 list-disc space-y-1 text-sm last:mb-0" {...p} />,
-  ol: (p) => <ol className="mb-3 ml-4 list-decimal space-y-1 text-sm last:mb-0" {...p} />,
-  li: (p) => <li className="leading-relaxed" {...p} />,
+  h1: ({ className, ...p }) => (
+    <h1
+      className={cn(MEASURE, 'text-fg mt-6 mb-2 text-lg leading-snug font-semibold tracking-[-0.015em] text-balance first:mt-0', className)}
+      {...dom(p)}
+    />
+  ),
+  h2: ({ className, ...p }) => (
+    <h2
+      className={cn(MEASURE, 'text-fg mt-5 mb-2 text-base leading-snug font-semibold tracking-[-0.01em] text-balance first:mt-0', className)}
+      {...dom(p)}
+    />
+  ),
+  h3: ({ className, ...p }) => (
+    <h3 className={cn(MEASURE, 'text-fg-muted mt-4 mb-1.5 text-sm font-semibold first:mt-0', className)} {...dom(p)} />
+  ),
+  // Unmapped, a fourth-level heading was preflight's reset: body text with no
+  // weight and no space, indistinguishable from the paragraph under it.
+  h4: ({ className, ...p }) => (
+    <h4 className={cn(MEASURE, 'text-fg-muted mt-3 mb-1 text-sm font-medium first:mt-0', className)} {...dom(p)} />
+  ),
+  p: ({ className, ...p }) => (
+    <p className={cn(MEASURE, 'mb-3 text-sm leading-relaxed text-pretty last:mb-0', className)} {...dom(p)} />
+  ),
+  // The class is merged, not replaced: GFM gives a task list its own class,
+  // and spreading it last used to wipe every style off the list.
+  ul: ({ className, ...p }) => (
+    <ul
+      className={cn(
+        MEASURE,
+        'marker:text-fg-subtle mb-3 ml-4 list-disc space-y-1 text-sm last:mb-0',
+        '[&.contains-task-list]:ml-0 [&.contains-task-list]:list-none',
+        className,
+      )}
+      {...dom(p)}
+    />
+  ),
+  ol: ({ className, ...p }) => (
+    <ol
+      className={cn(MEASURE, 'marker:text-fg-subtle mb-3 ml-4 list-decimal space-y-1 text-sm marker:tabular-nums last:mb-0', className)}
+      {...dom(p)}
+    />
+  ),
+  li: ({ className, ...p }) => <li className={cn('pl-0.5 leading-relaxed', className)} {...dom(p)} />,
   a: ({ href, children, ...rest }) => {
     // A linkified task ref is in-app navigation, not an outbound link: opening
     // it in a new tab would make following a chain of references unbearable.
@@ -45,18 +102,14 @@ const components: Components = {
         return (
           <span
             title={`No knowledge "${knowledgeRef}" — yet`}
-            className="text-fg-subtle decoration-dotted cursor-help underline underline-offset-2"
+            className="text-fg-subtle decoration-fg-subtle/60 decoration-dotted cursor-help underline underline-offset-[3px]"
           >
             {children}
           </span>
         )
       }
       return (
-        <Link
-          href={href}
-          prefetch
-          className="text-accent decoration-1 underline-offset-2 hover:underline"
-        >
+        <Link href={href} prefetch className={cn(LINK, 'hover:underline')}>
           {children}
         </Link>
       )
@@ -65,11 +118,7 @@ const components: Components = {
     const taskRef = (rest as Record<string, unknown>)['data-task-ref']
     if (typeof taskRef === 'string' && href) {
       return (
-        <Link
-          href={href}
-          prefetch
-          className="text-accent decoration-1 underline-offset-2 hover:underline"
-        >
+        <Link href={href} prefetch className={cn(LINK, 'hover:underline')}>
           {children}
         </Link>
       )
@@ -77,56 +126,83 @@ const components: Components = {
     return (
       <a
         href={href}
-        className="text-accent underline decoration-1 underline-offset-2"
+        className={cn(LINK, 'underline')}
         target="_blank"
         rel="noreferrer noopener"
-        {...rest}
+        {...dom(rest)}
       >
         {children}
       </a>
     )
   },
-  blockquote: (p) => (
-    <blockquote className="border-border text-fg-muted mb-3 border-l-2 pl-3 text-sm italic" {...p} />
+  // The trail marker as a quote's edge: the accent's line down the left and
+  // a little of its light across the face.
+  blockquote: ({ className, ...p }) => (
+    <blockquote
+      className={cn(
+        MEASURE,
+        'text-fg-muted mb-3 rounded-r-md py-1 pr-3 pl-3.5 text-sm last:mb-0',
+        'bg-[linear-gradient(90deg,color-mix(in_oklab,var(--accent)_6%,transparent),transparent_70%)]',
+        'shadow-[inset_2px_0_0_color-mix(in_oklab,var(--accent)_60%,transparent)]',
+        className,
+      )}
+      {...dom(p)}
+    />
   ),
-  hr: () => <hr className="border-border my-4" />,
-  strong: (p) => <strong className="font-semibold" {...p} />,
+  // A hairline that fades out at both ends, as the page header's does.
+  hr: () => (
+    <hr className="my-5 h-px border-0 bg-[linear-gradient(90deg,transparent,var(--border-strong)_15%,var(--border-strong)_85%,transparent)]" />
+  ),
+  strong: ({ className, ...p }) => <strong className={cn('text-fg font-semibold', className)} {...dom(p)} />,
   code: ({ className, children, ...rest }) => {
     // react-markdown gives fenced blocks a language-* class; bare inline code
     // has none, and the two want very different treatment.
     const isBlock = /language-/.test(className ?? '')
     if (isBlock) {
       return (
-        <code className={cn('font-mono text-[0.8125rem] leading-relaxed', className)} {...rest}>
+        <code className={cn('font-mono text-[0.8125rem] leading-relaxed', className)} {...dom(rest)}>
           {children}
         </code>
       )
     }
+    // A soft chip: a raised face and a hairline drawn inside it, rather than
+    // a box that competes with the words around it.
     return (
       <code
-        className="bg-surface-raised border-border rounded border px-1 py-px font-mono text-[0.78125rem]"
-        {...rest}
+        className="bg-surface-raised text-fg rounded-[0.3125rem] px-[0.3em] py-px font-mono text-[0.78125rem] break-words shadow-[inset_0_0_0_1px_var(--border)]"
+        {...dom(rest)}
       >
         {children}
       </code>
     )
   },
-  pre: (p) => <CodeBlock {...p} />,
-  table: (p) => (
+  pre: (p) => <CodeBlock {...dom(p)} />,
+  table: ({ className, ...p }) => (
     // Its own scroll container, so a wide table never makes the page body
     // scroll sideways.
-    <div className="border-border mb-3 overflow-x-auto rounded-md border">
-      <table className="w-full border-collapse text-[0.78125rem]" {...p} />
+    <div className="border-border mb-3 overflow-x-auto rounded-lg border shadow-[var(--highlight)] last:mb-0">
+      <table
+        className={cn(
+          'w-full border-collapse text-[0.78125rem] tabular-nums',
+          '[&_tbody_tr]:transition-colors [&_tbody_tr]:duration-[var(--dur-1)] [&_tbody_tr:hover]:bg-surface-hover/60',
+          '[&_tbody_tr:last-child>td]:border-b-0',
+          className,
+        )}
+        {...dom(p)}
+      />
     </div>
   ),
-  th: (p) => (
+  th: ({ className, ...p }) => (
     <th
-      className="border-border bg-surface-raised text-fg-muted border-b px-2.5 py-1.5 text-left text-[0.6875rem] font-medium"
-      {...p}
+      className={cn(
+        'border-border bg-surface-raised/60 text-fg-muted border-b px-2.5 py-1.5 text-left text-[0.6875rem] font-medium',
+        className,
+      )}
+      {...dom(p)}
     />
   ),
-  td: (p) => (
-    <td className="border-border border-b px-2.5 py-1.5 align-top last:border-0" {...p} />
+  td: ({ className, ...p }) => (
+    <td className={cn('border-border/70 border-b px-2.5 py-1.5 align-top', className)} {...dom(p)} />
   ),
   input: (p) => (
     // GFM task list checkboxes. Read-only here: the body is edited in the
@@ -135,7 +211,7 @@ const components: Components = {
       className="accent-accent mr-1.5 translate-y-[1px]"
       disabled
       readOnly
-      {...p}
+      {...dom(p)}
     />
   ),
   img: (p) => (
@@ -143,7 +219,7 @@ const components: Components = {
     // wrote, so the host is arbitrary and cannot be pre-declared in
     // next.config, and signed attachment URLs are short-lived and unoptimisable.
     // eslint-disable-next-line @next/next/no-img-element
-    <img className="border-border my-3 max-w-full rounded-md border" alt="" {...p} />
+    <img className="border-border raised-sm my-3 max-w-full rounded-lg border" alt="" {...dom(p)} />
   ),
 }
 

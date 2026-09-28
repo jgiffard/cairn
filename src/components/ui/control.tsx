@@ -16,11 +16,14 @@ import { cn } from '@/lib/utils'
  * for free, and it is the right trade here.
  */
 
+// Inset a hair so a field reads as a well in the surface, not a box on it;
+// focus lights the rim in the accent with a soft halo rather than a hard ring.
 const base =
-  'w-full rounded-md border border-border bg-surface text-fg transition-[color,background-color,border-color,box-shadow] duration-100 ' +
+  'w-full rounded-md border border-border bg-surface text-fg shadow-[inset_0_1px_1px_rgb(0_0_0/0.06)] ' +
+  'transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease)] ' +
   'placeholder:text-fg-subtle ' +
   'hover:border-border-strong hover:bg-surface-raised ' +
-  'focus:border-accent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-ring/40 ' +
+  'focus:border-accent focus:bg-surface focus:outline-none focus:shadow-[0_0_0_3px_color-mix(in_oklab,var(--ring)_22%,transparent)] ' +
   'disabled:cursor-not-allowed disabled:opacity-50'
 
 const sizes = {
@@ -98,7 +101,8 @@ const buttonVariants = {
   // the dark ground a faded accent looks disabled.
   primary:
     'bg-accent text-accent-fg shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(0_0_0/0.22)] hover:brightness-110',
-  secondary: 'border border-border bg-surface text-fg hover:bg-surface-raised hover:border-border-strong',
+  secondary:
+    'border border-border bg-surface text-fg shadow-[var(--shadow-sm),var(--highlight)] hover:bg-surface-raised hover:border-border-strong',
   ghost: 'text-fg-muted hover:bg-surface-raised hover:text-fg',
   quiet:
     'border border-transparent text-fg-muted hover:border-border hover:bg-surface-raised hover:text-fg',
@@ -113,7 +117,8 @@ export const Button = forwardRef<
     ref={ref}
     type="button"
     className={cn(
-      'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md font-medium transition-all',
+      'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md font-medium',
+      'transition-[background-color,border-color,color,box-shadow,filter,transform] duration-[var(--dur-1)] ease-[var(--ease)]',
       'focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-2',
       'disabled:pointer-events-none disabled:opacity-50',
       'active:scale-[0.98]',
@@ -147,7 +152,7 @@ export const InlineInput = forwardRef<HTMLInputElement, React.ComponentProps<'in
       className={cn(
         'border-border bg-bg text-fg placeholder:text-fg-subtle h-[1.75rem] w-full rounded-md border px-2 text-[0.78125rem] outline-none',
         'transition-[border-color,box-shadow] duration-100',
-        'hover:border-border-strong focus:border-accent focus:ring-ring/30 focus:ring-2',
+        'hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_color-mix(in_oklab,var(--ring)_22%,transparent)]',
         'disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}

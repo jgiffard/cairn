@@ -39,16 +39,18 @@ export const RedirectNotice = ({
     <div
       role="status"
       className={cn(
-        'border-border bg-surface-raised text-fg-muted flex items-start gap-2 rounded-md border py-2 pr-1.5 pl-3 text-[0.78125rem] leading-relaxed',
+        'text-fg-muted enter-rise flex items-start gap-2 rounded-lg border py-2 pr-1.5 pl-3 text-[0.78125rem] leading-relaxed shadow-[var(--shadow-sm),var(--highlight)] backdrop-blur-md',
+        'border-[color:color-mix(in_oklab,var(--accent)_28%,var(--border))]',
+        'bg-[linear-gradient(90deg,color-mix(in_oklab,var(--accent)_10%,transparent),color-mix(in_oklab,var(--accent)_3%,transparent)_70%)]',
         className ?? 'mb-5',
       )}
     >
-      <ArrowRightLeft size={13} className="text-fg-subtle mt-[3px] shrink-0" aria-hidden />
+      <ArrowRightLeft size={13} className="text-accent mt-[3px] shrink-0" aria-hidden />
       <p className="min-w-0 flex-1">{shown}</p>
       <button
         type="button"
         onClick={() => setShown(null)}
-        className="text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-[1.375rem] shrink-0 place-items-center rounded-md transition-colors"
+        className="text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-[1.375rem] shrink-0 place-items-center rounded-md transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
       >
         <X size={12} aria-hidden />
         <span className="sr-only">Dismiss</span>

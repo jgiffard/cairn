@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
+import { EmptyState } from '@/components/empty-state'
+import { Button } from '@/components/ui/control'
 
 /**
  * There was no error boundary anywhere, so a single bad render showed Next's
@@ -15,32 +17,29 @@ const AppError = ({ error, reset }: { error: Error & { digest?: string }; reset:
   }, [error])
 
   return (
-    <div className="flex h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-fg text-[0.9375rem] font-medium">That page did not render.</h1>
-        <p className="text-fg-muted max-w-[46ch] text-[0.8125rem] leading-relaxed">
-          Nothing was lost — this is a display failure, not a write. Retrying usually works.
-        </p>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={reset}
-          className="bg-accent text-accent-fg h-[1.875rem] rounded-md px-3.5 text-[0.8125rem] font-medium"
-        >
-          Try again
-        </button>
-        <Link
-          href="/"
-          className="text-fg-muted hover:text-fg hover:bg-surface-hover h-[1.875rem] rounded-md px-3.5 text-[0.8125rem] leading-[1.875rem] transition-colors"
-        >
-          Back to all tasks
-        </Link>
-      </div>
+    <div className="flex h-dvh flex-col items-center justify-center px-6">
+      <EmptyState
+        className={error.digest ? 'pb-5' : undefined}
+        as="h1"
+        title={<span className="text-fg text-[0.9375rem]">That page did not render.</span>}
+        hint="Nothing was lost — this is a display failure, not a write. Retrying usually works."
+        action={
+          <>
+            <Button variant="primary" onClick={reset} className="px-3.5">
+              Try again
+            </Button>
+            <Link
+              href="/"
+              className="text-fg-muted hover:text-fg hover:bg-surface-raised inline-flex h-8 items-center rounded-md px-3.5 text-[0.8125rem] font-medium transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
+            >
+              Back to all tasks
+            </Link>
+          </>
+        }
+      />
 
       {error.digest && (
-        <code className="text-fg-subtle text-[0.6875rem]">
+        <code className="text-fg-subtle border-border bg-surface-raised/50 rounded-md border px-2 py-0.5 text-[0.6875rem]">
           digest {error.digest}
         </code>
       )}

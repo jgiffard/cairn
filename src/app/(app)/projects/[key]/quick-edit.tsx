@@ -32,7 +32,13 @@ export const QuickSelect = <T extends string>({
 }) => (
   <span
     className={cn(
-      'hover:bg-surface-hover relative z-10 -mx-1 inline-flex shrink-0 items-center rounded px-1 transition-colors',
+      'relative z-10 -mx-1 inline-flex shrink-0 items-center rounded px-1',
+      'transition-[background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease)]',
+      // A wash of the foreground rather than the hover fill: it has to show
+      // on a row that is itself already hovered.
+      'hover:bg-[color-mix(in_oklab,var(--fg)_7%,transparent)]',
+      // The select is invisible, so its focus has to be drawn on the badge.
+      'has-[select:focus-visible]:shadow-[0_0_0_2px_color-mix(in_oklab,var(--ring)_40%,transparent)]',
       className,
     )}
   >

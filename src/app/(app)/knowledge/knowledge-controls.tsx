@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search as SearchIcon } from 'lucide-react'
 import { Spinner } from '@/components/spinner'
-import { Select } from '@/components/ui/control'
+import { Input, Select } from '@/components/ui/control'
 
 /**
  * Filters live in the URL, same as /search — a filtered view is then a link
@@ -58,19 +58,20 @@ export const KnowledgeControls = ({
   const searching = q.trim().length >= 2
 
   return (
-    <div className="border-border flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:flex-row sm:items-center sm:px-4">
-      <div className="flex min-w-0 flex-1 items-center gap-2 sm:max-w-[17.5rem]">
-        <span className="text-fg-subtle grid size-[0.875rem] shrink-0 place-items-center">
+    <div className="border-border/70 flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:flex-row sm:items-center sm:px-4">
+      <div className="relative flex min-w-0 flex-1 items-center sm:max-w-[17.5rem]">
+        <span className="text-fg-subtle pointer-events-none absolute left-2 z-10 grid size-[0.875rem] place-items-center">
           {running || pendingDebounce ? <Spinner size={13} /> : <SearchIcon size={13} aria-hidden />}
         </span>
-        <input
+        <Input
           ref={inputRef}
+          size="sm"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === 'Escape' && setDraft('')}
           placeholder="Search knowledge…"
           aria-label="Search knowledge"
-          className="text-fg placeholder:text-fg-subtle min-w-0 flex-1 bg-transparent text-[0.8125rem] outline-none"
+          className="min-w-0 flex-1 pl-7 text-[0.8125rem]"
         />
       </div>
 

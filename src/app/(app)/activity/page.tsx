@@ -8,6 +8,7 @@ import { ChevronRight } from 'lucide-react'
 import { currentUser, listProjects } from '@/lib/data'
 import { activityFeed, type ActivityRow } from '@/lib/api/activity-feed'
 import { MobileNavButton } from '@/components/mobile-nav-context'
+import { EmptyState } from '@/components/empty-state'
 import { ActivityList } from './activity-list'
 import { ActivityControls } from './activity-controls'
 
@@ -64,7 +65,7 @@ const ActivityPage = async ({
     <div className="flex h-dvh flex-col">
       {/* the feed is the one page whose whole purpose is what just happened */}
       <LiveUpdates />
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
+      <header className="page-header border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <Link href="/" className="text-fg-muted hover:text-fg hidden text-[0.8125rem] sm:block">
           <BrandName />
@@ -72,7 +73,7 @@ const ActivityPage = async ({
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
         <span className="text-fg text-[0.8125rem]">Activity</span>
         {rows.length > 0 && (
-          <span className="text-fg-subtle ml-auto hidden text-[0.75rem] sm:block">
+          <span className="text-fg-subtle ml-auto hidden text-[0.75rem] tabular-nums sm:block">
             {rows.length} events
           </span>
         )}
@@ -90,9 +91,7 @@ const ActivityPage = async ({
         {failure ? (
           <p className="text-danger px-4 py-8 text-[0.8125rem]">{failure}</p>
         ) : rows.length === 0 ? (
-          <p className="text-fg-subtle px-4 py-12 text-center text-[0.8125rem]">
-            Nothing here yet.
-          </p>
+          <EmptyState title="Nothing here yet." />
         ) : (
           <>
             <ActivityList rows={rows} />
@@ -105,7 +104,7 @@ const ActivityPage = async ({
                     link for as long as it took. */}
                 <PendingLink
                   href={withParam('before', older)}
-                  className="text-fg-subtle hover:text-fg inline-flex items-center gap-1.5 text-[0.75rem] transition-colors"
+                  className="border-border text-fg-muted hover:text-fg hover:border-border-strong inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[0.75rem] shadow-[var(--shadow-sm),var(--highlight)] transition-[color,border-color,transform] duration-[var(--dur-2)] ease-[var(--ease-out)] hover:-translate-y-px"
                 >
                   Load older
                 </PendingLink>

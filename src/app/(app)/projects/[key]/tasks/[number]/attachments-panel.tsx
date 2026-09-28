@@ -7,6 +7,8 @@ import type { Attachment } from '@/lib/data'
 import { mutate } from '@/lib/api/mutate'
 import { useMutate } from '@/lib/api/use-mutate'
 import { useNotify } from '@/components/toast'
+import { cn } from '@/lib/utils'
+import { COUNT, LABEL } from './styles'
 
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`
@@ -69,9 +71,9 @@ export const AttachmentsPanel = ({
 
   return (
     <section>
-      <h2 className="text-fg-muted mb-2.5 flex items-center gap-2 text-[0.6875rem] font-medium">
+      <h2 className={cn(LABEL, 'mb-2.5 flex items-center gap-2')}>
         Files
-        <span className="tabular text-fg-subtle">{attachments.length}</span>
+        <span className={COUNT}>{attachments.length}</span>
       </h2>
 
       <div
@@ -86,13 +88,17 @@ export const AttachmentsPanel = ({
           const file = e.dataTransfer.files[0]
           if (file) void upload(file)
         }}
-        className={`border-border mb-2 rounded-md border border-dashed text-center transition-all ${
+        // The rim and the light change, never the size in motion: padding
+        // steps between states rather than animating the panel's height.
+        className={cn(
+          'border-border mb-2 rounded-lg border border-dashed text-center',
+          'transition-[border-color,background-color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]',
           dragging
-            ? 'border-accent bg-accent-subtle p-3'
+            ? 'border-accent bg-accent/[0.06] p-3 shadow-[0_0_0_3px_color-mix(in_oklab,var(--ring)_18%,transparent)]'
             : attachments.length === 0
               ? 'border-transparent p-0 text-left'
-              : 'p-2'
-        }`}
+              : 'hover:border-border-strong p-2',
+        )}
       >
         <input
           ref={input}
@@ -108,7 +114,7 @@ export const AttachmentsPanel = ({
           type="button"
           onClick={() => input.current?.click()}
           disabled={pending}
-          className="text-fg-muted hover:text-fg inline-flex items-center gap-1.5 text-xs disabled:opacity-50"
+          className="text-fg-muted hover:text-fg inline-flex items-center gap-1.5 text-xs transition-colors duration-[var(--dur-1)] disabled:opacity-50"
         >
           <Paperclip size={13} />
           {pending ? 'Uploading…' : 'Drop a file, or choose one'}
@@ -116,33 +122,39 @@ export const AttachmentsPanel = ({
       </div>
 
       {error && (
-        <p className="text-danger bg-danger-subtle mb-2 rounded px-2 py-1.5 text-[0.6875rem]">{error}</p>
+        <p className="enter-rise text-danger bg-danger-subtle mb-2 rounded-md px-2 py-1.5 text-[0.6875rem]">{error}</p>
       )}
 
       {attachments.length > 0 && (
-        <ul className="divide-border border-border divide-y overflow-hidden rounded-md border">
+        // Cards, two across: a file is a thing you pick up, and the tile says
+        // what kind before the name is read.
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {attachments.map((a) => (
-            <li key={a.id} className="group flex items-center gap-2 px-2.5 py-1.5">
-              {a.mime_type.startsWith('image/') ? (
-                <ImageIcon size={13} className="text-fg-subtle shrink-0" />
-              ) : (
-                <File size={13} className="text-fg-subtle shrink-0" />
-              )}
-              <button
-                type="button"
-                onClick={() => void openSigned(a.id, a.original_name, a.mime_type)}
-                className="hover:text-accent min-w-0 flex-1 truncate text-left text-[0.78125rem]"
-              >
-                {a.original_name}
-              </button>
-              <span className="text-fg-subtle tabular shrink-0 text-[0.6875rem]">
-                {formatBytes(a.size_bytes)}
+            <li
+              key={a.id}
+              className="surface-card surface-card-interactive group flex min-w-0 items-center gap-2.5 px-2 py-1.5"
+            >
+              <span className="bg-surface-raised text-fg-subtle group-hover:text-fg-muted grid size-[1.75rem] shrink-0 place-items-center rounded-md shadow-[var(--highlight)] transition-colors duration-[var(--dur-2)]">
+                {a.mime_type.startsWith('image/') ? <ImageIcon size={13} /> : <File size={13} />}
               </span>
-              <span className="text-fg-subtle shrink-0 text-[0.6875rem]">{a.actor_id}</span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <button
+                  type="button"
+                  onClick={() => void openSigned(a.id, a.original_name, a.mime_type)}
+                  className="hover:text-accent min-w-0 truncate text-left text-[0.78125rem] transition-colors duration-[var(--dur-1)]"
+                >
+                  {a.original_name}
+                </button>
+                <span className="text-fg-subtle flex min-w-0 items-center gap-1.5 text-[0.6875rem]">
+                  <span className="tabular shrink-0">{formatBytes(a.size_bytes)}</span>
+                  <span aria-hidden>·</span>
+                  <span className="truncate">{a.actor_id}</span>
+                </span>
+              </span>
               <button
                 type="button"
                 onClick={() => void openSigned(a.id, a.original_name, 'application/octet-stream')}
-                className="text-fg-subtle hover:text-fg shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                className="text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-[1.375rem] shrink-0 place-items-center rounded opacity-0 transition-[opacity,color,background-color] duration-[var(--dur-1)] group-hover:opacity-100 focus-visible:opacity-100"
                 aria-label={`Download ${a.original_name}`}
               >
                 <Download size={13} />
@@ -150,7 +162,7 @@ export const AttachmentsPanel = ({
               <button
                 type="button"
                 onClick={() => void remove(a.id)}
-                className="text-fg-subtle hover:text-danger shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                className="text-fg-subtle hover:text-danger hover:bg-danger-subtle grid size-[1.375rem] shrink-0 place-items-center rounded opacity-0 transition-[opacity,color,background-color] duration-[var(--dur-1)] group-hover:opacity-100 focus-visible:opacity-100"
                 aria-label={`Delete ${a.original_name}`}
               >
                 <Trash2 size={13} />
@@ -162,14 +174,14 @@ export const AttachmentsPanel = ({
 
       {lightbox && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+          className="scrim fixed inset-0 z-50 flex items-center justify-center p-6"
           onClick={() => setLightbox(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={lightbox.url}
             alt={lightbox.name}
-            className="max-h-full max-w-full rounded-md"
+            className="enter-sheet raised-lg max-h-full max-w-full rounded-lg"
           />
         </div>
       )}

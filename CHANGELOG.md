@@ -22,6 +22,25 @@ out under **Breaking** with what to do about it.
 
 ### Changed
 
+- **One pass over the whole interface** (CAIRN-308): depth, light and motion, with the density
+  unchanged.
+  - *Material.* The page is lit from above by the instance's own accent, over a film grain too fine
+    to read as texture. The sidebar is a lifted material, and cards (board, vitals, settings, the
+    resolution) have a lit top edge and a contact shadow. Page bars end in a hairline that fades at
+    both ends.
+  - *Motion.* Every movement settles, the way a stone comes to rest:
+    - pages fade in and the first rows of a list settle one after another;
+    - the sidebar's active marker and the view tabs slide to the new choice;
+    - status icons animate when a task changes state;
+    - pop-ups and dialogs rise over a blurred backdrop.
+  - Everything stands still under reduced motion.
+  - *Signatures.* The activity feed is a trail: a dotted line with a stone per event and a small
+    cairn where each day begins. The work log on a task is the same trail. Empty states are three
+    stones settling, the top one in the accent.
+  - *Details.* Status group headers are washed in their colour. Selected rows and hovered rows
+    carry the 2px accent edge. Controls have a soft focus halo, and the destructive buttons stay red.
+    Loading screens shimmer instead of pulsing. The command palette, toasts, menus and the bulk bar
+    are glass.
 - **The family's type, everywhere** (CAIRN-307). Headings in Inter Tight at Cairn Cloud's
   weight and tracking, text in the system sans, refs and code in the system mono — the same three
   stacks as the site. Instrument Serif and IBM Plex are gone, and with them the italic serif

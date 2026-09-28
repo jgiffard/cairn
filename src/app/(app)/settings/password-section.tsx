@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Button, Field, Input } from '@/components/ui/control'
+import { SettingsCard } from './settings-card'
 
 /**
  * Until this existed the only way to change the password was an admin command
@@ -46,51 +47,61 @@ export const PasswordSection = () => {
   }
 
   return (
-    <section>
-      <h2 className="text-fg mb-3 text-[0.8125rem] font-medium">Password</h2>
+    <form onSubmit={submit}>
+      <SettingsCard
+        title="Password"
+        footer={
+          <>
+            <p className="text-fg-subtle min-w-0 flex-1 basis-60 text-[0.6875rem] leading-relaxed">
+              There is no SMTP configured, so a forgotten password can only be reset from the host.
+              Keep this in a password manager.
+            </p>
+            <Button type="submit" variant="primary" disabled={!canSubmit} className="w-auto px-4">
+              {state === 'saving' ? 'Changing…' : 'Change password'}
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="New password">
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+              aria-invalid={tooShort}
+            />
+          </Field>
+          <Field label="Confirm">
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              aria-invalid={mismatch}
+            />
+          </Field>
+        </div>
 
-      <form onSubmit={submit} className="flex max-w-sm flex-col gap-3">
-        <Field label="New password">
-          <Input
-            type="password"
-            autoComplete="new-password"
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-            aria-invalid={tooShort}
-          />
-        </Field>
-        <Field label="Confirm">
-          <Input
-            type="password"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            aria-invalid={mismatch}
-          />
-        </Field>
-
-        {tooShort && (
-          <p className="text-fg-subtle text-[0.6875rem]">At least 12 characters.</p>
-        )}
-        {mismatch && <p className="text-danger text-[0.6875rem]">These do not match.</p>}
-        {error && (
-          <p className="text-danger bg-danger-subtle rounded px-2 py-1.5 text-[0.6875rem]">{error}</p>
-        )}
-        {state === 'done' && (
-          <p className="text-status-done text-[0.6875rem]">
-            Changed. Store it somewhere safe — there is no email recovery on this instance.
-          </p>
-        )}
-
-        <Button type="submit" variant="primary" disabled={!canSubmit} className="w-auto self-start px-4">
-          {state === 'saving' ? 'Changing…' : 'Change password'}
-        </Button>
-      </form>
-
-      <p className="text-fg-subtle mt-3 max-w-sm text-[0.6875rem] leading-relaxed">
-        There is no SMTP configured, so a forgotten password can only be reset from the host.
-        Keep this in a password manager.
-      </p>
-    </section>
+        {tooShort || mismatch || error || state === 'done' ? (
+          <div className="mt-3 flex flex-col gap-2">
+            {tooShort && (
+              <p className="text-fg-subtle text-[0.6875rem]">At least 12 characters.</p>
+            )}
+            {mismatch && <p className="text-danger text-[0.6875rem]">These do not match.</p>}
+            {error && (
+              <p className="text-danger bg-danger-subtle enter-rise rounded-md px-2.5 py-1.5 text-[0.6875rem]">
+                {error}
+              </p>
+            )}
+            {state === 'done' && (
+              <p className="text-status-done enter-rise text-[0.6875rem]">
+                Changed. Store it somewhere safe — there is no email recovery on this instance.
+              </p>
+            )}
+          </div>
+        ) : null}
+      </SettingsCard>
+    </form>
   )
 }

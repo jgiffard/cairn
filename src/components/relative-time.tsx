@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useMounted } from '@/lib/use-mounted'
 import { fullDateTime, relativeTime, shortDate } from '@/lib/dates'
+import { cn } from '@/lib/utils'
 
 /**
  * "3m ago", without a hydration mismatch.
@@ -32,7 +33,9 @@ export const RelativeTime = ({
   }, [refreshMs])
 
   return (
-    <time dateTime={iso} title={fullDateTime(iso)} className={className}>
+    // Tabular, so "9m ago" turning into "10m ago" under a live refresh does
+    // not nudge whatever sits beside it.
+    <time dateTime={iso} title={fullDateTime(iso)} className={cn('tabular-nums', className)}>
       {mounted ? relativeTime(iso, now) : shortDate(iso)}
     </time>
   )

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 import { Spinner } from '@/components/spinner'
 import { Search as SearchIcon, X } from 'lucide-react'
+import { Input, Select } from '@/components/ui/control'
+import { cn } from '@/lib/utils'
 
 const STATUS_LABEL: Record<string, string> = {
   backlog: 'Backlog',
@@ -26,32 +28,20 @@ const Filter = ({
   placeholder: string
   options: { value: string; label: string }[]
 }) => (
-  <div className="relative shrink-0">
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label={placeholder}
-      className={`border-border bg-bg hover:bg-surface-hover h-[1.625rem] cursor-pointer appearance-none rounded-md border pr-6 pl-2 text-[0.75rem] outline-none transition-colors ${
-        value ? 'text-fg' : 'text-fg-subtle'
-      }`}
-    >
-      <option value="">{placeholder}</option>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-    <svg
-      className="text-fg-subtle pointer-events-none absolute top-1/2 right-1.5 -translate-y-1/2"
-      width="9"
-      height="9"
-      viewBox="0 0 9 9"
-      aria-hidden
-    >
-      <path d="M1.5 3.2L4.5 6 7.5 3.2" stroke="currentColor" strokeWidth="1.3" fill="none" />
-    </svg>
-  </div>
+  <Select
+    size="sm"
+    value={value}
+    onChange={(e) => onChange(e.target.value)}
+    aria-label={placeholder}
+    className={cn('w-auto', value ? 'text-fg' : 'text-fg-subtle')}
+  >
+    <option value="">{placeholder}</option>
+    {options.map((o) => (
+      <option key={o.value} value={o.value}>
+        {o.label}
+      </option>
+    ))}
+  </Select>
 )
 
 /**
@@ -130,12 +120,20 @@ export const SearchControls = ({
   const cleared = !q && !project && !type && !status && (!kind || kind === 'all')
 
   return (
-    <div className="border-border flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:h-[2.625rem] sm:flex-row sm:items-center sm:px-4 sm:py-0">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="text-fg-subtle grid size-[0.875rem] shrink-0 place-items-center">
+    <div className="border-border/70 flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:h-[2.625rem] sm:flex-row sm:items-center sm:px-4 sm:py-0">
+      {/* The one field on the page that matters, so it is drawn as a field:
+          a well with the accent halo on focus, rather than bare text on the
+          bar that only a blinking caret distinguished from a label. */}
+      <div className="relative flex min-w-0 flex-1 items-center">
+        <span
+          className={cn(
+            'pointer-events-none absolute left-2.5 z-10 grid size-[0.875rem] place-items-center transition-colors duration-[var(--dur-1)]',
+            draft ? 'text-accent' : 'text-fg-subtle',
+          )}
+        >
           {running || pendingDebounce ? <Spinner size={13} /> : <SearchIcon size={13} aria-hidden />}
         </span>
-        <input
+        <Input
           ref={inputRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -144,14 +142,14 @@ export const SearchControls = ({
           }}
           placeholder="Has this already been done or debugged?"
           aria-label="Search tasks"
-          className="text-fg placeholder:text-fg-subtle min-w-0 flex-1 bg-transparent text-[0.8125rem] outline-none"
+          className="min-w-0 flex-1 pr-8 pl-8 sm:pr-2.5"
         />
         {draft && (
           <button
             type="button"
             onClick={() => setDraft('')}
             aria-label="Clear the search"
-            className="text-fg-subtle hover:text-fg shrink-0 sm:hidden"
+            className="text-fg-subtle hover:text-fg absolute right-2 z-10 shrink-0 sm:hidden"
           >
             <X size={13} aria-hidden />
           </button>

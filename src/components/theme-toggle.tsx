@@ -19,12 +19,20 @@ export const ThemeToggle = () => {
     <button
       type="button"
       onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-      className="text-fg-subtle hover:text-fg hover:bg-surface-raised grid size-6 place-items-center rounded transition-colors"
+      className="group text-fg-subtle hover:text-fg hover:bg-surface-raised grid size-6 place-items-center rounded transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
       aria-label="Toggle theme"
       title="Toggle theme"
     >
-      <Sun size={14} className="hidden dark:block" aria-hidden />
-      <Moon size={14} className="block dark:hidden" aria-hidden />
+      <Sun
+        size={14}
+        className="hidden transition-transform duration-[var(--dur-3)] ease-[var(--ease-out)] group-hover:rotate-45 dark:block"
+        aria-hidden
+      />
+      <Moon
+        size={14}
+        className="block transition-transform duration-[var(--dur-3)] ease-[var(--ease-out)] group-hover:-rotate-12 dark:hidden"
+        aria-hidden
+      />
     </button>
   )
 }

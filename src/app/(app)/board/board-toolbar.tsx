@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Select } from '@/components/ui/control'
+import { EmptyState } from '@/components/empty-state'
 import { cn } from '@/lib/utils'
 import { TASK_PRIORITIES, TASK_TYPES } from '@/schemas/task'
 import {
@@ -75,10 +76,13 @@ const FilterMenu = ({
         aria-haspopup="menu"
         aria-label={`Filter by ${label}`}
         className={cn(
-          'flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[0.75rem] transition-colors',
+          'flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[0.75rem]',
+          'transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',
+          // An active filter is lit rather than painted: the accent in the rim
+          // and a faint halo of it, over the quietest accent wash.
           selected.length > 0
-            ? 'border-accent text-accent bg-accent-subtle'
-            : 'border-border text-fg-muted hover:bg-surface-hover hover:text-fg',
+            ? 'border-accent/70 text-accent bg-accent-subtle/70 shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_10%,transparent)]'
+            : 'border-border text-fg-muted hover:bg-surface-hover hover:text-fg hover:border-border-strong',
         )}
       >
         {label}
@@ -88,7 +92,8 @@ const FilterMenu = ({
       {open && (
         <div
           role="menu"
-          className="border-border bg-surface absolute top-[2rem] left-0 z-50 max-h-[15rem] w-[12.5rem] overflow-y-auto rounded-md border py-1 raised"
+          className="border-border bg-surface pop absolute top-[2rem] left-0 z-50 max-h-[15rem] w-[12.5rem] overflow-y-auto rounded-lg border py-1 raised"
+          style={{ '--origin': 'top left' } as React.CSSProperties}
         >
           {options.map((o) => (
             <button
@@ -97,7 +102,7 @@ const FilterMenu = ({
               role="menuitemcheckbox"
               aria-checked={selected.includes(o.value)}
               onClick={() => toggle(o.value)}
-              className="hover:bg-surface-hover flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+              className="hover:bg-surface-hover flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors duration-[var(--dur-1)]"
             >
               <input
                 type="checkbox"
@@ -109,9 +114,7 @@ const FilterMenu = ({
               <span className="text-fg-muted min-w-0 truncate text-[0.75rem]">{o.label}</span>
             </button>
           ))}
-          {options.length === 0 && (
-            <p className="text-fg-subtle px-2.5 py-1.5 text-[0.6875rem]">Nothing to filter by yet.</p>
-          )}
+          {options.length === 0 && <EmptyState compact title="Nothing to filter by yet." />}
         </div>
       )}
     </div>

@@ -3,6 +3,16 @@
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { useMutate } from '@/lib/api/use-mutate'
+import { cn } from '@/lib/utils'
+
+/**
+ * Shared by the heading and the textarea that replaces it, so clicking to edit
+ * does not move a single glyph. The display face at a confident size: this is
+ * the one voice on the page.
+ */
+const TITLE =
+  'font-display headline text-fg -mx-1.5 mb-5 rounded-md border px-1.5 text-[1.5rem] leading-[1.2] sm:text-[1.75rem] ' +
+  'transition-[background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]'
 
 /**
  * Click-to-edit title.
@@ -64,7 +74,7 @@ export const EditableTitle = ({ taskId, initial }: { taskId: string; initial: st
           setValue(initial)
           setEditing(true)
         }}
-        className="hover:bg-surface-hover -mx-1.5 mb-6 cursor-text rounded-md px-1.5 text-[1.5rem] leading-[1.25] font-semibold tracking-[-0.01em] text-balance transition-colors"
+        className={cn(TITLE, 'hover:bg-surface-hover/70 cursor-text border-transparent')}
         title="Click to edit"
       >
         {initial}
@@ -94,7 +104,11 @@ export const EditableTitle = ({ taskId, initial }: { taskId: string; initial: st
           setEditing(false)
         }
       }}
-      className="border-accent bg-surface -mx-1.5 mb-6 w-[calc(100%+0.75rem)] resize-none rounded-md border px-1.5 text-[1.5rem] leading-[1.25] font-semibold tracking-[-0.01em] outline-none"
+      className={cn(
+        TITLE,
+        'border-accent bg-surface block w-[calc(100%+0.75rem)] resize-none outline-none',
+        'shadow-[0_0_0_3px_color-mix(in_oklab,var(--ring)_22%,transparent)]',
+      )}
       rows={1}
     />
   )

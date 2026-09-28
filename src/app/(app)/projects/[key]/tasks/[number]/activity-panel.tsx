@@ -5,6 +5,8 @@ import { Avatar, StatusIcon } from '@/components/icons'
 import { RelativeTime } from '@/components/relative-time'
 import type { TaskStatus } from '@/schemas/task'
 import type { ActivityEntry } from '@/lib/data'
+import { cn } from '@/lib/utils'
+import { COUNT, LABEL } from './styles'
 
 const STATUS_LABEL: Record<string, string> = {
   backlog: 'Backlog',
@@ -115,14 +117,20 @@ const describe = (entry: ActivityEntry): React.ReactNode => {
  */
 export const ActivityPanel = ({ entries }: { entries: ActivityEntry[] }) => {
   const [open, setOpen] = useState(false)
+  // Mounted on first open and kept, so the rows are there to unfold into —
+  // and a long history costs nothing on a page where nobody opens it.
+  const [seen, setSeen] = useState(false)
   if (entries.length === 0) return null
 
   return (
     <section>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="text-fg-subtle hover:text-fg flex items-center gap-1.5 text-[0.6875rem] font-medium transition-colors"
+        onClick={() => {
+          setSeen(true)
+          setOpen((o) => !o)
+        }}
+        className={cn(LABEL, 'hover:text-fg flex items-center gap-1.5 transition-colors duration-[var(--dur-1)]')}
         aria-expanded={open}
       >
         <svg
@@ -130,26 +138,45 @@ export const ActivityPanel = ({ entries }: { entries: ActivityEntry[] }) => {
           height="9"
           viewBox="0 0 9 9"
           aria-hidden
-          style={{ transform: open ? 'rotate(90deg)' : undefined, transition: 'transform 120ms' }}
+          className={cn(
+            'transition-transform duration-[var(--dur-2)] ease-[var(--ease-out)]',
+            open && 'rotate-90',
+          )}
         >
           <path d="M3 1.5L6 4.5 3 7.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
         </svg>
-        Activity · {entries.length}
+        Activity
+        <span className={COUNT}>{entries.length}</span>
       </button>
 
-      {open && (
-        <ol className="mt-3 flex flex-col gap-2">
-          {entries.map((e) => (
-            <li key={e.id} className="flex items-center gap-2 text-[0.78125rem]">
-              <Avatar name={e.actor_id} size={16} />
-              <span className="text-fg-muted min-w-0 flex-1">
-                <span className="text-fg">{e.actor_id}</span> {describe(e)}
-              </span>
-              <RelativeTime iso={e.created_at} className="text-fg-subtle shrink-0 text-[0.6875rem]" />
-            </li>
-          ))}
-        </ol>
-      )}
+      {/* Unfolds rather than appears: the row track goes from 0fr to 1fr,
+          which animates the height without animating a height. */}
+      <div
+        className={cn(
+          'grid transition-[grid-template-rows,opacity] duration-[var(--dur-3)] ease-[var(--ease-out)]',
+          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+        )}
+        inert={!open}
+      >
+        <div className="min-h-0 overflow-hidden">
+          {seen ? (
+            <ol className="mt-2.5 flex flex-col gap-1">
+              {entries.map((e) => (
+                <li
+                  key={e.id}
+                  className="row-hover -mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-0.5 text-[0.78125rem]"
+                >
+                  <Avatar name={e.actor_id} size={16} />
+                  <span className="text-fg-muted min-w-0 flex-1">
+                    <span className="text-fg">{e.actor_id}</span> {describe(e)}
+                  </span>
+                  <RelativeTime iso={e.created_at} className="text-fg-subtle shrink-0 text-[0.6875rem]" />
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </div>
+      </div>
     </section>
   )
 }

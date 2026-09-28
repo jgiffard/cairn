@@ -66,7 +66,7 @@ const KnowledgeGraphPage = async () => {
     <div className="flex h-dvh flex-col overflow-hidden">
       {/* agents write knowledge while you are reading it */}
       <LiveUpdates />
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
+      <header className="page-header border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <Link
           href="/"
@@ -82,17 +82,26 @@ const KnowledgeGraphPage = async () => {
         <span className="text-fg text-[0.8125rem]">Map</span>
       </header>
 
-      <dl className="border-border grid shrink-0 grid-cols-2 border-b sm:grid-cols-3 lg:grid-cols-5">
+      {/* Five instruments over the map: glass, so the page's light passes
+          through them, each a label, a reading and what the reading means. */}
+      <dl className="grid shrink-0 grid-cols-2 gap-1.5 px-2.5 py-2 sm:grid-cols-3 md:px-4 lg:grid-cols-5">
         {figures.map(([value, label, note]) => (
-          <div key={label} className="border-border border-r border-b px-3 py-1.5 last:border-r-0">
-            <dt className="text-fg-subtle text-[0.68rem]">{label}</dt>
-            <dd className="text-fg text-[1.15rem] leading-tight font-medium tabular">{value}</dd>
+          <div
+            key={label}
+            className="border-border bg-surface/55 min-w-0 rounded-lg border px-3 py-1.5 shadow-[var(--shadow-sm),var(--highlight)] backdrop-blur-md"
+          >
+            <dt className="text-fg-subtle truncate text-[0.625rem] font-medium tracking-[0.08em] uppercase">
+              {label}
+            </dt>
+            <dd className="font-display text-fg text-[1.15rem] leading-tight font-medium tracking-tight tabular-nums">
+              {value}
+            </dd>
             {note ? <p className="text-fg-subtle truncate text-[0.65rem]">{note}</p> : null}
           </div>
         ))}
       </dl>
 
-      <div className="min-h-0 flex-1">
+      <div className="border-border/70 min-h-0 flex-1 border-t">
         <GraphView graph={graph} />
       </div>
     </div>

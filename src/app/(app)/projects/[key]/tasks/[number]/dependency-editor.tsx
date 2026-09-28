@@ -9,6 +9,8 @@ import Link from 'next/link'
 import { StatusIcon } from '@/components/icons'
 import type { TaskStatus } from '@/schemas/task'
 import type { Relation } from '@/lib/data'
+import { cn } from '@/lib/utils'
+import { LABEL } from './styles'
 
 type Direction = 'blocked-by' | 'blocks'
 
@@ -109,7 +111,10 @@ const Picker = ({
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div
+      className="pop flex flex-col gap-1"
+      style={{ '--origin': 'top' } as React.CSSProperties}
+    >
       <InlineInput
         ref={inputRef}
         value={query}
@@ -132,9 +137,12 @@ const Picker = ({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onPick(h.ref)}
               onMouseEnter={() => setCursor(i)}
-              className={`flex items-center gap-2 rounded-md px-1.5 py-1 text-left ${
-                i === cursor ? 'bg-surface-hover' : ''
-              }`}
+              // The cursor row wears the trail marker, as a selected row does
+              // anywhere else.
+              className={cn(
+                'flex items-center gap-2 rounded-md px-1.5 py-1 text-left transition-[background-color,box-shadow] duration-[var(--dur-1)]',
+                i === cursor && 'bg-surface-hover shadow-[inset_2px_0_0_color-mix(in_oklab,var(--accent)_70%,transparent)]',
+              )}
             >
               <StatusIcon status={h.status as TaskStatus} size={12} />
               <span className="text-fg-muted min-w-0 truncate text-[0.75rem]">{h.title}</span>
@@ -205,7 +213,7 @@ export const DependencyEditor = ({
         return (
           <div key={direction} className="group/dep flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-fg-subtle text-[0.6875rem] font-medium">{TITLE[direction]}</span>
+              <span className={LABEL}>{TITLE[direction]}</span>
               <button
                 type="button"
                 disabled={busy}
@@ -228,7 +236,7 @@ export const DependencyEditor = ({
               {items.map((r) => (
                 <div
                   key={r.id}
-                  className="hover:bg-surface-hover group/row -mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors"
+                  className="row-hover group/row -mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-1"
                 >
                   <StatusIcon status={r.status as TaskStatus} size={13} />
                   <Link

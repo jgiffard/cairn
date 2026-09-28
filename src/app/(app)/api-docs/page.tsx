@@ -17,7 +17,7 @@ const ApiDocsPage = () => (
   <div className="h-full overflow-y-auto">
     <ApiReference specUrl="/api/v1/openapi.json" />
     <noscript>
-      <div className="p-8">
+      <div className="surface-card m-8 max-w-xl p-5">
         <p className="text-sm">
           The interactive reference needs JavaScript. The raw document is at{' '}
           <a className="text-accent underline" href="/api/v1/openapi.json">

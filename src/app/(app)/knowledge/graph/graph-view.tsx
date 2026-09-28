@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic'
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
 import { Box, Map as MapIcon } from 'lucide-react'
 import { Select } from '@/components/ui/control'
+import { cn } from '@/lib/utils'
 import { GraphFlat } from './graph-flat'
 import { spotlightOptions, type Spotlight } from '@/lib/graph-spotlight'
 import type { KnowledgeGraph } from '@/lib/api/knowledge-graph'
@@ -29,6 +30,19 @@ const GraphScene = dynamic(() => import('./graph-scene'), {
 })
 
 type Props = { graph: KnowledgeGraph }
+
+/**
+ * The material every piece of chrome over the map is made of: translucent
+ * enough that the map stays visible through it, blurred so a node behind the
+ * legend reads as depth rather than clutter, and lit along its top edge.
+ */
+const GLASS = 'border-border bg-surface/80 raised border backdrop-blur-md'
+
+const SEGMENT =
+  'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] transition-[color,background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]'
+const SEGMENT_ON = 'bg-surface-raised text-fg shadow-[var(--highlight),0_0_0_1px_var(--border-strong)]'
+const SEGMENT_OFF = 'text-fg-subtle hover:text-fg'
+
 
 type Mode = 'scene' | 'flat'
 
@@ -127,7 +141,7 @@ export const GraphView = ({ graph }: Props) => {
   const hoveredMissing = focused ? graph.missing.find((m) => m.slug === focused) : null
 
   return (
-    <div className="bg-bg relative h-full w-full overflow-hidden">
+    <div className="relative h-full w-full overflow-hidden">
       {mode === 'scene' && able ? (
         <GraphScene graph={graph} focused={focused} onHover={setFocused} spotlight={spotlight} />
       ) : (
@@ -142,7 +156,7 @@ export const GraphView = ({ graph }: Props) => {
       {/* What is under the pointer. One bar, written once, over either
           renderer — hovering a node has to mean the same thing in both or the
           toggle stops being a change of view and becomes a change of page. */}
-      <div className="border-border bg-surface/90 text-fg-subtle pointer-events-none absolute top-2 left-2 max-w-[min(42rem,calc(100%-1rem))] truncate rounded-md border px-2.5 py-1.5 text-[0.7rem] backdrop-blur">
+      <div className={cn(GLASS, 'text-fg-subtle pointer-events-none absolute top-2 left-2 max-w-[min(42rem,calc(100%-1rem))] truncate rounded-lg px-2.5 py-1.5 text-[0.7rem]')}>
         {hovered ? (
           <span className="text-fg">
             {hovered.title}
@@ -198,7 +212,7 @@ export const GraphView = ({ graph }: Props) => {
           same question without moving anything, which is also more honest —
           you see how scattered a project's knowledge really is rather than a
           clump the layout invented. */}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2">
+      <div className="absolute top-2 left-1/2 flex -translate-x-1/2 rounded-md shadow-[var(--shadow-md)]">
         <Select
           size="sm"
           aria-label="Light up one project or entity"
@@ -243,18 +257,14 @@ export const GraphView = ({ graph }: Props) => {
         <div
           role="group"
           aria-label="How to draw the map"
-          className="border-border bg-surface/90 absolute top-2 right-2 flex items-center gap-0.5 rounded-md border p-0.5 backdrop-blur"
+          className={cn(GLASS, 'absolute top-2 right-2 flex items-center gap-0.5 rounded-full p-0.5')}
         >
           <button
             type="button"
             aria-pressed={mode === 'scene'}
             onClick={() => choose('scene')}
             title="Spatial — drag to orbit"
-            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[0.7rem] transition-colors ${
-              mode === 'scene'
-                ? 'bg-surface-raised text-fg'
-                : 'text-fg-subtle hover:text-fg'
-            }`}
+            className={cn(SEGMENT, mode === 'scene' ? SEGMENT_ON : SEGMENT_OFF)}
           >
             <Box size={12} aria-hidden />
             Spatial
@@ -264,9 +274,7 @@ export const GraphView = ({ graph }: Props) => {
             aria-pressed={mode === 'flat'}
             onClick={() => choose('flat')}
             title="Flat — every entry visible at once"
-            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[0.7rem] transition-colors ${
-              mode === 'flat' ? 'bg-surface-raised text-fg' : 'text-fg-subtle hover:text-fg'
-            }`}
+            className={cn(SEGMENT, mode === 'flat' ? SEGMENT_ON : SEGMENT_OFF)}
           >
             <MapIcon size={12} aria-hidden />
             Flat
@@ -278,7 +286,7 @@ export const GraphView = ({ graph }: Props) => {
           thing asked after ten minutes of looking at this. Every mark on the
           map means something and none of it was stated where it was being
           read. */}
-      <dl className="border-border bg-surface/90 text-fg-subtle pointer-events-none absolute bottom-2 left-2 hidden space-y-1 rounded-md border px-2.5 py-2 text-[0.68rem] backdrop-blur sm:block">
+      <dl className={cn(GLASS, 'text-fg-subtle pointer-events-none absolute bottom-2 left-2 hidden space-y-1 rounded-lg px-2.5 py-2 text-[0.68rem] sm:block')}>
         <div className="flex items-center gap-2">
           <svg width="26" height="10" aria-hidden className="shrink-0">
             <circle cx="5" cy="5" r="2" fill="var(--fg-muted)" />

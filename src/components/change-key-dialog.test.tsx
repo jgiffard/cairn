@@ -17,12 +17,12 @@ describe('ChangeKeyDialog', () => {
   let root: ReturnType<typeof createRoot>
   let onChanged: ReturnType<typeof vi.fn>
 
-  const input = () => container.querySelector('input') as HTMLInputElement
+  const input = () => document.body.querySelector('input') as HTMLInputElement
   const submit = () =>
-    [...container.querySelectorAll('button')].find((b) =>
+    [...document.body.querySelectorAll('button')].find((b) =>
       /^(Change|Changing)/.test(b.textContent?.trim() ?? ''),
     ) as HTMLButtonElement
-  const hint = () => container.querySelector('#change-key-hint')?.textContent ?? ''
+  const hint = () => document.body.querySelector('#change-key-hint')?.textContent ?? ''
 
   const type = async (value: string) => {
     await act(async () => {
@@ -59,7 +59,7 @@ describe('ChangeKeyDialog', () => {
   })
 
   it('explains that old refs keep resolving and the old key is spent', () => {
-    const text = container.textContent ?? ''
+    const text = document.body.textContent ?? ''
     expect(text).toContain('Old refs keep working')
     expect(text).toContain('HOL stays reserved for this project')
     expect(text).toContain('No other project can ever take it')

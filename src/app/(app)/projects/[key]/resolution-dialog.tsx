@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { RESOLUTION_KINDS, type ResolutionKind, type TaskStatus } from '@/schemas/task'
 import { Button, Select, Textarea, InlineInput } from '@/components/ui/control'
 import { resolutionSuggestion } from '@/lib/checkpoint-origin'
@@ -69,13 +70,20 @@ export const ResolutionDialog = ({
     if (!ok) setPending(false)
   }
 
-  return (
+  // Portalled to the body. It is opened from inside a list row, a board and
+  // the task sidebar, and any of those gaining a transform — an entrance, a
+  // hover lift — would become the box this `fixed` layer is fixed to, and the
+  // dialog would open inside a 36px row. It is only ever mounted by an
+  // interaction, so there is always a document by then.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="scrim fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={onCancel}
     >
       <div
-        className="bg-surface border-border w-full max-w-md rounded-lg border p-4 raised-lg"
+        // The lit edge: a line of the accent's glow along the top, where the
+        // light from above would catch the panel.
+        className="bg-surface border-border enter-sheet relative w-full max-w-md rounded-xl border p-4 raised-lg before:pointer-events-none before:absolute before:inset-x-10 before:-top-px before:h-px before:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-sm font-semibold">
@@ -149,6 +157,7 @@ export const ResolutionDialog = ({
         </div>
         <p className="text-fg-subtle mt-2 text-[0.6875rem]">⌘↵ to save</p>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

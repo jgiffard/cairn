@@ -50,12 +50,12 @@ export const MobileNav = ({
       {open && (
         <div className="fixed inset-0 z-50 flex md:hidden">
           <div
-            className="absolute inset-0 bg-black/55"
+            className="scrim absolute inset-0"
             onClick={() => setOpen(false)}
             role="presentation"
           />
           <aside
-            className="bg-bg-elevated border-border relative flex w-[16.875rem] max-w-[82vw] flex-col border-r raised-lg"
+            className="app-sidebar enter-sheet relative flex w-[16.875rem] max-w-[82vw] flex-col raised-lg"
             /* Keyed on the path so a navigation rebuilds it collapsed, rather
                than leaving a filter box half-typed from the last visit. */
             key={pathname}

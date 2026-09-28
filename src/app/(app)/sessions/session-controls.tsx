@@ -34,7 +34,7 @@ export const SessionControls = ({
   }
 
   return (
-    <div className="border-border flex h-[2.625rem] shrink-0 items-center gap-2 border-b px-3 sm:px-4">
+    <div className="border-border/70 flex h-[2.625rem] shrink-0 items-center gap-2 border-b px-3 sm:px-4">
       {pending && <Spinner size={13} />}
       <Select
         size="sm"

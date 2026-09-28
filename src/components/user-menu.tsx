@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 import { Avatar } from '@/components/icons'
 import { Spinner } from '@/components/spinner'
+import { cn } from '@/lib/utils'
 
 /**
  * The sidebar footer.
@@ -68,7 +69,7 @@ export const UserMenu = ({
   }
 
   const item =
-    'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.78125rem] text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg'
+    'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.78125rem] text-fg-muted transition-colors duration-[var(--dur-1)]'
 
   return (
     <div ref={wrap} className="border-border relative border-t p-1.5">
@@ -77,7 +78,7 @@ export const UserMenu = ({
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="hover:bg-surface-hover flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors"
+        className="hover:bg-surface-hover aria-expanded:bg-surface-hover flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
       >
         <Avatar name={email} size={18} />
         <span className="text-fg-muted min-w-0 flex-1 truncate text-left text-[0.75rem]" title={email}>
@@ -93,7 +94,11 @@ export const UserMenu = ({
       {open && (
         <div
           role="menu"
-          className="border-border bg-surface absolute bottom-[calc(100%-2px)] left-1.5 right-1.5 z-50 overflow-hidden rounded-md border py-1 raised"
+          className={cn(
+            'border-border bg-surface/85 raised-lg enter-pop absolute right-1.5 bottom-[calc(100%-2px)] left-1.5 z-50 overflow-hidden rounded-lg border py-1 backdrop-blur-xl backdrop-saturate-150',
+            'before:pointer-events-none before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]',
+          )}
+          style={{ '--origin': 'bottom left' } as React.CSSProperties}
         >
           <Link
             href="/settings"
@@ -102,7 +107,7 @@ export const UserMenu = ({
               setOpen(false)
               onNavigate?.()
             }}
-            className={item}
+            className={cn(item, 'row-hover hover:text-fg')}
           >
             <SettingsIcon size={13} aria-hidden />
             Settings
@@ -116,7 +121,7 @@ export const UserMenu = ({
                 setOpen(false)
                 onNavigate?.()
               }}
-              className={item}
+              className={cn(item, 'row-hover hover:text-fg')}
             >
               <Users size={13} aria-hidden />
               Users and access
@@ -131,20 +136,23 @@ export const UserMenu = ({
               // The `?` handler lives on the shortcuts overlay itself.
               document.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }))
             }}
-            className={item}
+            className={cn(item, 'row-hover hover:text-fg')}
           >
             <Keyboard size={13} aria-hidden />
             Keyboard shortcuts
           </button>
 
-          <div className="border-border my-1 border-t" />
+          <div className="border-border mx-2 my-1 border-t" />
 
           <button
             type="button"
             role="menuitem"
             disabled={busy}
             onClick={() => void signOut()}
-            className={`${item} text-danger hover:bg-danger-subtle hover:text-danger disabled:opacity-60`}
+            className={cn(
+              item,
+              'text-danger hover:bg-danger-subtle hover:text-danger hover:shadow-[inset_2px_0_0_color-mix(in_oklab,var(--danger)_70%,transparent)] disabled:opacity-60',
+            )}
           >
             {busy ? <Spinner size={13} /> : <LogOut size={13} aria-hidden />}
             {busy ? 'Signing out…' : 'Sign out'}

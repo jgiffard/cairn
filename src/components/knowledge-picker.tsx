@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { InlineInput } from '@/components/ui/control'
 import { cn } from '@/lib/utils'
+import { EmptyState } from '@/components/empty-state'
 
 type Hit = { slug: string; title: string }
 
@@ -124,13 +125,18 @@ export const KnowledgePicker = ({
       {touched && query.trim().length >= 2 && (
         <ul
           className={cn(
-            'border-border bg-bg-elevated raised-lg absolute z-30 mt-1 w-full overflow-hidden rounded-md border',
+            'border-border bg-surface/85 raised-lg enter-pop absolute z-30 mt-1 w-full rounded-lg border p-1 backdrop-blur-md',
             'max-h-[15rem] overflow-y-auto',
           )}
+          style={{ '--origin': 'top left' } as React.CSSProperties}
         >
           {hits.length === 0 ? (
-            <li className="text-fg-subtle px-2.5 py-2 text-[0.75rem]">
-              {busy ? 'Searching…' : 'Nothing matches.'}
+            <li>
+              {busy ? (
+                <p className="text-fg-subtle px-2.5 py-2 text-[0.75rem]">Searching…</p>
+              ) : (
+                <EmptyState compact title="Nothing matches." />
+              )}
             </li>
           ) : (
             hits.map((hit) => (
@@ -143,7 +149,7 @@ export const KnowledgePicker = ({
                     setHits([])
                     setTouched(false)
                   }}
-                  className="hover:bg-surface-raised flex w-full flex-col gap-0.5 px-2.5 py-1.5 text-left"
+                  className="hover:bg-accent-subtle focus-visible:bg-accent-subtle flex w-full flex-col gap-0.5 rounded-md px-2.5 py-1.5 text-left transition-[background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)] outline-none hover:shadow-[inset_2px_0_0_var(--accent)] focus-visible:shadow-[inset_2px_0_0_var(--accent)]"
                 >
                   <span className="text-fg truncate text-[0.8125rem]">{hit.title}</span>
                   <span className="text-fg-subtle truncate font-mono text-[0.6875rem]">

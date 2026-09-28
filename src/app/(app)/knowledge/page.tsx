@@ -2,13 +2,14 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { LiveUpdates } from '@/components/live-updates'
 import Link from 'next/link'
-import { ChevronRight, Waypoints } from 'lucide-react'
+import { ChevronRight, Info, Waypoints } from 'lucide-react'
 import { currentUser, listProjects } from '@/lib/data'
 import { countKnowledge, listKnowledge, supersededByInfo } from '@/lib/api/knowledge'
 import { listEntities } from '@/lib/api/entities'
 import { searchAll } from '@/lib/api/search'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { BrandName } from '@/components/brand'
+import { EmptyState } from '@/components/empty-state'
 import { KnowledgeControls } from './knowledge-controls'
 import { KnowledgeList, type KnowledgeListItem } from './knowledge-list'
 
@@ -140,7 +141,7 @@ const KnowledgePage = async ({
     <div className="flex h-dvh flex-col">
       {/* agents write knowledge while you are reading it */}
       <LiveUpdates />
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
+      <header className="page-header border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <Link
           href="/"
@@ -155,7 +156,7 @@ const KnowledgePage = async ({
             answers a different question from "12" and is the one being asked.
             And if the page ever caps again, admit it rather than silently
             showing a prefix. */}
-        <span className="text-fg-subtle ml-auto hidden text-[0.75rem] sm:block">
+        <span className="text-fg-subtle ml-auto hidden text-[0.75rem] tabular-nums sm:block">
           {narrowed
             ? `${items.length} of ${total} ${total === 1 ? 'entry' : 'entries'}`
             : `${total} ${total === 1 ? 'entry' : 'entries'}`}
@@ -169,7 +170,7 @@ const KnowledgePage = async ({
             is. */}
         <Link
           href="/knowledge/graph"
-          className="border-border text-fg-muted hover:text-fg hover:border-fg-subtle ml-3 flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[0.75rem] transition-colors"
+          className="border-border bg-surface text-fg-muted hover:text-fg hover:border-border-strong hover:bg-surface-raised ml-3 flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[0.75rem] shadow-[var(--shadow-sm),var(--highlight)] transition-colors duration-[var(--dur-1)]"
         >
           <Waypoints size={13} aria-hidden />
           Map
@@ -191,13 +192,16 @@ const KnowledgePage = async ({
           and "entity" means nothing to someone meeting it here for the first
           time. Said once, at the top, rather than in a tooltip nobody opens. */}
       {!query && (
-        <p className="border-border text-fg-subtle bg-bg-elevated border-b px-4 py-2 text-[0.71875rem] leading-relaxed">
-          Scope is how widely a fact applies:{' '}
-          <span className="text-fg-muted">a project</span> (true of that codebase),{' '}
-          <span className="text-fg-muted">an entity</span> — a grouping a fact can be true
-          of, like a business, a stack or a subsystem — or{' '}
-          <span className="text-fg-muted">everywhere</span>. Narrower wins, so a project
-          fact is shown ahead of one that merely applies to it.
+        <p className="border-border/70 text-fg-subtle flex items-start gap-2 border-b px-4 py-2 text-[0.71875rem] leading-relaxed">
+          <Info size={12} className="mt-[0.1875rem] shrink-0 opacity-70" aria-hidden />
+          <span>
+            Scope is how widely a fact applies:{' '}
+            <span className="text-fg-muted">a project</span> (true of that codebase),{' '}
+            <span className="text-fg-muted">an entity</span> — a grouping a fact can be true
+            of, like a business, a stack or a subsystem — or{' '}
+            <span className="text-fg-muted">everywhere</span>. Narrower wins, so a project
+            fact is shown ahead of one that merely applies to it.
+          </span>
         </p>
       )}
 
@@ -205,9 +209,9 @@ const KnowledgePage = async ({
         {failure ? (
           <p className="text-danger px-4 py-8 text-[0.8125rem]">{failure}</p>
         ) : items.length === 0 ? (
-          <div className="text-fg-subtle px-4 py-12 text-center text-[0.8125rem]">
-            <p>{query ? `Nothing found for "${query}".` : 'No knowledge matches these filters.'}</p>
-          </div>
+          <EmptyState
+            title={query ? `Nothing found for "${query}".` : 'No knowledge matches these filters.'}
+          />
         ) : (
           <KnowledgeList items={items} />
         )}

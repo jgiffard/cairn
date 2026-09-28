@@ -8,8 +8,11 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { MarkdownView } from '@/components/markdown'
 import type { Comment } from '@/lib/data'
-import { Button, Textarea } from '@/components/ui/control'
+import { Avatar } from '@/components/icons'
+import { Button } from '@/components/ui/control'
 import { useMutate } from '@/lib/api/use-mutate'
+import { cn } from '@/lib/utils'
+import { COMPOSER, COUNT, LABEL } from './styles'
 
 /** Conversation aimed at the human, kept separate from the agent work log. */
 export const CommentsPanel = ({
@@ -52,20 +55,21 @@ export const CommentsPanel = ({
 
   return (
     <section>
-      <h2 className="text-fg-muted mb-2.5 flex items-center gap-2 text-[0.6875rem] font-medium">
+      <h2 className={cn(LABEL, 'mb-2.5 flex items-center gap-2')}>
         Comments
-        <span className="tabular text-fg-subtle">{comments.length}</span>
+        <span className={COUNT}>{comments.length}</span>
       </h2>
 
       {comments.length > 0 && (
-        <ul className="mb-3 flex flex-col gap-3">
+        <ul className="stagger mb-3 flex flex-col gap-2">
           {comments.map((c) => (
-            <li key={c.id} className="border-border border-l-2 pl-3">
-              <div className="mb-0.5 flex items-center gap-2 text-[0.6875rem]">
-                <span className={c.actor_type === 'agent' ? 'text-accent' : 'text-fg-subtle'}>
+            <li key={c.id} className="surface-card px-3 py-2">
+              <div className="mb-1 flex items-center gap-2 text-[0.6875rem]">
+                <Avatar name={c.actor_id} size={16} />
+                <span className={c.actor_type === 'agent' ? 'text-accent' : 'text-fg-muted'}>
                   {c.actor_id}
                 </span>
-                <span className="text-fg-subtle tabular">
+                <span className="text-fg-subtle tabular ml-auto">
                   <RelativeTime iso={c.created_at} />
                 </span>
               </div>
@@ -75,8 +79,10 @@ export const CommentsPanel = ({
         </ul>
       )}
 
-      <div className="flex gap-2">
-        <Textarea
+      {/* The same shell as the work log's composer, so the page has one way
+          of writing into it. */}
+      <div className={COMPOSER}>
+        <textarea
           rows={2}
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -84,17 +90,24 @@ export const CommentsPanel = ({
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
           }}
           placeholder="Add a comment…"
-          className="min-w-0 flex-1"
+          aria-label="Add a comment"
+          className="text-fg placeholder:text-fg-subtle block max-h-[40vh] min-h-[3.625rem] w-full resize-y bg-transparent px-3 py-2.5 text-[0.8125rem] leading-relaxed outline-none"
         />
-        <Button
-          size="sm"
-          variant="primary"
-          onClick={submit}
-          disabled={!text.trim() || pending}
-          className="w-auto self-end px-3"
-        >
-          {pending ? <Spinner /> : 'Post'}
-        </Button>
+        <div className="border-border/70 flex items-center gap-2 border-t px-2 py-1.5">
+          <span className="text-fg-subtle ml-auto hidden text-[0.6875rem] sm:block">
+            <kbd className="kbd inline-flex">⌘</kbd>
+            <kbd className="kbd ml-0.5 inline-flex">↵</kbd>
+          </span>
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={submit}
+            disabled={!text.trim() || pending}
+            className="w-auto px-3"
+          >
+            {pending ? <Spinner /> : 'Post'}
+          </Button>
+        </div>
       </div>
     </section>
   )
