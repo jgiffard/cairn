@@ -22,7 +22,7 @@ const serve = (seen: Seen, projects: string[] = []) =>
       req.on('data', (c) => { body += c })
       req.on('end', () => {
         res.writeHead(200, { 'content-type': 'application/json' })
-        if (req.method === 'GET' && req.url === '/api/v1/projects?archived=1') {
+        if (req.method === 'GET' && req.url === '/api/v1/projects') {
           res.end(JSON.stringify({ success: true, data: projects.map((key) => ({ key, former_keys: [] })) }))
           return
         }

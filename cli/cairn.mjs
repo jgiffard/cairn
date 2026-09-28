@@ -1482,7 +1482,10 @@ const refreshProjectKeys = async (force) => {
   } catch { /* never fetched */ }
   refreshingKeys = true
   try {
-    const res = await fetch(`${BASE}/api/v1/projects?archived=1`, {
+    // Active projects only, with the keys they used to have. An archived
+    // project is history: when a project moves to another instance, the copy
+    // left behind is archived, and it must not keep claiming the moved refs.
+    const res = await fetch(`${BASE}/api/v1/projects`, {
       headers: authHeaders(),
       // A hint, so never allowed to hold up the answer longer than the answer itself could.
       signal: AbortSignal.timeout(Math.min(DEADLINE_MS, 3_000)),

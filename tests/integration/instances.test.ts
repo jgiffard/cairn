@@ -16,7 +16,7 @@ const cli = join(process.cwd(), 'cli', 'cairn.mjs')
 type Seen = { auth?: string; path?: string; body?: string }[]
 
 /**
- * The routing cache refresh (`GET /api/v1/projects?archived=1`) is answered
+ * The routing cache refresh (`GET /api/v1/projects`) is answered
  * with `projects` and kept out of `seen`, so each test counts the commands it
  * ran and nothing else.
  */
@@ -26,7 +26,7 @@ const serve = (seen: Seen, status = 200, projects: string[] = []) =>
       let body = ''
       req.on('data', (c) => { body += c })
       req.on('end', () => {
-        if (req.method === 'GET' && req.url === '/api/v1/projects?archived=1') {
+        if (req.method === 'GET' && req.url === '/api/v1/projects') {
           res.writeHead(200, { 'content-type': 'application/json' })
           res.end(JSON.stringify({ success: true, data: projects.map((key) => ({ key, former_keys: [] })) }))
           return
