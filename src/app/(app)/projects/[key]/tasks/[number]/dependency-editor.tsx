@@ -141,7 +141,7 @@ const Picker = ({
               // anywhere else.
               className={cn(
                 'flex items-center gap-2 rounded-md px-1.5 py-1 text-left transition-[background-color,box-shadow] duration-[var(--dur-1)]',
-                i === cursor && 'bg-surface-hover shadow-[inset_2px_0_0_color-mix(in_oklab,var(--accent)_70%,transparent)]',
+                i === cursor && 'bg-surface-hover shadow-[inset_2px_0_0_var(--accent)]',
               )}
             >
               <StatusIcon status={h.status as TaskStatus} size={12} />

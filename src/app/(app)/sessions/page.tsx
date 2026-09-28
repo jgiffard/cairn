@@ -172,7 +172,7 @@ const SessionsPage = async ({
               <div className="flex justify-center py-4">
                 <PendingLink
                   href={nextHref}
-                  className="border-border bg-surface text-fg-muted hover:bg-surface-raised hover:border-border-strong hover:text-fg rounded-md border px-3 py-1.5 text-[0.75rem] shadow-[var(--shadow-sm),var(--highlight)] transition-colors duration-[var(--dur-1)]"
+                  className="border-border bg-surface text-fg-muted hover:bg-surface-raised hover:border-border-strong hover:text-fg rounded-md border px-3 py-1.5 text-[0.75rem] transition-colors duration-[var(--dur-1)]"
                 >
                   Load older sessions
                 </PendingLink>

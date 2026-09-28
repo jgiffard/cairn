@@ -107,11 +107,11 @@ export const AlsoIn = ({
                   aria-pressed={on}
                   title={p.title}
                   className={cn(
-                    'rounded-full border px-1.5 py-0.5 font-mono text-[0.6875rem] transition-[color,border-color,background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',
-                    // On is lit, not filled: the accent at the rim and a
-                    // little of its glow, as the active marker is.
+                    'rounded-full border px-1.5 py-0.5 font-mono text-[0.6875rem] transition-[color,border-color,background-color] duration-[var(--dur-1)] ease-[var(--ease-out)]',
+                    // On is marked flatly: the accent at the rim and in the
+                    // text, over the accent's subtle fill.
                     on
-                      ? 'border-accent/70 text-accent bg-accent/[0.06] shadow-[0_0_8px_-2px_var(--glow)]'
+                      ? 'border-accent/70 text-accent bg-accent-subtle'
                       : 'border-border text-fg-subtle hover:text-fg hover:border-border-strong hover:bg-surface-hover',
                   )}
                 >

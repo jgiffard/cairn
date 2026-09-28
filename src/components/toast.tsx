@@ -65,9 +65,9 @@ const Row = ({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number) => vo
       ref={ref}
       role="status"
       className={cn(
-        'border-border bg-surface/85 raised-lg enter-rise pointer-events-auto relative flex max-w-[min(420px,calc(100vw-2rem))] items-start gap-2 overflow-hidden rounded-lg border py-2 pr-3 pl-3.5 backdrop-blur-xl backdrop-saturate-150',
+        'border-border bg-surface raised-lg enter-rise pointer-events-auto relative flex max-w-[min(420px,calc(100vw-2rem))] items-start gap-2 overflow-hidden rounded-lg border py-2 pr-3 pl-3.5',
         // The tone, as a thin edge of its colour down the left.
-        'before:bg-danger before:absolute before:inset-y-2 before:left-0 before:w-[2px] before:rounded-full before:shadow-[0_0_8px_color-mix(in_oklab,var(--danger)_60%,transparent)]',
+        'before:bg-danger before:absolute before:inset-y-2 before:left-0 before:w-[2px] before:rounded-full',
       )}
     >
       <CircleAlert size={14} className="text-danger mt-[0.1875rem] shrink-0" aria-hidden />

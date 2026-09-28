@@ -30,7 +30,7 @@ export const HealthBanner = async ({ userId }: { userId: string }) => {
     return (
       <Link
         href="/vitals"
-        className="border-border bg-surface-raised/50 hover:bg-surface-raised/80 enter-rise flex shrink-0 items-center gap-2 border-b px-3 py-1 shadow-[var(--highlight)] backdrop-blur-md transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)] md:px-4"
+        className="border-border bg-bg-elevated hover:bg-surface-raised enter-rise flex shrink-0 items-center gap-2 border-b px-3 py-1 transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)] md:px-4"
       >
         <HelpCircle size={12} className="text-fg-subtle shrink-0" aria-hidden />
         <p className="text-fg-muted min-w-0 text-[0.71875rem]">
@@ -46,15 +46,15 @@ export const HealthBanner = async ({ userId }: { userId: string }) => {
     <Link
       href="/vitals"
       className={[
-        'enter-rise flex shrink-0 items-start gap-2 border-b px-3 py-2 shadow-[var(--highlight)] backdrop-blur-md md:px-4',
+        'enter-rise flex shrink-0 items-start gap-2 border-b px-3 py-2 md:px-4',
         'border-[color:color-mix(in_oklab,var(--danger)_30%,transparent)]',
-        'bg-[linear-gradient(90deg,color-mix(in_oklab,var(--danger)_16%,transparent),color-mix(in_oklab,var(--danger)_6%,transparent)_70%)]',
-        'transition-[background-color] duration-[var(--dur-1)] ease-[var(--ease-out)] hover:bg-[color:color-mix(in_oklab,var(--danger)_6%,transparent)]',
+        'bg-[color-mix(in_oklab,var(--danger)_8%,transparent)]',
+        'transition-[background-color] duration-[var(--dur-1)] ease-[var(--ease-out)] hover:bg-[color-mix(in_oklab,var(--danger)_12%,transparent)]',
       ].join(' ')}
     >
       <AlertTriangle
         size={13}
-        className="text-danger mt-[2px] shrink-0 drop-shadow-[0_0_6px_color-mix(in_oklab,var(--danger)_55%,transparent)]"
+        className="text-danger mt-[2px] shrink-0"
         aria-hidden
       />
       <p className="text-fg min-w-0 text-[0.78125rem] leading-relaxed">

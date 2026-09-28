@@ -135,24 +135,21 @@ const components: Components = {
       </a>
     )
   },
-  // The trail marker as a quote's edge: the accent's line down the left and
-  // a little of its light across the face.
+  // The trail marker as a quote's edge: the accent's line down the left, on
+  // a bare face.
   blockquote: ({ className, ...p }) => (
     <blockquote
       className={cn(
         MEASURE,
         'text-fg-muted mb-3 rounded-r-md py-1 pr-3 pl-3.5 text-sm last:mb-0',
-        'bg-[linear-gradient(90deg,color-mix(in_oklab,var(--accent)_6%,transparent),transparent_70%)]',
         'shadow-[inset_2px_0_0_color-mix(in_oklab,var(--accent)_60%,transparent)]',
         className,
       )}
       {...dom(p)}
     />
   ),
-  // A hairline that fades out at both ends, as the page header's does.
-  hr: () => (
-    <hr className="my-5 h-px border-0 bg-[linear-gradient(90deg,transparent,var(--border-strong)_15%,var(--border-strong)_85%,transparent)]" />
-  ),
+  // A plain hairline, as the page header's is.
+  hr: () => <hr className="bg-border my-5 h-px border-0" />,
   strong: ({ className, ...p }) => <strong className={cn('text-fg font-semibold', className)} {...dom(p)} />,
   code: ({ className, children, ...rest }) => {
     // react-markdown gives fenced blocks a language-* class; bare inline code
@@ -169,7 +166,7 @@ const components: Components = {
     // a box that competes with the words around it.
     return (
       <code
-        className="bg-surface-raised text-fg rounded-[0.3125rem] px-[0.3em] py-px font-mono text-[0.78125rem] break-words shadow-[inset_0_0_0_1px_var(--border)]"
+        className="bg-surface-raised text-fg rounded-[0.3125rem] px-[0.3em] py-px font-mono text-[0.78125rem] break-words ring-1 ring-border ring-inset"
         {...dom(rest)}
       >
         {children}
@@ -180,11 +177,11 @@ const components: Components = {
   table: ({ className, ...p }) => (
     // Its own scroll container, so a wide table never makes the page body
     // scroll sideways.
-    <div className="border-border mb-3 overflow-x-auto rounded-lg border shadow-[var(--highlight)] last:mb-0">
+    <div className="border-border mb-3 overflow-x-auto rounded-lg border last:mb-0">
       <table
         className={cn(
           'w-full border-collapse text-[0.78125rem] tabular-nums',
-          '[&_tbody_tr]:transition-colors [&_tbody_tr]:duration-[var(--dur-1)] [&_tbody_tr:hover]:bg-surface-hover/60',
+          '[&_tbody_tr]:transition-colors [&_tbody_tr]:duration-[var(--dur-1)] [&_tbody_tr:hover]:bg-surface-hover',
           '[&_tbody_tr:last-child>td]:border-b-0',
           className,
         )}
@@ -195,7 +192,7 @@ const components: Components = {
   th: ({ className, ...p }) => (
     <th
       className={cn(
-        'border-border bg-surface-raised/60 text-fg-muted border-b px-2.5 py-1.5 text-left text-[0.6875rem] font-medium',
+        'border-border bg-surface-raised text-fg-muted border-b px-2.5 py-1.5 text-left text-[0.6875rem] font-medium',
         className,
       )}
       {...dom(p)}

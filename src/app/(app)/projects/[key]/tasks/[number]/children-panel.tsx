@@ -95,7 +95,7 @@ export const ChildrenPanel = ({
             aria-label={`${pct}% closed`}
           >
             <div
-              className="bg-status-done h-full rounded-full shadow-[0_0_6px_color-mix(in_oklab,var(--status-done)_60%,transparent)]"
+              className="bg-status-done h-full rounded-full"
               style={{ width: `${pct}%` }}
             />
           </div>

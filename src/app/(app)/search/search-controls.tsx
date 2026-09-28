@@ -122,7 +122,7 @@ export const SearchControls = ({
   return (
     <div className="border-border/70 flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:h-[2.625rem] sm:flex-row sm:items-center sm:px-4 sm:py-0">
       {/* The one field on the page that matters, so it is drawn as a field:
-          a well with the accent halo on focus, rather than bare text on the
+          a well whose rim turns to the accent on focus, rather than bare text on the
           bar that only a blinking caret distinguished from a label. */}
       <div className="relative flex min-w-0 flex-1 items-center">
         <span

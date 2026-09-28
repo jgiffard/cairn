@@ -94,10 +94,7 @@ export const UserMenu = ({
       {open && (
         <div
           role="menu"
-          className={cn(
-            'border-border bg-surface/85 raised-lg enter-pop absolute right-1.5 bottom-[calc(100%-2px)] left-1.5 z-50 overflow-hidden rounded-lg border py-1 backdrop-blur-xl backdrop-saturate-150',
-            'before:pointer-events-none before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]',
-          )}
+          className="border-border bg-surface raised-lg enter-pop absolute right-1.5 bottom-[calc(100%-2px)] left-1.5 z-50 overflow-hidden rounded-lg border py-1"
           style={{ '--origin': 'bottom left' } as React.CSSProperties}
         >
           <Link
@@ -151,7 +148,7 @@ export const UserMenu = ({
             onClick={() => void signOut()}
             className={cn(
               item,
-              'text-danger hover:bg-danger-subtle hover:text-danger hover:shadow-[inset_2px_0_0_color-mix(in_oklab,var(--danger)_70%,transparent)] disabled:opacity-60',
+              'text-danger hover:bg-danger-subtle hover:text-danger hover:shadow-[inset_2px_0_0_var(--danger)] disabled:opacity-60',
             )}
           >
             {busy ? <Spinner size={13} /> : <LogOut size={13} aria-hidden />}

@@ -75,10 +75,7 @@ export const ChangeKeyDialog = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="change-key-title"
-        className={cn(
-          'border-border bg-surface/85 raised-lg enter-sheet relative flex w-full max-w-[28rem] flex-col overflow-hidden rounded-xl border backdrop-blur-xl backdrop-saturate-150',
-          'before:pointer-events-none before:absolute before:inset-x-10 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]',
-        )}
+        className="border-border bg-surface raised-lg enter-sheet relative flex w-full max-w-[28rem] flex-col overflow-hidden rounded-xl border"
         onClick={(e) => e.stopPropagation()}
       >
         <h2

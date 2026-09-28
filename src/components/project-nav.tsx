@@ -23,9 +23,8 @@ const Marker = ({ index }: { index: number }) => (
     aria-hidden
     className={cn(
       'bg-surface-raised pointer-events-none absolute inset-x-0.5 top-0 h-[1.75rem] rounded-md',
-      'shadow-[var(--highlight)] transition-[transform,opacity] duration-[var(--dur-3)] ease-[var(--ease-out)]',
+      'transition-[transform,opacity] duration-[var(--dur-3)] ease-[var(--ease-out)]',
       'before:bg-accent before:absolute before:inset-y-[0.375rem] before:-left-[2px] before:w-[2px] before:rounded-full',
-      'before:shadow-[0_0_8px_var(--glow)]',
       index < 0 && 'opacity-0',
     )}
     style={{ transform: `translateY(${Math.max(index, 0) * 1.75}rem)` }}

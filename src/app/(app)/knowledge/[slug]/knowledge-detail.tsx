@@ -43,9 +43,8 @@ type Revision = {
 
 type KeyTitle = { key: string; title: string }
 
-/** A scope chip that is also a link rises a pixel under the pointer. */
-const LIFT =
-  'inline-flex rounded-full transition-transform duration-[var(--dur-2)] ease-[var(--ease-out)] hover:-translate-y-px [&>span]:transition-colors hover:[&>span]:text-fg'
+/** A scope chip that is also a link brightens its text under the pointer. */
+const CHIP_LINK = 'inline-flex rounded-full [&>span]:transition-colors hover:[&>span]:text-fg'
 
 type SlugTitle = { slug: string; title: string }
 
@@ -282,7 +281,7 @@ export const KnowledgeDetail = ({
                   header already sends them. */}
               <span className="flex flex-wrap items-center gap-1">
                 {current.projects.map((p) => (
-                  <Link key={p} href={`/projects/${p}`} className={LIFT}>
+                  <Link key={p} href={`/projects/${p}`} className={CHIP_LINK}>
                     <TintPill color={projectColor(p)}>
                       <ProjectIcon size={10} projectKey={p} />
                       {p}
@@ -293,7 +292,7 @@ export const KnowledgeDetail = ({
                   <Link
                     key={e}
                     href={`/knowledge?entity=${encodeURIComponent(e)}`}
-                    className={LIFT}
+                    className={CHIP_LINK}
                   >
                     <TintPill color={entityColor(e)}>
                       <span
@@ -380,7 +379,7 @@ export const KnowledgeDetail = ({
                     />
                     <span
                       aria-hidden
-                      className="bg-fg-subtle absolute top-[0.25rem] left-0 h-1.5 w-2 rounded-full shadow-[0_0_0_3px_color-mix(in_oklab,var(--fg-subtle)_14%,transparent)]"
+                      className="bg-fg-subtle absolute top-[0.25rem] left-0 h-1.5 w-2 rounded-full"
                     />
                     <div className="text-fg-subtle flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.6875rem]">
                       <span className="text-fg-muted font-mono tabular-nums">v{r.revision}</span>

@@ -88,13 +88,13 @@ export const AttachmentsPanel = ({
           const file = e.dataTransfer.files[0]
           if (file) void upload(file)
         }}
-        // The rim and the light change, never the size in motion: padding
+        // The rim and the fill change, never the size in motion: padding
         // steps between states rather than animating the panel's height.
         className={cn(
           'border-border mb-2 rounded-lg border border-dashed text-center',
-          'transition-[border-color,background-color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]',
+          'transition-[border-color,background-color] duration-[var(--dur-2)] ease-[var(--ease-out)]',
           dragging
-            ? 'border-accent bg-accent/[0.06] p-3 shadow-[0_0_0_3px_color-mix(in_oklab,var(--ring)_18%,transparent)]'
+            ? 'border-accent bg-accent-subtle p-3'
             : attachments.length === 0
               ? 'border-transparent p-0 text-left'
               : 'hover:border-border-strong p-2',
@@ -134,7 +134,7 @@ export const AttachmentsPanel = ({
               key={a.id}
               className="surface-card surface-card-interactive group flex min-w-0 items-center gap-2.5 px-2 py-1.5"
             >
-              <span className="bg-surface-raised text-fg-subtle group-hover:text-fg-muted grid size-[1.75rem] shrink-0 place-items-center rounded-md shadow-[var(--highlight)] transition-colors duration-[var(--dur-2)]">
+              <span className="bg-surface-raised text-fg-subtle group-hover:text-fg-muted grid size-[1.75rem] shrink-0 place-items-center rounded-md transition-colors duration-[var(--dur-2)]">
                 {a.mime_type.startsWith('image/') ? <ImageIcon size={13} /> : <File size={13} />}
               </span>
               <span className="flex min-w-0 flex-1 flex-col">

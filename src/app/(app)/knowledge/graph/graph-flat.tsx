@@ -745,7 +745,7 @@ export const GraphFlat = ({ graph, focused, setFocused, spotlight }: Props) => {
       {/* A wheel is not the only way to zoom, and on a touch screen there is
           no wheel at all. Also the keyboard path into the map, since the nodes
           themselves are deliberately not tab stops. */}
-      <div className="border-border bg-surface/80 raised absolute right-2 bottom-2 flex items-center gap-0.5 rounded-full border p-0.5 backdrop-blur-md">
+      <div className="border-border bg-surface raised absolute right-2 bottom-2 flex items-center gap-0.5 rounded-full border p-0.5">
         {zoom !== 1 || pan.x !== 0 || pan.y !== 0 ? (
           <button
             type="button"

@@ -77,11 +77,9 @@ const FilterMenu = ({
         aria-label={`Filter by ${label}`}
         className={cn(
           'flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[0.75rem]',
-          'transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',
-          // An active filter is lit rather than painted: the accent in the rim
-          // and a faint halo of it, over the quietest accent wash.
+          'transition-[color,background-color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)]',
           selected.length > 0
-            ? 'border-accent/70 text-accent bg-accent-subtle/70 shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_10%,transparent)]'
+            ? 'border-accent/70 text-accent bg-accent-subtle'
             : 'border-border text-fg-muted hover:bg-surface-hover hover:text-fg hover:border-border-strong',
         )}
       >

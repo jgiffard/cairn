@@ -35,14 +35,9 @@ export const CodeBlock = ({ children, ...rest }: React.ComponentProps<'pre'>) =>
   }
 
   return (
-    // A card with its own lit edge: the accent catches the top rim faintly,
-    // the way light catches the edge of anything raised on this canvas.
+    // A flat card: one hairline round it, one under the language bar.
     <div className="group surface-card relative mb-3 overflow-hidden last:mb-0">
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,color-mix(in_oklab,var(--accent)_35%,transparent)_30%,color-mix(in_oklab,var(--accent)_35%,transparent)_70%,transparent)]"
-      />
-      <div className="border-border/60 bg-surface-raised/40 flex h-[1.75rem] items-center gap-2 border-b px-2.5">
+      <div className="border-border flex h-[1.75rem] items-center gap-2 border-b px-2.5">
         <span className="text-fg-subtle font-mono text-[0.65625rem] tracking-wide">
           {language ?? 'text'}
         </span>

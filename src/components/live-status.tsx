@@ -117,7 +117,7 @@ export const LiveStatusIndicator = () => {
       // to make. It stays reachable on demand instead.
       aria-label={`${look.label}. ${look.title}`}
       title={look.title}
-      className="border-border bg-surface/70 text-fg-subtle pointer-events-none fixed top-2.5 right-2.5 z-30 flex items-center gap-1.5 rounded-full border px-2 py-1 text-[0.6875rem] shadow-[var(--shadow-sm),var(--highlight)] backdrop-blur-md backdrop-saturate-150"
+      className="border-border bg-surface text-fg-subtle raised-sm pointer-events-none fixed top-2.5 right-2.5 z-30 flex items-center gap-1.5 rounded-full border px-2 py-1 text-[0.6875rem]"
     >
       <span
         aria-hidden

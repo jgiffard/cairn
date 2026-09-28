@@ -158,13 +158,13 @@ export const LiveUpdates = ({ projectKey }: { projectKey?: string }) => {
         router.refresh()
       }}
       className={cn(
-        'bg-surface/85 text-fg raised-lg enter-pop fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border py-1.5 pr-3 pl-2.5 text-[0.75rem] font-medium backdrop-blur-xl backdrop-saturate-150',
-        'border-[color:color-mix(in_oklab,var(--accent)_40%,var(--border))] hover:bg-surface-raised/90',
+        'bg-surface text-fg raised-lg enter-pop fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border py-1.5 pr-3 pl-2.5 text-[0.75rem] font-medium',
+        'border-[color:color-mix(in_oklab,var(--accent)_40%,var(--border))] hover:bg-surface-raised',
         'transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]',
       )}
       style={{ '--origin': 'bottom' } as React.CSSProperties}
     >
-      <RefreshCw size={12} className="text-accent drop-shadow-[0_0_6px_var(--glow)]" aria-hidden />
+      <RefreshCw size={12} className="text-accent" aria-hidden />
       Updated elsewhere — refresh
     </button>
   )

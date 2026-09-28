@@ -74,7 +74,7 @@ export const EditableTitle = ({ taskId, initial }: { taskId: string; initial: st
           setValue(initial)
           setEditing(true)
         }}
-        className={cn(TITLE, 'hover:bg-surface-hover/70 cursor-text border-transparent')}
+        className={cn(TITLE, 'hover:bg-surface-hover cursor-text border-transparent')}
         title="Click to edit"
       >
         {initial}
@@ -106,8 +106,7 @@ export const EditableTitle = ({ taskId, initial }: { taskId: string; initial: st
       }}
       className={cn(
         TITLE,
-        'border-accent bg-surface block w-[calc(100%+0.75rem)] resize-none outline-none',
-        'shadow-[0_0_0_3px_color-mix(in_oklab,var(--ring)_22%,transparent)]',
+        'border-accent bg-surface ring-accent block w-[calc(100%+0.75rem)] resize-none ring-1 outline-none',
       )}
       rows={1}
     />

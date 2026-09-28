@@ -125,7 +125,7 @@ export const KnowledgePicker = ({
       {touched && query.trim().length >= 2 && (
         <ul
           className={cn(
-            'border-border bg-surface/85 raised-lg enter-pop absolute z-30 mt-1 w-full rounded-lg border p-1 backdrop-blur-md',
+            'border-border bg-surface raised-lg enter-pop absolute z-30 mt-1 w-full rounded-lg border p-1',
             'max-h-[15rem] overflow-y-auto',
           )}
           style={{ '--origin': 'top left' } as React.CSSProperties}

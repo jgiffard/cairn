@@ -62,9 +62,7 @@ const DeleteDialog = ({
       role="presentation"
     >
       <div
-        // Lit along the top like every raised panel, but in the danger
-        // colour: this is the one dialog whose light should be a warning.
-        className="border-border bg-surface enter-sheet relative w-full max-w-[26.25rem] rounded-xl border p-5 raised-lg before:pointer-events-none before:absolute before:inset-x-10 before:-top-px before:h-px before:bg-[linear-gradient(90deg,transparent,color-mix(in_oklab,var(--danger)_55%,transparent),transparent)]"
+        className="border-border bg-surface enter-sheet relative w-full max-w-[26.25rem] rounded-xl border p-5 raised-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-fg text-[0.875rem] font-medium">Delete {projectKey}?</h2>
@@ -100,7 +98,7 @@ const DeleteDialog = ({
             type="button"
             disabled={!armed || busy}
             onClick={() => void submit()}
-            className="bg-danger h-[1.75rem] rounded-md px-3 text-[0.8125rem] font-medium text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(0_0_0/0.22)] transition-[opacity,filter] duration-[var(--dur-1)] ease-[var(--ease)] hover:brightness-110 disabled:opacity-40"
+            className="bg-danger h-[1.75rem] rounded-md px-3 text-[0.8125rem] font-medium text-white transition-[opacity,filter] duration-[var(--dur-1)] ease-[var(--ease)] hover:brightness-110 disabled:opacity-40"
           >
             {busy ? 'Deleting…' : 'Delete project'}
           </button>

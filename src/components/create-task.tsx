@@ -139,10 +139,10 @@ export const CreateTask = ({
 
   // The select inside each chip is invisible, so the chip shows its focus.
   const chip =
-    'relative flex h-[1.625rem] items-center gap-1.5 rounded-md border border-border bg-surface/60 px-2 text-[0.75rem] ' +
+    'relative flex h-[1.625rem] items-center gap-1.5 rounded-md border border-border bg-surface px-2 text-[0.75rem] ' +
     'text-fg-muted transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)] ' +
     'hover:border-border-strong hover:bg-surface-hover hover:text-fg ' +
-    'focus-within:border-accent focus-within:text-fg focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--ring)_22%,transparent)]'
+    'focus-within:border-accent focus-within:text-fg focus-within:ring-2 focus-within:ring-ring/50'
 
   return (
     <div
@@ -151,10 +151,7 @@ export const CreateTask = ({
     >
       <div className="scrim absolute inset-0" aria-hidden />
       <div
-        className={cn(
-          'border-border bg-surface/85 raised-lg enter-sheet relative w-full max-w-[35rem] overflow-hidden rounded-xl border backdrop-blur-xl backdrop-saturate-150',
-          'before:pointer-events-none before:absolute before:inset-x-12 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]',
-        )}
+        className="border-border bg-surface raised-lg enter-sheet relative w-full max-w-[35rem] overflow-hidden rounded-xl border"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-border flex items-center gap-2 border-b px-4 py-2.5">

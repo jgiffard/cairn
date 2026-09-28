@@ -161,7 +161,7 @@ export const UsersManager = ({ users }: { users: AdminUser[] }) => {
         <div className="mb-3 flex items-baseline gap-2">
           <h2 className="text-fg-muted text-[0.65625rem] font-medium tracking-[0.06em] uppercase">Workspace users</h2>
           <span className="text-fg-subtle tabular text-[0.6875rem]">{users.length}</span>
-          <span className="ml-1 h-px flex-1 self-center bg-[linear-gradient(90deg,var(--border-strong),transparent)]" />
+          <span className="bg-border ml-1 h-px flex-1 self-center" />
         </div>
         <div className="stagger flex flex-col gap-3">
           {users.map((user) => (
@@ -254,7 +254,7 @@ export const UsersManager = ({ users }: { users: AdminUser[] }) => {
                               ))}
                             </ul>
                             {freshKey?.userId === user.id && (
-                              <div className="border-accent/50 bg-accent-subtle/60 enter-rise mb-3 rounded-md border p-3 shadow-[0_0_18px_-8px_var(--glow)]">
+                              <div className="enter-rise mb-3 rounded-md border border-[color:color-mix(in_oklab,var(--accent)_30%,transparent)] bg-[color-mix(in_oklab,var(--accent)_8%,transparent)] p-3">
                                 <p className="mb-2 text-[0.6875rem] font-medium">New key — shown once</p>
                                 <div className="flex items-center gap-2">
                                   <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-[0.6875rem]">{freshKey.key}</code>

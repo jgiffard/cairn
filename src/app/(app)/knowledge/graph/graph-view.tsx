@@ -32,15 +32,14 @@ const GraphScene = dynamic(() => import('./graph-scene'), {
 type Props = { graph: KnowledgeGraph }
 
 /**
- * The material every piece of chrome over the map is made of: translucent
- * enough that the map stays visible through it, blurred so a node behind the
- * legend reads as depth rather than clutter, and lit along its top edge.
+ * The material every piece of chrome over the map is made of: a solid panel
+ * with a hairline, and the soft shadow of anything that floats.
  */
-const GLASS = 'border-border bg-surface/80 raised border backdrop-blur-md'
+const CHROME = 'border-border bg-surface raised border'
 
 const SEGMENT =
   'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] transition-[color,background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]'
-const SEGMENT_ON = 'bg-surface-raised text-fg shadow-[var(--highlight),0_0_0_1px_var(--border-strong)]'
+const SEGMENT_ON = 'bg-surface-raised text-fg ring-1 ring-border-strong'
 const SEGMENT_OFF = 'text-fg-subtle hover:text-fg'
 
 
@@ -156,7 +155,7 @@ export const GraphView = ({ graph }: Props) => {
       {/* What is under the pointer. One bar, written once, over either
           renderer — hovering a node has to mean the same thing in both or the
           toggle stops being a change of view and becomes a change of page. */}
-      <div className={cn(GLASS, 'text-fg-subtle pointer-events-none absolute top-2 left-2 max-w-[min(42rem,calc(100%-1rem))] truncate rounded-lg px-2.5 py-1.5 text-[0.7rem]')}>
+      <div className={cn(CHROME, 'text-fg-subtle pointer-events-none absolute top-2 left-2 max-w-[min(42rem,calc(100%-1rem))] truncate rounded-lg px-2.5 py-1.5 text-[0.7rem]')}>
         {hovered ? (
           <span className="text-fg">
             {hovered.title}
@@ -212,7 +211,7 @@ export const GraphView = ({ graph }: Props) => {
           same question without moving anything, which is also more honest —
           you see how scattered a project's knowledge really is rather than a
           clump the layout invented. */}
-      <div className="absolute top-2 left-1/2 flex -translate-x-1/2 rounded-md shadow-[var(--shadow-md)]">
+      <div className="raised absolute top-2 left-1/2 flex -translate-x-1/2 rounded-md">
         <Select
           size="sm"
           aria-label="Light up one project or entity"
@@ -257,7 +256,7 @@ export const GraphView = ({ graph }: Props) => {
         <div
           role="group"
           aria-label="How to draw the map"
-          className={cn(GLASS, 'absolute top-2 right-2 flex items-center gap-0.5 rounded-full p-0.5')}
+          className={cn(CHROME, 'absolute top-2 right-2 flex items-center gap-0.5 rounded-full p-0.5')}
         >
           <button
             type="button"
@@ -286,7 +285,7 @@ export const GraphView = ({ graph }: Props) => {
           thing asked after ten minutes of looking at this. Every mark on the
           map means something and none of it was stated where it was being
           read. */}
-      <dl className={cn(GLASS, 'text-fg-subtle pointer-events-none absolute bottom-2 left-2 hidden space-y-1 rounded-lg px-2.5 py-2 text-[0.68rem] sm:block')}>
+      <dl className={cn(CHROME, 'text-fg-subtle pointer-events-none absolute bottom-2 left-2 hidden space-y-1 rounded-lg px-2.5 py-2 text-[0.68rem] sm:block')}>
         <div className="flex items-center gap-2">
           <svg width="26" height="10" aria-hidden className="shrink-0">
             <circle cx="5" cy="5" r="2" fill="var(--fg-muted)" />

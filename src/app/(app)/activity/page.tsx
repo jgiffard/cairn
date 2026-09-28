@@ -104,7 +104,7 @@ const ActivityPage = async ({
                     link for as long as it took. */}
                 <PendingLink
                   href={withParam('before', older)}
-                  className="border-border text-fg-muted hover:text-fg hover:border-border-strong inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[0.75rem] shadow-[var(--shadow-sm),var(--highlight)] transition-[color,border-color,transform] duration-[var(--dur-2)] ease-[var(--ease-out)] hover:-translate-y-px"
+                  className="border-border text-fg-muted hover:text-fg hover:border-border-strong inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[0.75rem] transition-[color,border-color] duration-[var(--dur-2)] ease-[var(--ease-out)]"
                 >
                   Load older
                 </PendingLink>

@@ -239,20 +239,19 @@ const TYPE_LABEL: Record<TaskType, string> = {
  * has a theme-specific hex chosen to clear 4.5 against that theme's ground,
  * which is why they are tokens rather than one shared palette.
  *
- * Both pills are one shape: the same height, a soft fill of their own colour,
- * a hairline rim of it, and a lit top edge, so a row carrying a type and two
- * labels reads as one set of chips rather than three styles.
+ * Both pills are one shape: the same height, a soft fill of their own colour
+ * and a hairline rim of it, so a row carrying a type and two labels reads as
+ * one set of chips rather than three styles.
  */
 const PILL =
   'inline-flex h-[1.25rem] shrink-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] leading-none whitespace-nowrap ' +
-  'transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]'
+  'transition-[color,background-color,border-color] duration-[var(--dur-2)] ease-[var(--ease-out)]'
 
 // An unsupported color-mix is simply ignored, leaving the border the class
 // underneath draws.
 const tint = (color: string, rim: number, wash: number): React.CSSProperties => ({
   borderColor: `color-mix(in oklab, ${color} ${rim}%, transparent)`,
   backgroundColor: `color-mix(in oklab, ${color} ${wash}%, transparent)`,
-  boxShadow: `inset 0 1px 0 color-mix(in oklab, ${color} 9%, transparent)`,
 })
 
 export const TypePill = ({ type }: { type: TaskType }) => {

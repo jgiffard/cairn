@@ -91,10 +91,7 @@ const Trail = ({ color }: { color: string }) => (
     />
     <span
       className="absolute top-4 left-1/2 h-1.5 w-2 -translate-x-1/2 rounded-full"
-      style={{
-        backgroundColor: color,
-        boxShadow: `0 0 0 3px color-mix(in oklab, ${color} 16%, transparent), 0 0 6px color-mix(in oklab, ${color} 35%, transparent)`,
-      }}
+      style={{ backgroundColor: color }}
     />
   </span>
 )

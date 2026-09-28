@@ -40,25 +40,14 @@ const TRAIL: React.CSSProperties = {
   backgroundRepeat: 'repeat-y',
 }
 
-/**
- * The stone for one entry, in its kind's colour. The latest one glows — so
- * the eye lands on where the work got to without reading a single date.
- */
-const Stone = ({ latest, kind }: { latest: boolean; kind: string }) => {
-  const tone = toneOf(kind)
-  return (
-    <span
-      className="relative z-10 mt-[0.3rem] block h-[0.4375rem] w-[0.625rem] shrink-0 rounded-full"
-      style={{
-        backgroundColor: tone,
-        boxShadow: latest
-          ? `0 0 0 3px color-mix(in oklab, ${tone} 18%, transparent), 0 0 10px color-mix(in oklab, ${tone} 50%, transparent)`
-          : undefined,
-      }}
-      title={kind}
-    />
-  )
-}
+/** The stone for one entry: a solid dot in its kind's colour. */
+const Stone = ({ kind }: { kind: string }) => (
+  <span
+    className="relative z-10 mt-[0.3rem] block h-[0.4375rem] w-[0.625rem] shrink-0 rounded-full"
+    style={{ backgroundColor: toneOf(kind) }}
+    title={kind}
+  />
+)
 
 /**
  * The work log, rendered dense and collapsed by default. This is the debugging
@@ -220,7 +209,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
             const ordinal = notes.length - index
             return (
               <li key={note.id} className="group/note relative flex gap-3 pb-3.5 last:pb-0">
-                <Stone latest={index === 0} kind={note.kind} />
+                <Stone kind={note.kind} />
                 {/* To the next stone down; the oldest entry is the trailhead. */}
                 <span
                   aria-hidden

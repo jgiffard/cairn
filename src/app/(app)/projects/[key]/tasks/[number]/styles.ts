@@ -1,5 +1,3 @@
-import type { CSSProperties } from 'react'
-
 /**
  * The one label style down the task page: every panel heading and every
  * sidebar section. Six panels and eight sections had drifted between two sizes
@@ -11,23 +9,16 @@ export const LABEL = 'text-fg-subtle text-[0.625rem] font-medium tracking-[0.08e
 export const COUNT =
   'bg-surface-raised text-fg-muted rounded-full px-1.5 py-px text-[0.625rem] leading-[1.4] font-medium tracking-normal normal-case tabular-nums'
 
-/** A composer's shell: a card whose rim lights, with a halo, while typing. */
+/** A composer's shell: a flat card whose rim turns to the accent, doubled to 2px, while typing. */
 export const COMPOSER =
   'surface-card overflow-hidden transition-[border-color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)] ' +
-  'focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--ring)_22%,transparent),var(--shadow-sm)]'
+  'focus-within:border-accent focus-within:ring-1 focus-within:ring-accent'
 
 /**
- * The properties column: a pane of the canvas rather than a slab over it — a
- * shade lifted, lit faintly from the top corner as the sidebar is, with a
- * hairline down its inner edge that fades out at both ends like the header's.
+ * The properties column: a solid pane beside the canvas, set off by one
+ * hairline down its inner edge.
  *
- * Deliberately no backdrop-filter: it would make this column the containing
- * block of the resolution dialog that opens from inside it.
+ * Deliberately no backdrop filter or transform: either would make this column
+ * the containing block of the resolution dialog that opens from inside it.
  */
-export const GLASS: CSSProperties = {
-  background: [
-    'linear-gradient(180deg, transparent, var(--border-strong) 10%, var(--border-strong) 90%, transparent) left / 1px 100% no-repeat',
-    'radial-gradient(140% 200px at 0% 0%, var(--aurora-far), transparent 70%)',
-    'color-mix(in oklab, var(--bg-elevated) 50%, transparent)',
-  ].join(', '),
-}
+export const PANE = 'bg-bg-elevated border-border border-l'
