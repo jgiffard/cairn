@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-09-28
+
 ### Fixed
 
 - **Attachments broke on installs older than 2026-09-11** (CAIRN-303). The S3 backend in 0.8.0
@@ -1157,7 +1159,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/montytorr/cairn/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/montytorr/cairn/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/montytorr/cairn/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/montytorr/cairn/compare/v0.5.1...v0.6.0
