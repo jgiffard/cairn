@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { admin } from '@/lib/db/client'
@@ -9,6 +10,8 @@ import { MobileNavButton } from '@/components/mobile-nav-context'
 import { PendingLink } from '@/components/pending-link'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Tasks' }
 
 const Stat = ({ label, value }: { label: string; value: number | string }) => (
   <span className="text-fg-subtle text-[0.75rem]">

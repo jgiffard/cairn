@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Avatar } from '@/components/icons'
+import { BrandMark, BrandName } from '@/components/brand'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { ProjectNav } from '@/components/project-nav'
 import { UserMenu } from '@/components/user-menu'
@@ -31,13 +31,18 @@ export const AppSidebar = ({
 }) => (
   <>
     <div className="flex h-[2.75rem] shrink-0 items-center gap-2 px-3">
-      <Avatar name={email} size={20} />
+      {/* The instance, not the person: who is signed in is the menu at the
+          foot of this column, and two Cairns open side by side have to be
+          told apart at a glance. */}
       <Link
         href="/"
         onClick={onNavigate}
-        className="text-fg truncate text-[0.8125rem] font-medium"
+        className="text-fg flex min-w-0 items-center gap-2 text-[0.8125rem] font-semibold tracking-tight"
       >
-        Cairn
+        <BrandMark size={20} className="rounded-[5px]" />
+        <span className="truncate">
+          <BrandName />
+        </span>
       </Link>
       <span className="ml-auto flex items-center gap-0.5">
         <ThemeToggle />

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
@@ -5,12 +6,15 @@ import { currentUser, listProjects } from '@/lib/data'
 import { searchAll, searchTasks, type SearchAllRow, type SearchRow } from '@/lib/api/search'
 import { TASK_STATUSES, TASK_TYPES, type TaskStatus, type TaskType } from '@/schemas/task'
 import { PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
+import { BrandName } from '@/components/brand'
 import { SearchControls } from './search-controls'
 import { SearchResults } from './search-results'
 import { UnifiedResults } from './unified-results'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Search' }
 
 export const KINDS = ['all', 'task', 'note', 'knowledge', 'session'] as const
 export type Kind = (typeof KINDS)[number]
@@ -85,7 +89,7 @@ const SearchPage = async ({
           href="/"
           className="text-fg-muted hover:text-fg hidden text-[0.8125rem] transition-colors sm:block"
         >
-          Cairn
+          <BrandName />
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
         <span className="text-fg text-[0.8125rem]">Search</span>

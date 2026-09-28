@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { sessionUser } from '@/lib/auth/session'
@@ -12,14 +13,14 @@ import { LoginForm } from './login-form'
  * (password changed, session expired or revoked) has to reach this form, or
  * the layout and the middleware bounce it between / and /login for ever.
  */
+export const metadata: Metadata = { title: 'Sign in' }
+
 const LoginPage = async () => {
   if (await sessionUser()) redirect('/')
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-dvh items-center justify-center px-6">
-          <p className="text-fg-subtle text-sm">Loading…</p>
-        </main>
+        <main className="bg-bg min-h-dvh" />
       }
     >
       <LoginForm />

@@ -93,7 +93,11 @@ export const Select = forwardRef<HTMLSelectElement, WithSize<React.ComponentProp
 Select.displayName = 'Select'
 
 const buttonVariants = {
-  primary: 'bg-accent text-accent-fg hover:opacity-90',
+  // A lit top edge and a contact shadow, so the one action on a surface reads
+  // as raised rather than painted on. Brightening on hover, not fading: on
+  // the dark ground a faded accent looks disabled.
+  primary:
+    'bg-accent text-accent-fg shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(0_0_0/0.22)] hover:brightness-110',
   secondary: 'border border-border bg-surface text-fg hover:bg-surface-raised hover:border-border-strong',
   ghost: 'text-fg-muted hover:bg-surface-raised hover:text-fg',
   quiet:

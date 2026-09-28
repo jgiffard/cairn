@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { LiveUpdates } from '@/components/live-updates'
 import { redirect } from 'next/navigation'
@@ -8,10 +9,13 @@ import { groupByDay } from '@/lib/session-grouping'
 import { isMachinePrompt } from '@/lib/session-title'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { PendingLink } from '@/components/pending-link'
+import { BrandName } from '@/components/brand'
 import { SessionControls } from './session-controls'
 import { SessionTimeline, type SessionItem } from './session-list'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Sessions' }
 
 // ~5,000 rows exist; a page holds a fixed slice and the rest are one cursor
 // link away, never all loaded at once.
@@ -105,7 +109,7 @@ const SessionsPage = async ({
           href="/"
           className="text-fg-muted hover:text-fg hidden text-[0.8125rem] transition-colors sm:block"
         >
-          Cairn
+          <BrandName />
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
         <span className="text-fg text-[0.8125rem]">Sessions</span>

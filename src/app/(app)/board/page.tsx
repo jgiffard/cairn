@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { currentUser } from '@/lib/data'
 import { listBoardTasks } from '@/lib/board-data'
@@ -7,6 +8,8 @@ import { PendingLink } from '@/components/pending-link'
 import { LiveUpdates } from '@/components/live-updates'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Board' }
 
 /**
  * Preserves every other query param (groupBy, swimlane, the filters) when

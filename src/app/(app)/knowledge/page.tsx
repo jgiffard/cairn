@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { LiveUpdates } from '@/components/live-updates'
 import Link from 'next/link'
@@ -7,10 +8,13 @@ import { countKnowledge, listKnowledge, supersededByInfo } from '@/lib/api/knowl
 import { listEntities } from '@/lib/api/entities'
 import { searchAll } from '@/lib/api/search'
 import { MobileNavButton } from '@/components/mobile-nav-context'
+import { BrandName } from '@/components/brand'
 import { KnowledgeControls } from './knowledge-controls'
 import { KnowledgeList, type KnowledgeListItem } from './knowledge-list'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Knowledge' }
 
 /**
  * One page of the corpus.
@@ -142,7 +146,7 @@ const KnowledgePage = async ({
           href="/"
           className="text-fg-muted hover:text-fg hidden text-[0.8125rem] transition-colors sm:block"
         >
-          Cairn
+          <BrandName />
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
         <span className="text-fg text-[0.8125rem]">Knowledge</span>

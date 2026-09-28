@@ -1,3 +1,5 @@
+import type { Metadata } from 'next'
+import { cache } from 'react'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
@@ -9,6 +11,7 @@ import {
 import { MarkdownEditor } from '@/components/markdown-editor'
 import { MarkdownView } from '@/components/markdown'
 import { ProjectIcon } from '@/components/icons'
+import { BrandName } from '@/components/brand'
 import { Properties } from './properties'
 import { EditableTitle } from './editable-title'
 import { LiveUpdates } from '@/components/live-updates'
@@ -26,6 +29,28 @@ import { formerRefsOf, renameLine, renamesOf, taskRedirectNotice } from '@/lib/p
 
 export const dynamic = 'force-dynamic'
 
+// Deduped against the page's own lookup below (React cache(), same request).
+const cachedTask = cache(getTask)
+
+export const generateMetadata = async ({
+  params,
+}: {
+  params: Promise<{ key: string; number: string }>
+}): Promise<Metadata> => {
+  const { key, number } = await params
+  const parsed = Number(number)
+  const ref = `${key.toUpperCase()}-${number}`
+  if (!Number.isInteger(parsed)) return { title: ref }
+  // Signed in or no title: the layout turns everyone else away, but metadata
+  // is resolved alongside it, not after it.
+  const user = await currentUser()
+  if (!user) return { title: ref }
+  const task = await cachedTask(user.id, key, parsed)
+  if (!task) return { title: ref }
+  const title = `${ref} · ${task.title}`
+  return { title: title.length > 60 ? `${title.slice(0, 59)}…` : title }
+}
+
 const TaskPage = async ({
   params,
   searchParams,
@@ -42,7 +67,7 @@ const TaskPage = async ({
   if (!Number.isInteger(parsed)) notFound()
 
   const [task, formerKeys] = await Promise.all([
-    getTask(user.id, key, parsed),
+    cachedTask(user.id, key, parsed),
     listFormerKeyRecords(),
   ])
 
@@ -103,7 +128,7 @@ const TaskPage = async ({
           href="/"
           className="text-fg-muted hover:text-fg hidden text-[0.8125rem] transition-colors lg:block"
         >
-          Cairn
+          <BrandName />
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden lg:block" aria-hidden />
         <Link

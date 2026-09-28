@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { currentUser, listFormerKeyRecords, listProjects } from '@/lib/data'
 import { admin } from '@/lib/db/client'
@@ -6,6 +7,8 @@ import { LiveUpdates } from '@/components/live-updates'
 import { ProjectsManager } from './projects-manager'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Projects' }
 
 /**
  * Projects, as something you can change.

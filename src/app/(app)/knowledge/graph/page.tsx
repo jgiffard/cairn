@@ -1,13 +1,17 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import { LiveUpdates } from '@/components/live-updates'
 import { MobileNavButton } from '@/components/mobile-nav-context'
+import { BrandName } from '@/components/brand'
 import { currentUser } from '@/lib/data'
 import { knowledgeGraph } from '@/lib/api/knowledge-graph'
 import { GraphView } from './graph-view'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Knowledge map' }
 
 /**
  * The corpus as a map, and specifically as a map of what it is NOT joined to.
@@ -68,7 +72,7 @@ const KnowledgeGraphPage = async () => {
           href="/"
           className="text-fg-muted hover:text-fg hidden text-[0.8125rem] transition-colors sm:block"
         >
-          Cairn
+          <BrandName />
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
         <Link href="/knowledge" className="text-fg-muted hover:text-fg text-[0.8125rem]">

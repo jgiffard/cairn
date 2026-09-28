@@ -1194,6 +1194,24 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('Applied.'), '400': errorResponse },
       },
     },
+    '/branding': {
+      get: {
+        summary: "The instance's name and accent",
+        responses: { '200': okResponse('Branding; a null accent means the stock indigo.') },
+      },
+      put: {
+        summary: 'Set the instance branding (administrator browser session only)',
+        requestBody: body({
+          type: 'object',
+          properties: {
+            name: { type: ['string', 'null'], maxLength: 60 },
+            accent: { type: ['string', 'null'], pattern: '^#[0-9a-fA-F]{6}$' },
+          },
+          required: ['name', 'accent'],
+        }),
+        responses: { '200': okResponse('Saved.'), '400': errorResponse, '403': errorResponse },
+      },
+    },
     '/users': {
       get: {
         summary: 'List users (administrator browser session only)',

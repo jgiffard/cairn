@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { currentUser } from '@/lib/data'
@@ -5,6 +6,8 @@ import { listUsers } from '@/lib/api/users'
 import { UsersManager } from './users-manager'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Users' }
 
 const UsersPage = async () => {
   const user = await currentUser()

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PendingLink } from '@/components/pending-link'
 import { redirect } from 'next/navigation'
@@ -17,6 +18,8 @@ import { MobileNavButton } from '@/components/mobile-nav-context'
 import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Vitals' }
 
 const WINDOWS = [
   { hours: 24, label: '24h' },

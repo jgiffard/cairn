@@ -9,6 +9,26 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **An instance can have its own name and colour** (CAIRN-306). Settings → Branding, for
+  administrators: the name replaces "Cairn" in the sidebar, breadcrumbs, tab titles, login page
+  and link previews, and the accent recolours the interface, the favicon and the home-screen
+  icon. One colour is enough — each theme gets the nearest variant that stays readable on its
+  background. Stored in the database (migration 066), so it survives a mirror's upstream sync
+  and needs no rebuild. `GET`/`PUT /api/v1/branding`.
+- **Every tab has a title of its own** — `Board · Cairn`, `HM-716 · Fix the thing · Cairn`
+  — instead of fifteen tabs all called "Cairn".
+
+### Changed
+
+- **A new login page.** A panel that says what Cairn is, beside the form, and copy that is
+  true: it said "Cairn is single-user; self-service signup is disabled", which stopped being
+  the case when administrators could add people. A password can be shown while typing.
+- **The sidebar header is the instance, not the person** — its mark and name, where it used to
+  repeat the signed-in user's avatar that the menu at the foot already shows.
+- **Primary buttons are lit and raised**, and brighten on hover instead of fading.
+
 ### Fixed
 
 - **The header's health banner no longer sticks on a cleared alarm.** It read vitals through
