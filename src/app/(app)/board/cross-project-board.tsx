@@ -11,9 +11,10 @@ import { Card } from '../projects/[key]/board-view'
 import { ResolutionDialog } from '../projects/[key]/resolution-dialog'
 import { useMutate } from '@/lib/api/use-mutate'
 import { BoardToolbar } from './board-toolbar'
-import { COLUMN_PANEL, COLUMN_WIDTH, ColumnCount, DragPreview, DropList } from '@/components/board-columns'
+import { COLUMN_PANEL, COLUMN_WIDTH, ColumnCount, DragPreview, DropList, laneTone } from '@/components/board-columns'
+import { EmptyState } from '@/components/empty-state'
 import { cn } from '@/lib/utils'
-import { Avatar, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
+import { Avatar, PriorityIcon, ProjectIcon, StatusIcon, TypePill, projectColor } from '@/components/icons'
 import { isTerminal, type ResolutionKind, type TaskPriority, type TaskStatus, type TaskType } from '@/schemas/task'
 import type { BoardProject, BoardTask } from '@/lib/board-data'
 import {
@@ -50,6 +51,15 @@ const ColumnHeading = ({ groupBy, col }: { groupBy: GroupBy; col: ColumnDef }) =
       <span className="truncate text-xs font-medium">{col.label}</span>
     </span>
   )
+}
+
+/** The colour a column's hairline takes: whatever its heading is drawn in. */
+const columnTone = (groupBy: GroupBy, value: string) => {
+  if (groupBy === 'status') return `var(--status-${value})`
+  if (groupBy === 'priority') return `var(--priority-${value})`
+  if (groupBy === 'type') return `var(--type-${value})`
+  if (groupBy === 'project') return projectColor(value)
+  return undefined
 }
 
 const CardList = ({
@@ -92,6 +102,7 @@ const FlatBoard = ({
         <section
           key={col.value}
           className={cn(COLUMN_PANEL, 'h-full', COLUMN_WIDTH)}
+          style={laneTone(columnTone(groupBy, col.value))}
         >
           <ColumnHeader groupBy={groupBy} col={col} count={cards.length} />
           <CardList dropId={`all${SEP}${col.value}`} tasks={cards} className="min-h-0 flex-1 overscroll-contain" />
@@ -122,11 +133,16 @@ const Lane = ({
         type="button"
         onClick={() => setCollapsed((c) => !c)}
         aria-expanded={!collapsed}
-        className="text-fg-muted hover:text-fg sticky left-3 mb-1.5 flex w-fit items-center gap-1.5 rounded px-1 py-0.5 text-[0.75rem] font-medium transition-colors"
+        className="text-fg-muted hover:text-fg sticky left-3 mb-1.5 flex w-fit items-center gap-1.5 rounded px-1 py-0.5 text-[0.75rem] font-medium transition-colors duration-[var(--dur-1)]"
       >
-        <ChevronRight size={13} className={cn('transition-transform', !collapsed && 'rotate-90')} />
+        <ChevronRight
+          size={13}
+          className={cn('transition-transform duration-[var(--dur-2)] ease-[var(--ease-out)]', !collapsed && 'rotate-90')}
+        />
         {lane.label}
-        <span className="text-fg-subtle tabular">{tasks.length}</span>
+        <span className="text-fg-subtle tabular rounded-full bg-[color-mix(in_oklab,var(--fg)_6%,transparent)] px-1.5 text-[0.6875rem] leading-[1.125rem]">
+          {tasks.length}
+        </span>
       </button>
 
       {!collapsed && (
@@ -169,9 +185,13 @@ const LaneBoard = ({
   tasks: BoardTask[]
 }) => (
   <div className="w-max min-w-full pb-3">
-    <div className="bg-bg/95 sticky top-0 z-10 flex gap-2.5 px-3 pt-3 pb-2 backdrop-blur">
+    <div className="bg-bg/80 sticky top-0 z-10 flex gap-2.5 px-3 pt-3 pb-2 backdrop-blur-md">
       {columns.map((col) => (
-        <div key={col.value} className={cn('bg-bg-elevated border-border shrink-0 rounded-lg border', COLUMN_WIDTH)}>
+        <div
+          key={col.value}
+          className={cn(COLUMN_PANEL, COLUMN_WIDTH)}
+          style={laneTone(columnTone(groupBy, col.value))}
+        >
           <ColumnHeader
             groupBy={groupBy}
             col={col}
@@ -348,18 +368,20 @@ export const CrossProjectBoard = ({
       >
         <div className="min-h-0 flex-1 snap-x scroll-px-3 overflow-auto md:snap-none">
           {visible.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-16 text-center">
-              <p className="text-fg-subtle text-[0.8125rem]">Nothing matches these filters.</p>
-              <button
-                type="button"
-                onClick={() =>
-                  setFilters({ ...parseFilters(''), groupBy: filters.groupBy, swimlane: filters.swimlane })
-                }
-                className="text-accent text-[0.75rem] hover:underline"
-              >
-                Clear filters
-              </button>
-            </div>
+            <EmptyState
+              title="Nothing matches these filters."
+              action={
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFilters({ ...parseFilters(''), groupBy: filters.groupBy, swimlane: filters.swimlane })
+                  }
+                  className="text-accent text-[0.75rem] hover:underline"
+                >
+                  Clear filters
+                </button>
+              }
+            />
           ) : effectiveSwimlane === 'none' ? (
             <FlatBoard groupBy={filters.groupBy} columns={columns} tasks={visible} />
           ) : (

@@ -1,7 +1,8 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { CircleAlert, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 /**
  * Where a failed write goes when the control that made it has nowhere to put
@@ -26,26 +27,58 @@ export const useNotify = () => useContext(NotifyContext)
 
 const DISMISS_AFTER_MS = 9000
 
+const LEAVE_MS = 200
+
 const Row = ({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number) => void }) => {
-  useEffect(() => {
-    const timer = setTimeout(() => onDismiss(toast.id), DISMISS_AFTER_MS)
-    return () => clearTimeout(timer)
+  const ref = useRef<HTMLDivElement>(null)
+  const leaving = useRef(false)
+
+  // Slides out before it goes, rather than blinking away. Script-driven, so it
+  // asks about reduced motion itself: the global CSS rule cannot reach it.
+  const leave = useCallback(() => {
+    if (leaving.current) return
+    leaving.current = true
+    const el = ref.current
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (!el || still || typeof el.animate !== 'function') {
+      onDismiss(toast.id)
+      return
+    }
+    const exit = el.animate(
+      [
+        { opacity: 1, transform: 'none' },
+        { opacity: 0, transform: 'translateX(12px) scale(0.98)' },
+      ],
+      { duration: LEAVE_MS, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' },
+    )
+    exit.onfinish = () => onDismiss(toast.id)
+    exit.oncancel = () => onDismiss(toast.id)
   }, [toast.id, onDismiss])
+
+  useEffect(() => {
+    const timer = setTimeout(leave, DISMISS_AFTER_MS)
+    return () => clearTimeout(timer)
+  }, [leave])
 
   return (
     <div
+      ref={ref}
       role="status"
-      className="border-danger/40 bg-surface pointer-events-auto flex max-w-[min(420px,calc(100vw-2rem))] items-start gap-2 rounded-lg border px-3 py-2 raised-lg"
+      className={cn(
+        'border-border bg-surface/85 raised-lg enter-rise pointer-events-auto relative flex max-w-[min(420px,calc(100vw-2rem))] items-start gap-2 overflow-hidden rounded-lg border py-2 pr-3 pl-3.5 backdrop-blur-xl backdrop-saturate-150',
+        // The tone, as a thin edge of its colour down the left.
+        'before:bg-danger before:absolute before:inset-y-2 before:left-0 before:w-[2px] before:rounded-full before:shadow-[0_0_8px_color-mix(in_oklab,var(--danger)_60%,transparent)]',
+      )}
     >
-      <span className="bg-danger mt-[0.3125rem] size-[0.375rem] shrink-0 rounded-full" aria-hidden />
+      <CircleAlert size={14} className="text-danger mt-[0.1875rem] shrink-0" aria-hidden />
       <p className="text-fg min-w-0 flex-1 text-[0.78125rem] leading-relaxed break-words">
         {toast.message}
       </p>
       <button
         type="button"
-        onClick={() => onDismiss(toast.id)}
+        onClick={leave}
         aria-label="Dismiss"
-        className="text-fg-subtle hover:text-fg -mr-1 shrink-0 transition-colors"
+        className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1 grid size-5 shrink-0 place-items-center rounded transition-colors duration-[var(--dur-1)]"
       >
         <X size={13} />
       </button>
@@ -76,7 +109,7 @@ export const ToastHost = ({ children }: { children: React.ReactNode }) => {
           inside a modal has to be readable without closing the modal first. */}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 px-4"
+        className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 px-4 sm:inset-x-auto sm:right-4 sm:items-end sm:px-0"
       >
         {toasts.map((toast) => (
           <Row key={toast.id} toast={toast} onDismiss={dismiss} />

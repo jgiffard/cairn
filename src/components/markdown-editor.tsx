@@ -7,6 +7,7 @@ import { editorExtensions } from '@/lib/editor/markdown'
 import { MarkdownView } from '@/components/markdown'
 import { cn } from '@/lib/utils'
 import { mutate } from '@/lib/api/mutate'
+import { Button } from '@/components/ui/control'
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
@@ -119,12 +120,12 @@ export const MarkdownEditor = ({
             baseline.current = initial
             setEditing(true)
           }}
-          className="text-fg-subtle hover:text-fg border-border bg-surface absolute -top-1 right-0 rounded border px-2 py-0.5 text-[0.6875rem] opacity-0 transition-opacity group-hover:opacity-100"
+          className="text-fg-subtle hover:text-fg border-border hover:border-border-strong bg-surface-raised absolute -top-1 right-0 rounded-md border px-2 py-0.5 text-[0.6875rem] opacity-0 shadow-[var(--shadow-sm),var(--highlight)] transition-[opacity,color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)] group-hover:opacity-100 focus-visible:opacity-100"
         >
           Edit
         </button>
         {state === 'saved' && (
-          <span className="text-status-done absolute -top-1 right-14 text-[0.6875rem]">saved</span>
+          <span className="enter-rise text-status-done absolute -top-1 right-14 text-[0.6875rem]">saved</span>
         )}
       </div>
     )
@@ -134,31 +135,34 @@ export const MarkdownEditor = ({
     <div>
       <div
         className={cn(
-          'border-border focus-within:border-accent rounded-md border p-3 transition-colors',
-          state === 'error' && 'border-danger',
+          'surface-card p-3 transition-[border-color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]',
+          'focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--ring)_22%,transparent),var(--shadow-sm)]',
+          state === 'error' && 'border-danger focus-within:border-danger',
         )}
       >
         <EditorContent editor={editor} />
       </div>
       <div className="mt-2 flex items-center gap-2">
-        <button
-          type="button"
+        <Button
+          size="sm"
+          variant="primary"
           onClick={() => void save()}
           disabled={state === 'saving'}
-          className="bg-accent text-accent-fg rounded-md px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-50"
+          className="px-3"
         >
           {state === 'saving' ? 'Saving…' : 'Save'}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
           onClick={() => {
             setEditing(false)
             setState('idle')
           }}
-          className="text-fg-muted hover:bg-surface-raised rounded-md px-3 py-1.5 text-xs transition-colors"
+          className="px-3 font-normal"
         >
           Cancel
-        </button>
+        </Button>
         <span className="text-fg-subtle text-[0.6875rem]">⌘↵ save · esc cancel</span>
         {state === 'error' && (
           <span className="text-danger text-[0.6875rem]">Save failed — nothing was changed.</span>

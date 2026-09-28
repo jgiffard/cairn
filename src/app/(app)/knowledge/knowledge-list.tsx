@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ArrowRight, ShieldCheck } from 'lucide-react'
-import { LabelPill, ProjectIcon } from '@/components/icons'
+import { LabelPill, ProjectIcon, entityColor, projectColor } from '@/components/icons'
 import { shortDate, fullDateTime } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 
@@ -21,27 +21,51 @@ export type KnowledgeListItem = {
 }
 
 /**
+ * A scope pill, cut to the same shape and tint as `LabelPill` — a soft fill of
+ * the thing's own colour, a hairline of the same colour — so labels and scope
+ * on a row read as one set of chips, and the title stays the brightest thing
+ * on the line. Exported for the entry page, which shows the same chips.
+ */
+export const TintPill = ({
+  color,
+  children,
+  className,
+}: {
+  color: string
+  children: React.ReactNode
+  className?: string
+}) => (
+  <span
+    className={cn(
+      'text-fg-muted inline-flex h-[1.25rem] shrink-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] leading-none whitespace-nowrap',
+      className,
+    )}
+    style={{
+      borderColor: `color-mix(in oklab, ${color} 28%, transparent)`,
+      backgroundColor: `color-mix(in oklab, ${color} 8%, transparent)`,
+      boxShadow: `inset 0 1px 0 color-mix(in oklab, ${color} 9%, transparent)`,
+    }}
+  >
+    {children}
+  </span>
+)
+
+/**
  * How widely a fact applies, in one shape.
  *
  * A project used to render as an icon and a key, an entity as bare text, and
  * global as a grey italic word — three treatments for one field, so the column
  * read as three unrelated things rather than one answer at three widths.
  */
-const Chip = ({ children }: { children: React.ReactNode }) => (
-  <span className="border-border bg-surface text-fg-muted inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded-full border px-1.5 text-[0.65625rem] whitespace-nowrap">
-    {children}
-  </span>
-)
-
 const Scope = ({ item }: { item: KnowledgeListItem }) => {
   if (item.projects.length > 0) {
     return (
       <span className="inline-flex flex-wrap items-center gap-1">
         {item.projects.map((p) => (
-          <Chip key={p}>
+          <TintPill key={p} color={projectColor(p)}>
             <ProjectIcon size={10} projectKey={p} />
             {p}
-          </Chip>
+          </TintPill>
         ))}
       </span>
     )
@@ -50,26 +74,28 @@ const Scope = ({ item }: { item: KnowledgeListItem }) => {
     return (
       <span className="inline-flex flex-wrap items-center gap-1">
         {item.entities.map((e) => (
-          <Chip key={e}>
-            <span className="bg-fg-subtle size-[0.3125rem] rounded-full" aria-hidden />
+          <TintPill key={e} color={entityColor(e)}>
+            <span className="size-[0.4375rem] rounded-full" style={{ backgroundColor: entityColor(e) }} aria-hidden />
             {e}
-          </Chip>
+          </TintPill>
         ))}
       </span>
     )
   }
   return (
-    <Chip>
-      <span className="bg-fg-subtle size-[0.3125rem] rounded-full opacity-60" aria-hidden />
+    <TintPill color="var(--fg-subtle)" className="text-fg-subtle">
+      <span className="bg-fg-subtle size-[0.4375rem] rounded-full opacity-60" aria-hidden />
       everywhere
-    </Chip>
+    </TintPill>
   )
 }
 
 export const KnowledgeList = ({ items }: { items: KnowledgeListItem[] }) => (
-  <ul className="divide-border divide-y">
+  <ul className="divide-border/70 stagger divide-y">
     {items.map((item) => (
-      <li key={item.slug} className="group relative">
+      // The hover lives on the row, not the inner line: the link is laid over
+      // the whole row, so the line underneath it is never the thing hovered.
+      <li key={item.slug} className="group row-hover relative">
         <Link
           href={`/knowledge/${item.slug}`}
           prefetch
@@ -81,7 +107,7 @@ export const KnowledgeList = ({ items }: { items: KnowledgeListItem[] }) => (
             own rhythm — a knowledge list beside a task list read as two
             different applications. Everything after the title is metadata and
             belongs on the same line, ranked right. */}
-        <div className="hover:bg-surface-hover flex h-[2.5rem] min-w-0 items-center gap-2 px-3 transition-colors sm:px-4">
+        <div className="flex h-[2.5rem] min-w-0 items-center gap-2 px-3 sm:px-4">
           <span
             className={cn(
               'pointer-events-none min-w-0 flex-1 truncate text-[0.8125rem]',
@@ -126,7 +152,7 @@ export const KnowledgeList = ({ items }: { items: KnowledgeListItem[] }) => (
                 <LabelPill key={l}>{l}</LabelPill>
               ))}
               {item.labels.length > 3 && (
-                <span className="text-fg-subtle text-[0.6875rem]">+{item.labels.length - 3}</span>
+                <span className="text-fg-subtle text-[0.6875rem] tabular-nums">+{item.labels.length - 3}</span>
               )}
             </span>
           )}

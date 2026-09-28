@@ -6,6 +6,7 @@ import { Button, Input } from '@/components/ui/control'
 import { mutate } from '@/lib/api/mutate'
 import { HEX, STOCK_MARK, paletteFor, type AccentTokens } from '@/lib/brand-colour'
 import { cn } from '@/lib/utils'
+import { SettingsCard } from './settings-card'
 
 export type BrandingValue = { name: string; accent: string | null }
 
@@ -38,7 +39,7 @@ const Preview = ({
   const ground = theme === 'light' ? { bg: '#ffffff', fg: '#0d0e10', muted: '#61656c', border: '#e6e7e9' } : { bg: '#08090a', fg: '#f7f8f8', muted: '#9aa0a9', border: '#1f2023' }
   return (
     <div
-      className="flex flex-1 flex-col gap-3 rounded-lg border p-3"
+      className="flex flex-1 flex-col gap-3 rounded-md border p-3 shadow-[0_1px_2px_rgb(0_0_0/0.12)] transition-colors duration-[var(--dur-2)] ease-[var(--ease-out)]"
       style={{ background: ground.bg, color: ground.fg, borderColor: ground.border }}
     >
       <div className="flex items-center gap-2 text-[0.8125rem] font-semibold tracking-tight">
@@ -105,17 +106,44 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
   }
 
   return (
-    <section>
-      <h2 className="text-fg text-[0.8125rem] font-medium">Branding</h2>
-      <p className="text-fg-subtle mt-1 text-[0.75rem]">
-        What this instance is called and its colour, for everyone who signs in: the sidebar, tab titles,
-        the login page, the favicon and link previews. The mark stays the cairn, drawn in the accent, so
-        someone who uses more than one Cairn can tell at a glance which one this is.
-      </p>
-
-      <div className="mt-4 flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5">
-          <span className="text-fg-muted text-xs font-medium">Name</span>
+    <SettingsCard
+      title="Branding"
+      description={
+        <>
+          What this instance is called and its colour, for everyone who signs in: the sidebar, tab titles,
+          the login page, the favicon and link previews. The mark stays the cairn, drawn in the accent, so
+          someone who uses more than one Cairn can tell at a glance which one this is.
+        </>
+      }
+      footer={
+        <>
+          {message ? (
+            <p
+              role={message.tone === 'error' ? 'alert' : 'status'}
+              className={cn(
+                'enter-rise min-w-0 flex-1 basis-60 rounded-md px-2.5 py-1.5 text-xs',
+                message.tone === 'error' ? 'text-danger bg-danger-subtle' : 'text-fg-muted',
+              )}
+            >
+              {message.text}
+            </p>
+          ) : (
+            <span className="flex-1" />
+          )}
+          <div className="flex items-center gap-2">
+            <Button variant="primary" onClick={() => void save()} disabled={busy || !valid}>
+              {busy ? 'Saving…' : 'Save branding'}
+            </Button>
+            <Button variant="ghost" onClick={() => void save(true)} disabled={busy}>
+              Reset to stock
+            </Button>
+          </div>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1">
+          <span className="text-fg-subtle text-[0.6875rem] font-medium">Name</span>
           <Input
             value={name}
             maxLength={60}
@@ -125,8 +153,8 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
           />
         </label>
 
-        <div className="flex flex-col gap-1.5">
-          <span className="text-fg-muted text-xs font-medium">Accent</span>
+        <div className="flex flex-col gap-1">
+          <span className="text-fg-subtle text-[0.6875rem] font-medium">Accent</span>
           <div className="flex flex-wrap items-center gap-2">
             {PRESETS.map((preset) => (
               <button
@@ -136,8 +164,9 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
                 aria-label={preset === STOCK_ACCENT ? 'Stock indigo' : preset}
                 title={preset === STOCK_ACCENT ? 'Stock indigo' : preset}
                 className={cn(
-                  'size-6 rounded-full border border-black/10 transition-transform hover:scale-110',
-                  (accent || STOCK_ACCENT) === preset && 'ring-fg ring-2 ring-offset-2 ring-offset-bg',
+                  'size-6 rounded-full shadow-[inset_0_0_0_1px_rgb(0_0_0/0.12),inset_0_1px_0_rgb(255_255_255/0.25)]',
+                  'transition-transform duration-[var(--dur-2)] ease-[var(--ease-spring)] hover:scale-110',
+                  (accent || STOCK_ACCENT) === preset && 'ring-fg ring-offset-surface ring-2 ring-offset-2',
                 )}
                 style={{ background: preset }}
               />
@@ -163,32 +192,13 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
           </p>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row">
+        {/* The live preview, in a well of its own so it reads as a picture of
+            the product rather than a piece of this page. */}
+        <div className="border-border bg-surface-raised/40 flex flex-col gap-2 rounded-lg border p-2 shadow-[inset_0_1px_2px_rgb(0_0_0/0.08)] sm:flex-row">
           <Preview theme="light" tokens={palette?.light ?? STOCK_TOKENS.light} mark={palette?.dark.accent ?? STOCK_MARK} name={shownName} />
           <Preview theme="dark" tokens={palette?.dark ?? STOCK_TOKENS.dark} mark={palette?.dark.accent ?? STOCK_MARK} name={shownName} />
         </div>
-
-        {message ? (
-          <p
-            role={message.tone === 'error' ? 'alert' : 'status'}
-            className={cn(
-              'rounded-md px-3 py-2 text-xs',
-              message.tone === 'error' ? 'text-danger bg-danger-subtle' : 'text-fg-muted bg-surface-raised',
-            )}
-          >
-            {message.text}
-          </p>
-        ) : null}
-
-        <div className="flex items-center gap-2">
-          <Button variant="primary" onClick={() => void save()} disabled={busy || !valid}>
-            {busy ? 'Saving…' : 'Save branding'}
-          </Button>
-          <Button variant="ghost" onClick={() => void save(true)} disabled={busy}>
-            Reset to stock
-          </Button>
-        </div>
       </div>
-    </section>
+    </SettingsCard>
   )
 }

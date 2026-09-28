@@ -1,10 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Clock, Plus } from 'lucide-react'
 import { Avatar, LabelPill, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
 import { cn } from '@/lib/utils'
+import { EmptyState } from '@/components/empty-state'
 import { useRenderedClaimStale } from '@/lib/use-mounted'
 import { fullDateTime, shortDate } from '@/lib/dates'
 import {
@@ -48,6 +49,91 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   cancelled: 'Cancelled',
 }
 
+/**
+ * The active tab's pill, which slides to whichever tab is picked instead of
+ * jumping there.
+ *
+ * Tabs are marked `data-pill="<key>"` inside `track`; the pill is measured
+ * onto the active one and moved by writing its style directly, so a slide
+ * costs no React render. The first placement, and any placement caused by a
+ * resize, snaps: only a change of tab moves. Until the first measurement the
+ * active tab draws its own background (the track gains `data-measured` once
+ * the pill has taken over), so the server render and a slow hydration still
+ * show which tab is on.
+ *
+ * `from` is for a switch that remounts on every change (the list/board
+ * toggle moves between two toolbars): it starts the new pill where the old
+ * one was, so it still reads as one pill travelling.
+ */
+export const useSlidingPill = (active: string, from?: string | null) => {
+  const track = useRef<HTMLDivElement>(null)
+  const pill = useRef<HTMLSpanElement>(null)
+  const placed = useRef(false)
+
+  useLayoutEffect(() => {
+    const box = track.current
+    const mark = pill.current
+    if (!box || !mark) return
+
+    const find = (key: string) => box.querySelector<HTMLElement>(`[data-pill="${key}"]`)
+    let at = ''
+    const moveTo = (el: HTMLElement, animate: boolean) => {
+      const next = `${el.offsetLeft}:${el.offsetWidth}`
+      if (next === at) return
+      at = next
+      if (!animate) mark.style.transition = 'none'
+      mark.style.transform = `translateX(${el.offsetLeft}px)`
+      mark.style.width = `${el.offsetWidth}px`
+      mark.style.opacity = '1'
+      box.setAttribute('data-measured', '')
+      if (!animate) {
+        // Commit the jump before the transition comes back, or it animates.
+        void mark.offsetWidth
+        mark.style.transition = ''
+      }
+    }
+    const place = (animate: boolean) => {
+      const el = find(active)
+      if (el) {
+        moveTo(el, animate)
+        return
+      }
+      at = ''
+      mark.style.opacity = '0'
+      box.removeAttribute('data-measured')
+    }
+
+    if (placed.current) {
+      place(true)
+    } else {
+      const origin = from && from !== active ? find(from) : null
+      if (origin) moveTo(origin, false)
+      place(Boolean(origin))
+      placed.current = true
+    }
+
+    // A resize (a font landing, a tab appearing) re-measures and snaps. The
+    // observer also reports once on attaching, which finds the pill already
+    // where it belongs and leaves a slide in progress alone.
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => place(false))
+    observer.observe(box)
+    return () => observer.disconnect()
+  }, [active, from])
+
+  return { track, pill }
+}
+
+/** The pill itself: raised, lit along its top, with the accent at its foot. */
+export const PILL_CLASS = cn(
+  'bg-surface-raised raised-sm pointer-events-none absolute inset-y-0 left-0 rounded-md opacity-0',
+  'transition-[transform,width,opacity] duration-[var(--dur-3)] ease-[var(--ease-out)]',
+  'after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]',
+)
+
+// The rows of one group settle in one after another (`stagger`, globals.css).
+const STAGGER = 'stagger'
+
 const Row = ({
   task,
   projectKey,
@@ -82,16 +168,18 @@ const Row = ({
   return (
     <div
       className={cn(
-        'group relative flex h-[2.25rem] items-center transition-colors duration-100 ease-[var(--ease)]',
+        'group relative flex h-[2.25rem] items-center',
         // Shift-click paints a text selection across the rows it passes
         // otherwise, which looks like a mistake on every range.
         'select-none',
         // A selected row gets an edge as well as a tint. On a list of three
         // hundred, a background one step off the ground is easy to lose
-        // track of when scrolling; the 2px rule is not.
+        // track of when scrolling; the 2px rule is not. It is the hover's
+        // trail marker at full strength, with a little of its light spilling
+        // into the row — one marker, two intensities.
         selected
-          ? 'bg-accent-subtle before:bg-accent before:absolute before:inset-y-0 before:left-0 before:w-[2px]'
-          : 'hover:bg-surface-hover',
+          ? 'bg-accent-subtle shadow-[inset_2px_0_0_var(--accent),inset_18px_0_18px_-18px_var(--glow)] transition-[background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease)]'
+          : 'row-hover',
       )}
     >
       {/* The whole row navigates, but the badges on it are controls. An
@@ -127,22 +215,33 @@ const Row = ({
           onToggle(task.id, e.shiftKey)
         }}
         className={cn(
-          'relative z-10 grid h-[2.25rem] w-[1.875rem] shrink-0 place-items-center pl-3 transition-opacity',
+          'relative z-10 grid h-[2.25rem] w-[1.875rem] shrink-0 place-items-center pl-3',
+          // `translate`, not `transform`: Tailwind's translate utilities set
+          // the individual property, which a transform transition ignores.
+          'transition-[opacity,translate] duration-[var(--dur-2)] ease-[var(--ease-out)]',
           selected || selecting
             ? 'opacity-100'
-            : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100',
+            : 'opacity-100 md:-translate-x-0.5 md:opacity-0 md:group-hover:translate-x-0 md:group-hover:opacity-100 md:focus-visible:translate-x-0 md:focus-visible:opacity-100',
         )}
       >
         <span
           className={cn(
-            'grid size-[0.875rem] place-items-center rounded-[0.25rem] border transition-colors',
+            'grid size-[0.875rem] place-items-center rounded-[0.25rem] border',
+            'transition-[background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',
             selected
-              ? 'border-accent bg-accent text-accent-fg'
+              ? 'border-accent bg-accent text-accent-fg shadow-[0_0_6px_-1px_var(--glow)]'
               : 'border-border-strong bg-surface hover:border-accent',
           )}
         >
           {selected && (
-            <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden>
+            <svg
+              width="9"
+              height="9"
+              viewBox="0 0 10 10"
+              aria-hidden
+              className="enter-pop"
+              style={{ '--origin': 'center' } as React.CSSProperties}
+            >
               <path
                 d="M1.5 5.2l2.2 2.2L8.5 2.6"
                 stroke="currentColor"
@@ -204,6 +303,8 @@ const Row = ({
           <StatusIcon status={status} />
         </QuickSelect>
 
+        {/* The brightest thing on the row: everything around it is a grey or
+            a tint, so the eye lands on the title and reads across. */}
         <span className="text-fg min-w-0 flex-1 truncate text-[0.8125rem]">{task.title}</span>
 
         {/* Filed in another project and linked here. Without saying so, a row
@@ -467,11 +568,25 @@ export const ListView = ({
       return next
     })
 
-  const tabClass = (t: Tab) =>
-    cn(
-      'shrink-0 rounded-md px-2.5 py-1 text-[0.75rem] whitespace-nowrap transition-colors',
-      tab === t ? 'bg-surface-raised text-fg' : 'text-fg-muted hover:text-fg',
-    )
+  const { track: tabTrack, pill: tabPill } = useSlidingPill(tab)
+
+  // `relative` so each label paints above the absolutely placed pill.
+  const tabButton = (t: Tab, label: string) => (
+    <button
+      type="button"
+      data-pill={t}
+      onClick={() => setTab(t)}
+      className={cn(
+        'relative shrink-0 rounded-md px-2.5 py-1 text-[0.75rem] whitespace-nowrap',
+        'transition-colors duration-[var(--dur-2)] ease-[var(--ease-out)]',
+        tab === t
+          ? 'bg-surface-raised text-fg group-data-[measured]/tabs:bg-transparent'
+          : 'text-fg-muted hover:text-fg',
+      )}
+    >
+      {label}
+    </button>
+  )
 
   return (
     <div>
@@ -482,34 +597,17 @@ export const ListView = ({
         <div className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {toolbarExtra}
           {toolbarExtra ? <span className="bg-border mx-1 h-[1rem] w-px shrink-0" aria-hidden /> : null}
-          <button type="button" onClick={() => setTab('doing')} className={tabClass('doing')}>
-            In Progress
-          </button>
-          <button type="button" onClick={() => setTab('todo')} className={tabClass('todo')}>
-            Todo
-          </button>
-          <button type="button" onClick={() => setTab('active')} className={tabClass('active')}>
-            Active
-          </button>
-          <button type="button" onClick={() => setTab('backlog')} className={tabClass('backlog')}>
-            Backlog
-          </button>
-          <button type="button" onClick={() => setTab('all')} className={tabClass('all')}>
-            All
-          </button>
-          <button type="button" onClick={() => setTab('recent')} className={tabClass('recent')}>
-            Recent
-          </button>
-          {recentlyClosed.length > 0 && (
-            <button type="button" onClick={() => setTab('closed')} className={tabClass('closed')}>
-              Recently closed
-            </button>
-          )}
-          {tasks.some((t) => t.claimed_by) && (
-            <button type="button" onClick={() => setTab('held')} className={tabClass('held')}>
-              Held
-            </button>
-          )}
+          <div ref={tabTrack} className="group/tabs relative flex shrink-0 items-center gap-1">
+            <span ref={tabPill} aria-hidden className={PILL_CLASS} />
+            {tabButton('doing', 'In Progress')}
+            {tabButton('todo', 'Todo')}
+            {tabButton('active', 'Active')}
+            {tabButton('backlog', 'Backlog')}
+            {tabButton('all', 'All')}
+            {tabButton('recent', 'Recent')}
+            {recentlyClosed.length > 0 && tabButton('closed', 'Recently closed')}
+            {tasks.some((t) => t.claimed_by) && tabButton('held', 'Held')}
+          </div>
         </div>
 
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -526,7 +624,7 @@ export const ListView = ({
         </div>
       </div>
 
-      {groups.length === 0 && (
+      {groups.length === 0 &&
         /**
          * "Nothing here" was fine when the page opened on All, where an empty
          * list meant an empty project. In Progress is the default now, so an
@@ -534,13 +632,13 @@ export const ListView = ({
          * picked up — and a dead end is the wrong thing to show somebody who
          * has just arrived looking for work.
          */
-        <div className="text-fg-subtle flex flex-col items-center gap-2 py-16 text-center text-[0.8125rem]">
-          {query ? (
-            <p>Nothing matches “{query}”.</p>
-          ) : tab === 'doing' ? (
-            <>
-              <p>Nothing is in progress.</p>
-              <div className="flex items-center gap-1.5">
+        (query ? (
+          <EmptyState title={`Nothing matches “${query}”.`} />
+        ) : tab === 'doing' ? (
+          <EmptyState
+            title="Nothing is in progress."
+            action={
+              <span className="text-fg-subtle flex items-center gap-1.5 text-[0.8125rem]">
                 <button type="button" onClick={() => setTab('todo')} className="text-accent hover:underline">
                   Todo
                 </button>
@@ -552,13 +650,12 @@ export const ListView = ({
                 <button type="button" onClick={() => setTab('all')} className="text-accent hover:underline">
                   All
                 </button>
-              </div>
-            </>
-          ) : (
-            <p>Nothing here.</p>
-          )}
-        </div>
-      )}
+              </span>
+            }
+          />
+        ) : (
+          <EmptyState title="Nothing here." />
+        ))}
 
       {groups.map((group) => {
         const isCollapsed = collapsed.has(group.status)
@@ -572,7 +669,15 @@ export const ListView = ({
               // the sticky heading — a bar-chart glyph and a type pill floating
               // over "In Progress". Same stacking context, equal z, DOM order
               // decides. Still beneath the bulk bar (z-40) and dialogs (z-50).
-              className="bg-bg-elevated border-border hover:bg-surface-hover sticky top-0 z-20 flex h-[2.125rem] w-full items-center gap-2 border-b px-3 text-left transition-colors"
+              //
+              // A band, not a slab: translucent over the rows scrolling under
+              // it, with a wash of the group's own colour from the left.
+              className="group-band border-border hover:bg-surface-hover/70 sticky top-0 z-20 flex h-[2.125rem] w-full items-center gap-2 border-b px-3 text-left transition-colors duration-[var(--dur-1)] ease-[var(--ease)]"
+              style={
+                group.status === 'recent'
+                  ? undefined
+                  : ({ '--band': `var(--status-${group.status})` } as React.CSSProperties)
+              }
             >
               {group.status === 'recent' ? (
                 <Clock size={13} className="text-fg-subtle" />
@@ -593,7 +698,7 @@ export const ListView = ({
               >
                 {GROUP_LABEL[group.status]}
               </span>
-              <span className="text-fg-subtle tabular text-[0.75rem]">
+              <span className="text-fg-subtle tabular rounded-full bg-[color-mix(in_oklab,var(--fg)_6%,transparent)] px-1.5 text-[0.75rem] leading-[1.125rem]">
                 {group.items.length}
                 {group.items.length !== group.total ? ` / ${group.total}` : ''}
               </span>
@@ -601,7 +706,7 @@ export const ListView = ({
             </button>
 
             {!isCollapsed && (
-              <ul className="divide-border divide-y">
+              <ul className={cn('divide-border divide-y', STAGGER)}>
                 {group.items.map((task) => (
                   <li key={task.id}>
                     <Row

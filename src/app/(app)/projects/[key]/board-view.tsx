@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { MarkdownPreview } from '@/components/markdown'
 import { Avatar, LabelPill, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
-import { COLUMN_PANEL, COLUMN_WIDTH, ColumnCount, DragPreview, DropList } from '@/components/board-columns'
+import { COLUMN_PANEL, COLUMN_WIDTH, ColumnCount, DragPreview, DropList, laneTone } from '@/components/board-columns'
 import { ResolutionDialog } from './resolution-dialog'
 import { useMutate } from '@/lib/api/use-mutate'
 import { cn } from '@/lib/utils'
@@ -45,7 +45,10 @@ export const Card = ({
       {...listeners}
       {...attributes}
       className={cn(
-        'bg-surface border-border hover:border-border-strong group cursor-grab rounded-md border p-2.5 transition-colors',
+        'surface-card surface-card-interactive group cursor-grab p-2.5',
+        'focus-visible:outline-accent/60 focus-visible:outline-2 focus-visible:outline-offset-1',
+        // The card left behind while its preview is in the hand: a ghost of
+        // where it came from, not a second copy.
         isDragging && 'opacity-40',
       )}
     >
@@ -111,10 +114,10 @@ const Column = ({
   tasks: TaskListItem[]
   projectKey: string
 }) => (
-  <section className={cn(COLUMN_PANEL, 'h-full', COLUMN_WIDTH)}>
+  <section className={cn(COLUMN_PANEL, 'h-full', COLUMN_WIDTH)} style={laneTone(`var(--status-${status})`)}>
     <div className="flex h-8 items-center gap-2 px-2.5">
       <StatusIcon status={status} size={13} />
-      <span className="text-xs font-medium">{COLUMN_LABEL[status]}</span>
+      <span className="text-fg text-xs font-medium">{COLUMN_LABEL[status]}</span>
       <ColumnCount count={tasks.length} />
     </div>
     <DropList dropId={status} count={tasks.length} className="min-h-0 flex-1 overscroll-contain">

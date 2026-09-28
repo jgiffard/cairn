@@ -10,6 +10,7 @@ import { isMachinePrompt } from '@/lib/session-title'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { PendingLink } from '@/components/pending-link'
 import { BrandName } from '@/components/brand'
+import { EmptyState } from '@/components/empty-state'
 import { SessionControls } from './session-controls'
 import { SessionTimeline, type SessionItem } from './session-list'
 
@@ -103,7 +104,7 @@ const SessionsPage = async ({
     <div className="flex h-dvh flex-col">
       {/* sessions arrive from a sweep on a schedule, never from anything you did here */}
       <LiveUpdates />
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
+      <header className="page-header border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <Link
           href="/"
@@ -148,7 +149,7 @@ const SessionsPage = async ({
               const query = params.toString()
               return query ? `/sessions?${query}` : '/sessions'
             })()}
-            className="border-border text-fg-subtle hover:text-fg block border-b px-4 py-1.5 text-[0.71875rem] transition-colors"
+            className="border-border/70 text-fg-subtle hover:text-fg block border-b px-4 py-1.5 text-[0.71875rem] transition-colors duration-[var(--dur-1)]"
           >
             {showScheduled
               ? `Hide ${scheduledCount} scheduled run${scheduledCount === 1 ? '' : 's'}`
@@ -157,11 +158,13 @@ const SessionsPage = async ({
         )}
 
         {visible.length === 0 ? (
-          <p className="text-fg-subtle px-4 py-12 text-center text-[0.8125rem]">
-            {scheduledCount > 0
-              ? 'Only scheduled runs on this page.'
-              : `No sessions recorded ${project || agent ? 'for these filters' : 'yet'}.`}
-          </p>
+          <EmptyState
+            title={
+              scheduledCount > 0
+                ? 'Only scheduled runs on this page.'
+                : `No sessions recorded ${project || agent ? 'for these filters' : 'yet'}.`
+            }
+          />
         ) : (
           <>
             <SessionTimeline groups={groups} />
@@ -169,7 +172,7 @@ const SessionsPage = async ({
               <div className="flex justify-center py-4">
                 <PendingLink
                   href={nextHref}
-                  className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg rounded-md border px-3 py-1.5 text-[0.75rem] transition-colors"
+                  className="border-border bg-surface text-fg-muted hover:bg-surface-raised hover:border-border-strong hover:text-fg rounded-md border px-3 py-1.5 text-[0.75rem] shadow-[var(--shadow-sm),var(--highlight)] transition-colors duration-[var(--dur-1)]"
                 >
                   Load older sessions
                 </PendingLink>

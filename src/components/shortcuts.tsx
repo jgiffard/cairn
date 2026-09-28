@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 const GROUPS: { title: string; keys: [string[], string][] }[] = [
   {
@@ -66,18 +67,26 @@ export const Shortcuts = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={() => setOpen(false)}
     >
+      <div className="scrim absolute inset-0" aria-hidden />
       <div
-        className="bg-surface border-border pop w-full max-w-[26.25rem] rounded-lg border p-5 raised-lg"
+        className={cn(
+          'border-border bg-surface/85 raised-lg enter-sheet relative w-full max-w-[26.25rem] overflow-hidden rounded-xl border backdrop-blur-xl backdrop-saturate-150',
+          'before:pointer-events-none before:absolute before:inset-x-10 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]',
+        )}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-fg mb-4 text-[0.8125rem] font-medium">Keyboard shortcuts</h2>
-        <div className="flex flex-col gap-4">
+        <h2 className="border-border text-fg border-b px-5 py-3 text-[0.8125rem] font-medium">
+          Keyboard shortcuts
+        </h2>
+        <div className="flex flex-col gap-4 px-5 py-4">
           {GROUPS.map((group) => (
             <div key={group.title}>
-              <p className="text-fg-subtle mb-1.5 text-[0.6875rem]">{group.title}</p>
+              <p className="text-fg-subtle mb-1.5 text-[0.65625rem] font-medium tracking-[0.06em] uppercase">
+                {group.title}
+              </p>
               <ul className="flex flex-col gap-1">
                 {group.keys.map(([keys, label]) => (
                   <li key={label} className="flex items-center gap-2 text-[0.78125rem]">

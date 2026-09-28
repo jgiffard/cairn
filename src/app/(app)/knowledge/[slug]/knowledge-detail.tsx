@@ -3,14 +3,15 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, ShieldCheck, Undo2 } from 'lucide-react'
+import { ArrowRight, ChevronRight, ShieldCheck, Undo2 } from 'lucide-react'
 import { MarkdownView } from '@/components/markdown'
-import { LabelPill, ProjectIcon } from '@/components/icons'
+import { LabelPill, ProjectIcon, entityColor, projectColor } from '@/components/icons'
 import { Button, Field, Input, Select, Textarea } from '@/components/ui/control'
 import { LabelEditor } from '../../projects/[key]/label-editor'
 import { fullDateTime, shortDate } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 import { KnowledgePicker } from '@/components/knowledge-picker'
+import { TintPill } from '../knowledge-list'
 
 type Row = {
   title: string
@@ -41,6 +42,11 @@ type Revision = {
 }
 
 type KeyTitle = { key: string; title: string }
+
+/** A scope chip that is also a link rises a pixel under the pointer. */
+const LIFT =
+  'inline-flex rounded-full transition-transform duration-[var(--dur-2)] ease-[var(--ease-out)] hover:-translate-y-px [&>span]:transition-colors hover:[&>span]:text-fg'
+
 type SlugTitle = { slug: string; title: string }
 
 const patch = async (slug: string, body: Record<string, unknown>) => {
@@ -209,7 +215,7 @@ export const KnowledgeDetail = ({
   return (
     <div className="mx-auto max-w-[45rem] px-4 py-6 sm:px-6">
       {current.superseded && (
-        <div className="border-border bg-surface-raised text-fg-muted mb-4 flex flex-wrap items-center gap-1.5 rounded-md border px-3 py-2 text-[0.78125rem]">
+        <div className="surface-card text-fg-muted enter-rise mb-4 flex flex-wrap items-center gap-1.5 px-3 py-2 text-[0.78125rem]">
           <span>This entry is superseded.</span>
           {current.supersededByRef ? (
             <Link
@@ -224,7 +230,7 @@ export const KnowledgeDetail = ({
             type="button"
             onClick={unsupersede}
             disabled={supersedeBusy}
-            className="text-fg-subtle hover:text-fg ml-auto inline-flex items-center gap-1 disabled:opacity-50"
+            className="text-fg-subtle hover:text-fg ml-auto inline-flex items-center gap-1 transition-colors disabled:opacity-50"
           >
             <Undo2 size={12} aria-hidden />
             Undo
@@ -243,108 +249,141 @@ export const KnowledgeDetail = ({
           <div className="mb-3 flex items-start justify-between gap-3">
             <h1
               className={cn(
-                'text-fg text-[1.1875rem] font-semibold tracking-tight',
+                'font-display headline text-fg text-[1.375rem] leading-snug',
                 current.superseded && 'text-fg-muted line-through decoration-1',
               )}
             >
               {current.title}
             </h1>
-            <Button size="sm" onClick={startEdit} className="shrink-0">
+            <Button size="sm" onClick={startEdit} className="mt-0.5 shrink-0">
               Edit
             </Button>
           </div>
 
-          <div className="text-fg-subtle mb-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.75rem]">
-            {current.verified && (
-              <span className="text-status-in-review inline-flex items-center gap-1">
-                <ShieldCheck size={12} aria-hidden /> Verified
+          {/* Everything said ABOUT the fact, in one card above it: its state
+              and scope on the first line, where it came from on the second.
+              The body below then reads uninterrupted. */}
+          <div className="surface-card mb-6 text-[0.75rem]">
+            <div className="text-fg-subtle flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2">
+              {current.verified && (
+                <TintPill color="var(--status-in-review)" className="text-status-in-review">
+                  <ShieldCheck size={11} aria-hidden /> Verified
+                </TintPill>
+              )}
+              <time dateTime={current.updatedAt} title={fullDateTime(current.updatedAt)}>
+                Updated {shortDate(current.updatedAt)}
+              </time>
+              {/* Both, not one or the other. A fact scoped to a project AND an
+                  entity showed only its projects here, so the entity was
+                  invisible until somebody clicked Edit. And these are links
+                  now: the whole point of a scope is the rest of what shares
+                  it, and reaching that was a URL you had to know. Entities
+                  have no page of their own, so they go where the project
+                  header already sends them. */}
+              <span className="flex flex-wrap items-center gap-1">
+                {current.projects.map((p) => (
+                  <Link key={p} href={`/projects/${p}`} className={LIFT}>
+                    <TintPill color={projectColor(p)}>
+                      <ProjectIcon size={10} projectKey={p} />
+                      {p}
+                    </TintPill>
+                  </Link>
+                ))}
+                {current.entities.map((e) => (
+                  <Link
+                    key={e}
+                    href={`/knowledge?entity=${encodeURIComponent(e)}`}
+                    className={LIFT}
+                  >
+                    <TintPill color={entityColor(e)}>
+                      <span
+                        aria-hidden
+                        className="size-[0.4375rem] rounded-full"
+                        style={{ backgroundColor: entityColor(e) }}
+                      />
+                      {e}
+                    </TintPill>
+                  </Link>
+                ))}
+                {current.projects.length === 0 && current.entities.length === 0 && (
+                  <TintPill color="var(--fg-subtle)" className="text-fg-subtle italic">
+                    global
+                  </TintPill>
+                )}
               </span>
-            )}
-            <time dateTime={current.updatedAt} title={fullDateTime(current.updatedAt)}>
-              Updated {shortDate(current.updatedAt)}
-            </time>
-            {/* Both, not one or the other. A fact scoped to a project AND an
-                entity showed only its projects here, so the entity was
-                invisible until somebody clicked Edit. And these are links
-                now: the whole point of a scope is the rest of what shares
-                it, and reaching that was a URL you had to know. Entities
-                have no page of their own, so they go where the project
-                header already sends them. */}
-            {current.projects.map((p) => (
-              <Link
-                key={p}
-                href={`/projects/${p}`}
-                className="hover:text-fg inline-flex items-center gap-1 transition-colors"
-              >
-                <ProjectIcon size={11} projectKey={p} />
-                {p}
-              </Link>
-            ))}
-            {current.entities.map((e) => (
-              <Link
-                key={e}
-                href={`/knowledge?entity=${encodeURIComponent(e)}`}
-                className="hover:text-fg inline-flex items-center gap-1 transition-colors"
-              >
-                <span aria-hidden className="bg-fg-subtle size-1.5 rounded-full" />
-                {e}
-              </Link>
-            ))}
-            {current.projects.length === 0 && current.entities.length === 0 && (
-              <span className="italic">global</span>
-            )}
-            {current.labels.map((l) => (
-              <LabelPill key={l}>{l}</LabelPill>
-            ))}
+              {current.labels.length > 0 && (
+                <span className="flex flex-wrap items-center gap-1">
+                  {current.labels.map((l) => (
+                    <LabelPill key={l}>{l}</LabelPill>
+                  ))}
+                </span>
+              )}
+            </div>
+
+            {/* The slug is the name this fact has. It lived only in the URL,
+                while being the exact string an agent types to fetch it and the
+                one that goes inside [[...]] to reference it. */}
+            <div className="border-border/70 text-fg-subtle flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t px-3 py-2 text-[0.6875rem]">
+              <code className="bg-surface-raised text-fg-muted rounded px-1.5 py-0.5 font-mono">{slug}</code>
+              {current.sourceTask && (
+                <span>
+                  learned on{' '}
+                  <Link
+                    href={`/projects/${current.sourceTask.ref.split('-')[0]}/tasks/${current.sourceTask.ref.split('-').slice(1).join('-')}`}
+                    className="text-accent font-mono decoration-1 underline-offset-2 hover:underline"
+                    title={current.sourceTask.title}
+                  >
+                    {current.sourceTask.ref}
+                  </Link>
+                </span>
+              )}
+              {current.author && <span>recorded by {current.author}</span>}
+              <time dateTime={current.createdAt} title={fullDateTime(current.createdAt)}>
+                first written {shortDate(current.createdAt)}
+              </time>
+              {/* How often it is handed to anyone (CAIRN-270), and what that
+                  leaves out — a fact the briefing shows daily would otherwise
+                  read as unused. */}
+              <span className="tabular-nums" title={`Last ${recall.days} days: ${recall.counted}.`}>
+                {recall.returned + recall.read === 0
+                  ? `not recalled in ${recall.days} days`
+                  : `recalled ${recall.returned + recall.read}× in ${recall.days} days (${recall.returned} search, ${recall.read} read)`}
+                {recall.lastRecalled && recall.returned + recall.read === 0
+                  ? ` · last ${shortDate(recall.lastRecalled)}`
+                  : ''}
+              </span>
+            </div>
           </div>
 
           <MarkdownView>{current.body || '_No body yet._'}</MarkdownView>
 
-          {/* The slug is the name this fact has. It lived only in the URL,
-              while being the exact string an agent types to fetch it and the
-              one that goes inside [[...]] to reference it. */}
-          <div className="text-fg-subtle mt-8 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[0.6875rem]">
-            <code className="bg-surface-raised rounded px-1.5 py-0.5">{slug}</code>
-            {current.sourceTask && (
-              <span>
-                learned on{' '}
-                <Link
-                  href={`/projects/${current.sourceTask.ref.split('-')[0]}/tasks/${current.sourceTask.ref.split('-').slice(1).join('-')}`}
-                  className="text-accent decoration-1 underline-offset-2 hover:underline"
-                  title={current.sourceTask.title}
-                >
-                  {current.sourceTask.ref}
-                </Link>
-              </span>
-            )}
-            {current.author && <span>recorded by {current.author}</span>}
-            <time dateTime={current.createdAt} title={fullDateTime(current.createdAt)}>
-              first written {shortDate(current.createdAt)}
-            </time>
-            {/* How often it is handed to anyone (CAIRN-270), and what that
-                leaves out — a fact the briefing shows daily would otherwise
-                read as unused. */}
-            <span title={`Last ${recall.days} days: ${recall.counted}.`}>
-              {recall.returned + recall.read === 0
-                ? `not recalled in ${recall.days} days`
-                : `recalled ${recall.returned + recall.read}× in ${recall.days} days (${recall.returned} search, ${recall.read} read)`}
-              {recall.lastRecalled && recall.returned + recall.read === 0
-                ? ` · last ${shortDate(recall.lastRecalled)}`
-                : ''}
-            </span>
-          </div>
-
           {revisions.length > 0 && (
-            <details className="border-border mt-6 border-t pt-4">
-              <summary className="text-fg-muted hover:text-fg cursor-pointer text-[0.75rem]">
+            <details className="group/history border-border/70 mt-8 border-t pt-4">
+              <summary className="text-fg-muted hover:text-fg flex cursor-pointer list-none items-center gap-1.5 text-[0.75rem] transition-colors [&::-webkit-details-marker]:hidden">
+                <ChevronRight
+                  size={12}
+                  aria-hidden
+                  className="text-fg-subtle transition-transform duration-[var(--dur-2)] ease-[var(--ease-out)] group-open/history:rotate-90"
+                />
                 {revisions.length} earlier version{revisions.length === 1 ? '' : 's'} — this is
                 version {(revisions[0]?.revision ?? 0) + 1}
               </summary>
-              <ol className="mt-3 flex flex-col gap-4">
+              {/* The history as a short trail: one stone per version it
+                  replaced, joined by the same dotted line as the activity
+                  feed, newest at the top. */}
+              <ol className="enter-rise mt-3 flex flex-col">
                 {revisions.map((r) => (
-                  <li key={r.revision} className="border-border border-l-2 pl-3">
+                  <li key={r.revision} className="group/rev relative pb-4 pl-5 last:pb-0">
+                    <span
+                      aria-hidden
+                      className="absolute top-0 bottom-0 left-[3.5px] w-px bg-[linear-gradient(to_bottom,var(--border-strong)_40%,transparent_0)] bg-[length:1px_5px] group-first/rev:top-[0.4375rem] group-last/rev:bottom-auto group-last/rev:h-[0.4375rem] group-only/rev:hidden"
+                    />
+                    <span
+                      aria-hidden
+                      className="bg-fg-subtle absolute top-[0.25rem] left-0 h-1.5 w-2 rounded-full shadow-[0_0_0_3px_color-mix(in_oklab,var(--fg-subtle)_14%,transparent)]"
+                    />
                     <div className="text-fg-subtle flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.6875rem]">
-                      <span className="text-fg-muted">v{r.revision}</span>
+                      <span className="text-fg-muted font-mono tabular-nums">v{r.revision}</span>
                       <span>
                         replaced{r.editedBy ? ` by ${r.editedBy}` : ''} ·{' '}
                         <time dateTime={r.editedAt} title={fullDateTime(r.editedAt)}>
@@ -355,8 +394,10 @@ export const KnowledgeDetail = ({
                     </div>
                     {r.reason && <p className="text-fg-muted mt-1 text-[0.75rem]">{r.reason}</p>}
                     <details className="mt-1">
-                      <summary className="text-fg cursor-pointer text-[0.78125rem]">{r.title}</summary>
-                      <div className="mt-2">
+                      <summary className="text-fg hover:text-accent cursor-pointer text-[0.78125rem] transition-colors">
+                        {r.title}
+                      </summary>
+                      <div className="surface-card mt-2 px-3 py-2.5">
                         <MarkdownView>{r.body || '_No body._'}</MarkdownView>
                       </div>
                     </details>
@@ -367,7 +408,7 @@ export const KnowledgeDetail = ({
           )}
 
           {!current.superseded && (
-            <div className="border-border mt-8 flex flex-wrap items-center gap-2 border-t pt-4">
+            <div className="border-border/70 mt-8 flex flex-wrap items-center gap-2 border-t pt-4">
               <span className="text-fg-subtle text-[0.75rem]">Mark superseded by:</span>
               {/* Searched, not listed. This was a select holding every current
                   entry, which is unusable at 348 and was silently capped at
@@ -382,7 +423,7 @@ export const KnowledgeDetail = ({
                 }}
               />
               {supersedeTarget && (
-                <span className="text-fg flex items-center gap-1 text-[0.75rem]">
+                <span className="text-fg enter-rise flex items-center gap-1 text-[0.75rem]">
                   <span className="text-fg-subtle">→</span>
                   <span className="max-w-[16rem] truncate">{supersedeTitle || supersedeTarget}</span>
                   <button

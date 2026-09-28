@@ -10,8 +10,11 @@ import {
 } from '@/lib/data'
 import { MarkdownEditor } from '@/components/markdown-editor'
 import { MarkdownView } from '@/components/markdown'
-import { ProjectIcon } from '@/components/icons'
+import { ProjectIcon, StatusIcon } from '@/components/icons'
 import { BrandName } from '@/components/brand'
+import { RelativeTime } from '@/components/relative-time'
+import { isTerminal } from '@/schemas/task'
+import { cn } from '@/lib/utils'
 import { Properties } from './properties'
 import { EditableTitle } from './editable-title'
 import { LiveUpdates } from '@/components/live-updates'
@@ -26,6 +29,7 @@ import { MobileNavButton } from '@/components/mobile-nav-context'
 import { RedirectNotice } from '@/components/redirect-notice'
 import { listFormerKeyRecords } from '@/lib/data'
 import { formerRefsOf, renameLine, renamesOf, taskRedirectNotice } from '@/lib/project-rename'
+import { GLASS, LABEL } from './styles'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +54,45 @@ export const generateMetadata = async ({
   const title = `${ref} · ${task.title}`
   return { title: title.length > 60 ? `${title.slice(0, 59)}…` : title }
 }
+
+/**
+ * A note set above the body. The stripe is the trail marker in the note's own
+ * colour, and the face carries a faint wash of it from the left, so a blocked
+ * task, a duplicate and an answer are told apart before a word is read.
+ */
+const Callout = ({
+  tone,
+  className,
+  children,
+}: {
+  tone: string
+  className?: string
+  children: React.ReactNode
+}) => (
+  <div
+    className={cn('surface-card relative mb-5 overflow-hidden py-2 pr-3 pl-3.5', className)}
+    style={{
+      borderColor: `color-mix(in oklab, ${tone} 22%, var(--border))`,
+      backgroundImage: `linear-gradient(90deg, color-mix(in oklab, ${tone} 7%, transparent), transparent 55%), linear-gradient(180deg, var(--card-top), var(--surface) 70%)`,
+    }}
+  >
+    <span
+      aria-hidden
+      className="absolute inset-y-0 left-0 w-[2px]"
+      style={{
+        backgroundColor: tone,
+        boxShadow: `0 0 10px color-mix(in oklab, ${tone} 55%, transparent)`,
+      }}
+    />
+    {children}
+  </div>
+)
+
+const Dot = () => (
+  <span aria-hidden className="text-fg-subtle">
+    ·
+  </span>
+)
 
 const TaskPage = async ({
   params,
@@ -122,7 +165,7 @@ const TaskPage = async ({
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
+      <header className="page-header border-border flex h-[2.75rem] shrink-0 items-center gap-1.5 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <Link
           href="/"
@@ -190,6 +233,21 @@ const TaskPage = async ({
       <div className="flex min-h-0 flex-1 flex-col-reverse lg:flex-row">
         <div className="min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[51.25rem] px-4 py-6 sm:px-6 lg:px-8">
+            {/* The ref and the project, quiet above the title rather than
+                competing with it: the title is the page's one voice. */}
+            <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5">
+              <span className="border-border bg-surface-raised/60 text-fg-muted inline-flex h-[1.25rem] shrink-0 items-center rounded-md border px-1.5 font-mono text-[0.6875rem] shadow-[var(--highlight)]">
+                {ref}
+              </span>
+              <Link
+                href={`/projects/${task.project.key}`}
+                className="border-border text-fg-muted hover:text-fg hover:border-border-strong hover:bg-surface-hover inline-flex h-[1.25rem] min-w-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
+              >
+                <ProjectIcon size={11} projectKey={task.project.key} />
+                <span className="truncate">{task.project.title}</span>
+              </Link>
+            </div>
+
             <EditableTitle taskId={task.id} initial={task.title} />
 
             <RedirectNotice message={arrivedFrom} />
@@ -197,42 +255,65 @@ const TaskPage = async ({
             {/* First thing on the page when it applies: a reader who opens a
                 duplicate wants redirecting, not reading. */}
             {duplicateOf ? (
-              <p className="border-border bg-surface-raised text-fg-muted mb-5 rounded-md border px-3 py-2 text-[0.78125rem]">
-                Duplicate of{' '}
-                <Link
-                  href={`/projects/${duplicateOf.ref.slice(0, duplicateOf.ref.lastIndexOf('-'))}/tasks/${duplicateOf.ref.slice(duplicateOf.ref.lastIndexOf('-') + 1)}`}
-                  prefetch
-                  className="text-accent hover:underline"
-                >
-                  {duplicateOf.ref}
-                </Link>{' '}
-                — {duplicateOf.title}
-              </p>
+              <Callout tone="var(--fg-subtle)">
+                <p className="text-fg-muted text-[0.78125rem]">
+                  Duplicate of{' '}
+                  <Link
+                    href={`/projects/${duplicateOf.ref.slice(0, duplicateOf.ref.lastIndexOf('-'))}/tasks/${duplicateOf.ref.slice(duplicateOf.ref.lastIndexOf('-') + 1)}`}
+                    prefetch
+                    className="text-accent decoration-accent/50 underline-offset-[3px] hover:underline"
+                  >
+                    {duplicateOf.ref}
+                  </Link>{' '}
+                  — {duplicateOf.title}
+                </p>
+              </Callout>
             ) : null}
 
             {task.blocked_reason ? (
-              <p className="text-danger bg-danger-subtle mb-5 rounded-md px-3 py-2 text-[0.75rem]">
-                Blocked: {task.blocked_reason}
-              </p>
+              <Callout tone="var(--danger)">
+                <p className="text-danger text-[0.75rem]">Blocked: {task.blocked_reason}</p>
+              </Callout>
             ) : null}
 
             {/* Above the body on purpose: when a future agent opens a closed
-                task, the answer is what it came for. */}
+                task, the answer is what it came for — so it is the one card on
+                the page that carries its status's light. */}
             {task.resolution ? (
-              <div className="border-status-done/25 bg-status-done/[0.06] mb-6 rounded-md border py-2.5 pr-3 pl-3.5">
-                <p className="text-status-done mb-1 text-[0.6875rem] font-medium">
-                  Resolution{task.resolution_kind ? ` · ${task.resolution_kind}` : ''}
-                  {task.resolved_by ? ` · ${task.resolved_by}` : ''}
+              <Callout tone={`var(--status-${task.status})`} className="mb-6 py-3 pr-4 pl-[1.125rem]">
+                <p className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.6875rem]">
+                  <StatusIcon status={task.status} size={12} />
+                  <span className="font-medium" style={{ color: `var(--status-${task.status})` }}>
+                    {isTerminal(task.status) ? 'Resolved' : 'Resolution'}
+                  </span>
+                  {task.resolution_kind ? (
+                    <>
+                      <Dot />
+                      <span className="text-fg-muted">{task.resolution_kind}</span>
+                    </>
+                  ) : null}
+                  {task.resolved_by ? (
+                    <>
+                      <Dot />
+                      <span className="text-fg-muted">{task.resolved_by}</span>
+                    </>
+                  ) : null}
+                  {task.resolved_at ? (
+                    <>
+                      <Dot />
+                      <RelativeTime iso={task.resolved_at} className="text-fg-subtle" />
+                    </>
+                  ) : null}
                 </p>
                 <MarkdownView>{task.resolution}</MarkdownView>
-              </div>
+              </Callout>
             ) : null}
 
             {task.checkpoint_summary && !task.resolution ? (
-              <div className="border-border bg-surface-raised mb-6 rounded-md border py-2.5 pr-3 pl-3.5">
-                <p className="text-fg-subtle mb-1 text-[0.6875rem] font-medium">Last checkpoint</p>
+              <Callout tone="var(--fg-subtle)" className="mb-6 py-2.5">
+                <p className={cn(LABEL, 'mb-1')}>Last checkpoint</p>
                 <p className="text-fg-muted text-[0.8125rem]">{task.checkpoint_summary}</p>
-              </div>
+              </Callout>
             ) : null}
 
             <div className="mb-6">
@@ -243,8 +324,9 @@ const TaskPage = async ({
                 was most of the dead space on this page; a divider does the
                 same job of separating them and reads as structure. Ordered by
                 what a reader wants next: the split, then the evidence, then
-                the conversation, then the audit trail. */}
-            <div className="divide-border flex flex-col divide-y [&>*]:py-5">
+                the conversation, then the audit trail. The rule fades out at
+                both ends, as the header's does. */}
+            <div className="flex flex-col [&>*]:py-5 [&>*+*]:bg-[linear-gradient(90deg,transparent,var(--border-strong)_8%,var(--border-strong)_92%,transparent)] [&>*+*]:bg-[length:100%_1px] [&>*+*]:bg-no-repeat">
               <MentionsPanel total={mentioned.total} mentions={mentioned.mentions} />
               <ChildrenPanel
                 taskRef={`${task.project.key}-${task.number}`}
@@ -260,7 +342,7 @@ const TaskPage = async ({
           </div>
         </div>
 
-        <div className="hidden overflow-y-auto lg:block">
+        <div className="hidden overflow-y-auto lg:block" style={GLASS}>
           <Properties
             task={task}
             project={task.project}

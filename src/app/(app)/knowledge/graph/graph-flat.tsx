@@ -745,12 +745,13 @@ export const GraphFlat = ({ graph, focused, setFocused, spotlight }: Props) => {
       {/* A wheel is not the only way to zoom, and on a touch screen there is
           no wheel at all. Also the keyboard path into the map, since the nodes
           themselves are deliberately not tab stops. */}
-      <div className="absolute right-2 bottom-2 flex items-center gap-1">
+      <div className="border-border bg-surface/80 raised absolute right-2 bottom-2 flex items-center gap-0.5 rounded-full border p-0.5 backdrop-blur-md">
         {zoom !== 1 || pan.x !== 0 || pan.y !== 0 ? (
           <button
             type="button"
             onClick={reset}
-            className="border-border bg-surface text-fg-subtle hover:text-fg rounded-md border px-2 py-1 text-[0.7rem]"
+            className="text-fg-subtle hover:bg-surface-raised hover:text-fg enter-pop h-7 rounded-full px-2.5 text-[0.7rem] transition-colors duration-[var(--dur-1)]"
+            style={{ '--origin': 'right' } as React.CSSProperties}
           >
             Reset view
           </button>
@@ -759,7 +760,7 @@ export const GraphFlat = ({ graph, focused, setFocused, spotlight }: Props) => {
           type="button"
           aria-label="Zoom out"
           onClick={() => zoomAt(0.8)}
-          className="border-border bg-surface text-fg-subtle hover:text-fg h-7 w-7 rounded-md border text-[0.9rem] leading-none"
+          className="text-fg-subtle hover:bg-surface-raised hover:text-fg h-7 w-7 rounded-full text-[0.9rem] leading-none transition-colors duration-[var(--dur-1)]"
         >
           −
         </button>
@@ -767,7 +768,7 @@ export const GraphFlat = ({ graph, focused, setFocused, spotlight }: Props) => {
           type="button"
           aria-label="Zoom in"
           onClick={() => zoomAt(1.25)}
-          className="border-border bg-surface text-fg-subtle hover:text-fg h-7 w-7 rounded-md border text-[0.9rem] leading-none"
+          className="text-fg-subtle hover:bg-surface-raised hover:text-fg h-7 w-7 rounded-full text-[0.9rem] leading-none transition-colors duration-[var(--dur-1)]"
         >
           +
         </button>

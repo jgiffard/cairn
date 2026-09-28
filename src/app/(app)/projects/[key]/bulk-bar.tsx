@@ -89,7 +89,7 @@ const Action = <T extends string>({
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className={`h-[1.625rem] rounded-md px-2.5 text-[0.75rem] transition-colors ${
+        className={`h-[1.625rem] rounded-md px-2.5 text-[0.75rem] transition-colors duration-[var(--dur-1)] ease-[var(--ease)] ${
           open ? 'bg-surface-hover text-fg' : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
         }`}
       >
@@ -98,7 +98,9 @@ const Action = <T extends string>({
       {open && (
         <div
           role="menu"
-          className="border-border bg-surface absolute bottom-[2rem] left-0 z-50 w-[10.5rem] overflow-hidden rounded-md border py-1 raised"
+          className="border-border bg-surface pop absolute bottom-[2rem] left-0 z-50 w-[10.5rem] overflow-hidden rounded-lg border py-1 raised"
+          // It opens upwards, so it grows from the corner nearest its button.
+          style={{ '--origin': 'bottom left' } as React.CSSProperties}
         >
           {options.map((o) => (
             <button
@@ -109,7 +111,7 @@ const Action = <T extends string>({
                 setOpen(false)
                 onPick(o)
               }}
-              className="text-fg-muted hover:bg-surface-hover hover:text-fg flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.78125rem] transition-colors"
+              className="text-fg-muted hover:bg-surface-hover hover:text-fg flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.78125rem] transition-colors duration-[var(--dur-1)]"
             >
               {icon(o)}
               {labels?.[o] ?? o}
@@ -155,7 +157,9 @@ export const BulkBar = ({
             a scroll container in both directions and clipped its own Status
             and Priority menus — which open *above* it — out of existence.
             The content is ~300px; it wraps rather than scrolls. */}
-        <div className="border-border bg-surface pointer-events-auto flex max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-1 rounded-lg border px-2 py-1.5 raised-lg">
+        {/* Glass, floating: the list stays legible through it, and it rises
+            into place from below rather than appearing on top. */}
+        <div className="border-border bg-surface/85 enter-sheet pointer-events-auto relative flex max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-1 rounded-xl border px-2 py-1.5 backdrop-blur-xl raised-lg">
           <span className="text-fg tabular px-1.5 text-[0.75rem] font-medium">
             {progress === null
               ? `${ids.length} selected`
@@ -188,10 +192,19 @@ export const BulkBar = ({
           <button
             type="button"
             onClick={onClear}
-            className="text-fg-subtle hover:text-fg h-[1.625rem] rounded-md px-2 text-[0.75rem] transition-colors"
+            className="text-fg-subtle hover:text-fg h-[1.625rem] rounded-md px-2 text-[0.75rem] transition-colors duration-[var(--dur-1)] ease-[var(--ease)]"
           >
             Clear
           </button>
+
+          {/* How far a run has got, as light along the bar's foot. */}
+          {progress !== null && (
+            <span
+              aria-hidden
+              className="bg-accent pointer-events-none absolute inset-x-3 bottom-0 h-px origin-left shadow-[0_0_6px_var(--glow)] transition-transform duration-[var(--dur-3)] ease-[var(--ease-out)]"
+              style={{ transform: `scaleX(${ids.length ? progress / ids.length : 0})` }}
+            />
+          )}
         </div>
       </div>
 

@@ -9,42 +9,56 @@ import { cn } from '@/lib/utils'
 import { NOTE_KINDS, type NoteKind } from '@/schemas/task'
 import { Button } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
+import { EmptyState } from '@/components/empty-state'
 import type { Note } from '@/lib/data'
 import { useMutate } from '@/lib/api/use-mutate'
+import { COMPOSER, COUNT, LABEL } from './styles'
 
-const KIND_STYLE: Record<string, string> = {
-  finding: 'text-status-todo',
-  decision: 'text-status-in-review',
-  attempt: 'text-status-doing',
-  handoff: 'text-priority-high',
-  note: 'text-fg-subtle',
+/**
+ * Each kind's colour, as a token so the label and its stone share it. Dead
+ * ends recede; what was found and what was decided carry the light.
+ */
+const KIND_TONE: Record<string, string> = {
+  finding: 'var(--status-in-review)',
+  decision: 'var(--accent)',
+  attempt: 'var(--fg-subtle)',
+  handoff: 'var(--status-doing)',
+  note: 'var(--fg-muted)',
+}
+
+const toneOf = (kind: string) => KIND_TONE[kind] ?? 'var(--fg-subtle)'
+
+/**
+ * The trail between two stones: dots, not a rule, so the log reads as a path
+ * walked rather than a table. Drawn per entry, so it settles in with the entry
+ * it leads to.
+ */
+const TRAIL: React.CSSProperties = {
+  backgroundImage:
+    'radial-gradient(circle, color-mix(in oklab, var(--fg-subtle) 55%, transparent) 0.75px, transparent 1.15px)',
+  backgroundSize: '2px 5px',
+  backgroundRepeat: 'repeat-y',
 }
 
 /**
- * The rail marker. Filled for the latest entry, hollow for the rest — so the
- * eye lands on where the work got to without reading a single date.
+ * The stone for one entry, in its kind's colour. The latest one glows — so
+ * the eye lands on where the work got to without reading a single date.
  */
-const RailMarker = ({
-  ordinal,
-  latest,
-  kind,
-}: {
-  ordinal: number
-  latest: boolean
-  kind: string
-}) => (
-  <span
-    className={cn(
-      'tabular relative z-10 grid size-[1.375rem] shrink-0 place-items-center rounded-full border text-[0.625rem] font-medium',
-      latest
-        ? 'border-accent bg-accent-subtle text-accent'
-        : 'border-border bg-bg text-fg-subtle',
-    )}
-    title={kind}
-  >
-    {latest ? <span className="bg-accent size-[0.4375rem] rounded-full" /> : ordinal}
-  </span>
-)
+const Stone = ({ latest, kind }: { latest: boolean; kind: string }) => {
+  const tone = toneOf(kind)
+  return (
+    <span
+      className="relative z-10 mt-[0.3rem] block h-[0.4375rem] w-[0.625rem] shrink-0 rounded-full"
+      style={{
+        backgroundColor: tone,
+        boxShadow: latest
+          ? `0 0 0 3px color-mix(in oklab, ${tone} 18%, transparent), 0 0 10px color-mix(in oklab, ${tone} 50%, transparent)`
+          : undefined,
+      }}
+      title={kind}
+    />
+  )
+}
 
 /**
  * The work log, rendered dense and collapsed by default. This is the debugging
@@ -114,14 +128,14 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
 
   return (
     <section>
-      <h2 className="text-fg-muted mb-2.5 flex items-center gap-2 text-[0.6875rem] font-medium">
+      <h2 className={cn(LABEL, 'mb-2.5 flex items-center gap-2')}>
         Work log
-        <span className="tabular text-fg-subtle">{notes.length}</span>
+        <span className={COUNT}>{notes.length}</span>
         {allLong.length > 1 && (
           <button
             type="button"
             onClick={() => setExpanded(anyCollapsed ? new Set(allLong) : new Set())}
-            className="text-fg-subtle hover:text-fg ml-auto font-normal transition-colors"
+            className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 ml-auto rounded px-1.5 py-px text-[0.6875rem] font-normal tracking-normal normal-case transition-colors duration-[var(--dur-1)]"
           >
             {anyCollapsed ? 'Expand all' : 'Collapse all'}
           </button>
@@ -130,9 +144,9 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
 
       {/* One bordered box with its own footer, rather than a textarea, a
           select and a button sitting side by side in three different shapes.
-          The border lives on the wrapper and lifts on focus-within, so the
+          The rim lives on the wrapper and lights on focus-within, so the
           whole composer reads as a single control. */}
-      <div className="border-border bg-surface focus-within:border-accent focus-within:ring-ring/30 mb-4 overflow-hidden rounded-lg border transition-[border-color,box-shadow] focus-within:ring-2">
+      <div className={cn(COMPOSER, 'mb-4')}>
         <textarea
           rows={2}
           value={text}
@@ -145,15 +159,18 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
         />
 
         <div className="border-border/70 flex items-center gap-2 border-t px-2 py-1.5">
-          <div className="relative">
+          <div className="relative flex items-center">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute left-1.5 h-[0.375rem] w-[0.5rem] rounded-full transition-colors duration-[var(--dur-1)]"
+              style={{ backgroundColor: toneOf(kind) }}
+            />
             <select
               value={kind}
               onChange={(e) => setKind(e.target.value as NoteKind)}
               aria-label="Note kind"
-              className={cn(
-                'hover:bg-surface-raised cursor-pointer appearance-none rounded-md border border-transparent bg-transparent py-1 pr-5 pl-1.5 text-[0.75rem] outline-none transition-colors',
-                KIND_STYLE[kind] ?? 'text-fg-muted',
-              )}
+              className="hover:bg-surface-raised focus-visible:border-accent cursor-pointer appearance-none rounded-md border border-transparent bg-transparent py-1 pr-5 pl-4 text-[0.75rem] outline-none transition-colors"
+              style={{ color: toneOf(kind) }}
             >
               {NOTE_KINDS.map((k) => (
                 <option key={k} value={k}>
@@ -190,19 +207,11 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
       </div>
 
       {notes.length === 0 ? (
-        <p className="text-fg-subtle border-border rounded-md border border-dashed px-3 py-4 text-center text-[0.75rem]">
-          Nothing logged yet. Dead ends are worth recording too.
-        </p>
+        <EmptyState compact title="Nothing logged yet." hint="Dead ends are worth recording too." />
       ) : (
-        <ol className="relative flex flex-col">
-          {/* One continuous line behind the markers, rather than a border per
-              row — a divided list of boxes reads as a table, and this is a
-              sequence. */}
-          <span
-            className="bg-border-strong/70 absolute top-[1rem] bottom-[1rem] left-[0.65625rem] w-px"
-            aria-hidden
-          />
-
+        // A trail rather than a divided list: a divided list of boxes reads
+        // as a table, and this is a sequence. The newest entries settle in.
+        <ol className="stagger flex flex-col">
           {notes.map((note, index) => {
             const isOpen = expanded.has(note.id)
             const long = note.note.length > 180
@@ -210,14 +219,18 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
             // ones arrive; the list itself stays newest-first for scanning.
             const ordinal = notes.length - index
             return (
-              <li key={note.id} className="group/note flex gap-2.5 pb-3.5 last:pb-0">
-                <RailMarker ordinal={ordinal} latest={index === 0} kind={note.kind} />
+              <li key={note.id} className="group/note relative flex gap-3 pb-3.5 last:pb-0">
+                <Stone latest={index === 0} kind={note.kind} />
+                {/* To the next stone down; the oldest entry is the trailhead. */}
+                <span
+                  aria-hidden
+                  className="absolute top-[0.9375rem] bottom-[-0.125rem] left-[0.25rem] w-[2px] group-last/note:hidden"
+                  style={TRAIL}
+                />
 
-                <div className="min-w-0 flex-1 pt-[2px]">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2 text-[0.6875rem]">
-                    <span
-                      className={cn('font-medium', KIND_STYLE[note.kind] ?? 'text-fg-subtle')}
-                    >
+                    <span className="font-medium" style={{ color: toneOf(note.kind) }}>
                       {note.kind}
                     </span>
                     <span
@@ -225,10 +238,10 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
                     >
                       {note.actor_id}
                     </span>
-                    <RelativeTime
-                      iso={note.created_at}
-                      className="text-fg-subtle tabular ml-auto shrink-0"
-                    />
+                    <span className="text-fg-subtle/80 tabular ml-auto shrink-0" title={`Entry ${ordinal}`}>
+                      #{ordinal}
+                    </span>
+                    <RelativeTime iso={note.created_at} className="text-fg-subtle tabular shrink-0" />
                   </div>
 
                   <div
@@ -244,7 +257,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
                     <button
                       type="button"
                       onClick={() => toggleExpanded(note.id)}
-                      className="text-fg-subtle hover:text-fg mt-0.5 text-[0.6875rem] transition-colors"
+                      className="text-fg-subtle hover:text-fg mt-0.5 text-[0.6875rem] transition-colors duration-[var(--dur-1)]"
                     >
                       {isOpen ? 'Show less' : 'Show more'}
                     </button>

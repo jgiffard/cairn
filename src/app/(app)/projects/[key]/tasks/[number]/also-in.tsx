@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ProjectIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { useMutate } from '@/lib/api/use-mutate'
+import { LABEL } from './styles'
 
 /**
  * The projects a task belongs to beyond the one that owns its ref.
@@ -58,13 +59,13 @@ export const AlsoIn = ({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
-        {/* Matches every other label down this sidebar. Uppercase here made
-            one heading shout among six that do not. */}
-        <span className="text-fg-subtle text-[0.6875rem] font-medium">Also in</span>
+        {/* Matches every other label down this sidebar, from the one
+            definition they all share. */}
+        <span className={LABEL}>Also in</span>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="text-fg-subtle hover:text-fg text-[0.6875rem] transition-colors"
+          className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 rounded px-1.5 py-px text-[0.6875rem] transition-colors duration-[var(--dur-1)]"
         >
           {open ? 'Done' : 'Edit'}
         </button>
@@ -79,7 +80,7 @@ export const AlsoIn = ({
           {current.map((key) => (
             <span
               key={key}
-              className="text-fg-muted inline-flex items-center gap-1 text-[0.75rem]"
+              className="border-border text-fg-muted inline-flex h-[1.25rem] items-center gap-1 rounded-full border pr-2 pl-1.5 text-[0.75rem]"
             >
               <ProjectIcon size={11} projectKey={key} />
               {key}
@@ -89,7 +90,10 @@ export const AlsoIn = ({
       )}
 
       {open && (
-        <div className="mt-1 flex flex-wrap gap-1">
+        <div
+          className="pop mt-1 flex flex-wrap gap-1"
+          style={{ '--origin': 'top left' } as React.CSSProperties}
+        >
           {projects
             .filter((p) => p.key !== homeKey)
             .map((p) => {
@@ -103,8 +107,12 @@ export const AlsoIn = ({
                   aria-pressed={on}
                   title={p.title}
                   className={cn(
-                    'rounded border px-1.5 py-0.5 font-mono text-[0.6875rem] transition-colors',
-                    on ? 'border-accent text-accent' : 'border-border text-fg-subtle hover:text-fg',
+                    'rounded-full border px-1.5 py-0.5 font-mono text-[0.6875rem] transition-[color,border-color,background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',
+                    // On is lit, not filled: the accent at the rim and a
+                    // little of its glow, as the active marker is.
+                    on
+                      ? 'border-accent/70 text-accent bg-accent/[0.06] shadow-[0_0_8px_-2px_var(--glow)]'
+                      : 'border-border text-fg-subtle hover:text-fg hover:border-border-strong hover:bg-surface-hover',
                   )}
                 >
                   {p.key}

@@ -2,7 +2,9 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { useLiveStatus } from '@/components/live-status'
+import { cn } from '@/lib/utils'
 
 /** Backoff between our own reconnection attempts, capped. */
 const RETRY_MS = [1_000, 2_000, 5_000, 10_000, 30_000]
@@ -155,8 +157,14 @@ export const LiveUpdates = ({ projectKey }: { projectKey?: string }) => {
         setStale(false)
         router.refresh()
       }}
-      className="bg-accent text-accent-fg pop fixed bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-full px-3 py-1.5 text-[0.75rem] font-medium raised"
+      className={cn(
+        'bg-surface/85 text-fg raised-lg enter-pop fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border py-1.5 pr-3 pl-2.5 text-[0.75rem] font-medium backdrop-blur-xl backdrop-saturate-150',
+        'border-[color:color-mix(in_oklab,var(--accent)_40%,var(--border))] hover:bg-surface-raised/90',
+        'transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]',
+      )}
+      style={{ '--origin': 'bottom' } as React.CSSProperties}
     >
+      <RefreshCw size={12} className="text-accent drop-shadow-[0_0_6px_var(--glow)]" aria-hidden />
       Updated elsewhere — refresh
     </button>
   )

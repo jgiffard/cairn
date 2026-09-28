@@ -1,19 +1,21 @@
 import Link from 'next/link'
+import { EmptyState } from '@/components/empty-state'
 
 const NotFound = () => (
-  <div className="flex h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
-    <div className="flex flex-col gap-1.5">
-      <h1 className="text-fg text-[0.9375rem] font-medium">Nothing here.</h1>
-      <p className="text-fg-muted max-w-[42ch] text-[0.8125rem] leading-relaxed">
-        That task or project does not exist, or it was deleted.
-      </p>
-    </div>
-    <Link
-      href="/"
-      className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg h-[1.875rem] rounded-md border px-3.5 text-[0.8125rem] leading-[1.75rem] transition-colors"
-    >
-      Back to all tasks
-    </Link>
+  <div className="flex h-dvh flex-col items-center justify-center px-6">
+    <EmptyState
+      as="h1"
+      title={<span className="text-fg text-[0.9375rem]">Nothing here.</span>}
+      hint="That task or project does not exist, or it was deleted."
+      action={
+        <Link
+          href="/"
+          className="border-border bg-surface text-fg hover:bg-surface-raised hover:border-border-strong inline-flex h-8 items-center rounded-md border px-3.5 text-[0.8125rem] font-medium shadow-[var(--shadow-sm),var(--highlight)] transition-[color,background-color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)]"
+        >
+          Back to all tasks
+        </Link>
+      }
+    />
   </div>
 )
 

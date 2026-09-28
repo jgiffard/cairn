@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { mutate } from '@/lib/api/mutate'
 import { Button, InlineInput } from '@/components/ui/control'
 import { ProjectIcon } from '@/components/icons'
+import { EmptyState } from '@/components/empty-state'
+import { SettingsCard } from './settings-card'
 import { cn } from '@/lib/utils'
 
 export type EntityRow = {
@@ -95,26 +97,38 @@ export const EntitiesSection = ({
   }
 
   return (
-    <section>
-      <div className="mb-1 flex items-baseline justify-between gap-3">
-        <h2 className="text-[0.8125rem] font-medium">Entities</h2>
-        <button
-          type="button"
-          onClick={() => setCreating((v) => !v)}
-          className="text-fg-subtle hover:text-fg text-[0.75rem] transition-colors"
-        >
+    <SettingsCard
+      title="Entities"
+      flush
+      description={
+        <>
+          A grouping a fact can be true of — a business, a stack, a subsystem. Knowledge filed
+          against one is visible from every project in it, which is how something true of a
+          whole business stops having to be filed twenty times or made global.
+        </>
+      }
+      action={
+        <Button size="sm" variant="quiet" onClick={() => setCreating((v) => !v)}>
           {creating ? 'Cancel' : 'New entity'}
-        </button>
-      </div>
-
-      <p className="text-fg-subtle mb-3 text-[0.75rem] leading-relaxed">
-        A grouping a fact can be true of — a business, a stack, a subsystem. Knowledge filed
-        against one is visible from every project in it, which is how something true of a
-        whole business stops having to be filed twenty times or made global.
-      </p>
-
+        </Button>
+      }
+      footer={
+        unassigned.length > 0 || message ? (
+          <div className="flex min-w-0 flex-col gap-1">
+            {unassigned.length > 0 && (
+              <p className="text-fg-subtle text-[0.75rem]">
+                In no entity at all:{' '}
+                <span className="text-fg-muted font-mono">{unassigned.join(' ')}</span> — these see
+                only their own knowledge and whatever is global.
+              </p>
+            )}
+            {message && <p className="text-fg-muted enter-rise text-[0.75rem]">{message}</p>}
+          </div>
+        ) : undefined
+      }
+    >
       {creating && (
-        <div className="border-border bg-surface mb-3 flex flex-wrap items-center gap-2 rounded-md border p-2.5">
+        <div className="border-border bg-surface-raised/40 enter-rise flex flex-wrap items-center gap-2 border-b px-4 py-2.5 md:px-5">
           <InlineInput
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
@@ -135,95 +149,87 @@ export const EntitiesSection = ({
         </div>
       )}
 
-      <div className="border-border divide-border divide-y rounded-md border">
-        {entities.length === 0 && (
-          <p className="text-fg-subtle px-3 py-4 text-[0.75rem]">No entities yet.</p>
-        )}
+      {entities.length === 0 ? (
+        <EmptyState compact title="No entities yet." />
+      ) : (
+        <div className="divide-border stagger divide-y">
+          {entities.map((entity) => (
+            <div key={entity.key} className="row-hover group">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 md:px-5">
+                <button
+                  type="button"
+                  onClick={() => setOpen(open === entity.key ? null : entity.key)}
+                  aria-expanded={open === entity.key}
+                  className="text-fg min-w-0 text-left text-[0.8125rem]"
+                >
+                  {entity.title}{' '}
+                  <span className="text-fg-subtle font-mono text-[0.6875rem]">{entity.key}</span>
+                </button>
 
-        {entities.map((entity) => (
-          <div key={entity.key}>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5">
-              <button
-                type="button"
-                onClick={() => setOpen(open === entity.key ? null : entity.key)}
-                className="text-fg min-w-0 text-left text-[0.8125rem]"
-              >
-                {entity.title}{' '}
-                <span className="text-fg-subtle font-mono text-[0.6875rem]">{entity.key}</span>
-              </button>
+                <span className="text-fg-subtle ml-auto shrink-0 text-[0.6875rem] tabular-nums">
+                  {entity.projects.length} project{entity.projects.length === 1 ? '' : 's'} ·{' '}
+                  {entity.knowledgeCount} scoped here
+                </span>
 
-              <span className="text-fg-subtle ml-auto shrink-0 text-[0.6875rem] tabular-nums">
-                {entity.projects.length} project{entity.projects.length === 1 ? '' : 's'} ·{' '}
-                {entity.knowledgeCount} scoped here
-              </span>
-
-              <button
-                type="button"
-                onClick={() => remove(entity)}
-                disabled={busy}
-                className="text-fg-subtle hover:text-danger shrink-0 text-[0.6875rem] transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-
-            {entity.projects.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 px-3 pb-2.5">
-                {entity.projects.map((key) => (
-                  <span
-                    key={key}
-                    className="text-fg-muted inline-flex items-center gap-1 text-[0.6875rem]"
-                  >
-                    <ProjectIcon size={10} projectKey={key} />
-                    {key}
-                  </span>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => remove(entity)}
+                  disabled={busy}
+                  className="text-fg-subtle hover:text-danger shrink-0 text-[0.6875rem] transition-[color,opacity] duration-[var(--dur-1)] ease-[var(--ease-out)] md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100"
+                >
+                  Delete
+                </button>
               </div>
-            )}
 
-            {open === entity.key && (
-              <div className="border-border bg-surface border-t px-3 py-2.5">
-                <p className="text-fg-subtle mb-2 text-[0.6875rem]">
-                  Click a project to add or remove it. A project can belong to several
-                  entities at once.
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {allProjects.map((p) => {
-                    const member = entity.projects.includes(p.key)
-                    return (
-                      <button
-                        key={p.key}
-                        type="button"
-                        disabled={busy}
-                        onClick={() => toggleProject(entity, p.key)}
-                        aria-pressed={member}
-                        className={cn(
-                          'rounded-md border px-1.5 py-0.5 font-mono text-[0.6875rem] transition-colors',
-                          member
-                            ? 'border-accent text-accent'
-                            : 'border-border text-fg-subtle hover:text-fg',
-                        )}
-                      >
-                        {p.key}
-                      </button>
-                    )
-                  })}
+              {entity.projects.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 px-4 pb-2.5 md:px-5">
+                  {entity.projects.map((key) => (
+                    <span
+                      key={key}
+                      className="text-fg-muted inline-flex items-center gap-1 text-[0.6875rem]"
+                    >
+                      <ProjectIcon size={10} projectKey={key} />
+                      {key}
+                    </span>
+                  ))}
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+              )}
 
-      {unassigned.length > 0 && (
-        <p className="text-fg-subtle mt-2 text-[0.75rem]">
-          In no entity at all:{' '}
-          <span className="text-fg-muted font-mono">{unassigned.join(' ')}</span> — these see
-          only their own knowledge and whatever is global.
-        </p>
+              {open === entity.key && (
+                <div className="border-border bg-surface-raised/40 enter-rise border-t px-4 py-2.5 md:px-5">
+                  <p className="text-fg-subtle mb-2 text-[0.6875rem]">
+                    Click a project to add or remove it. A project can belong to several
+                    entities at once.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allProjects.map((p) => {
+                      const member = entity.projects.includes(p.key)
+                      return (
+                        <button
+                          key={p.key}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => toggleProject(entity, p.key)}
+                          aria-pressed={member}
+                          className={cn(
+                            'rounded-md border px-1.5 py-0.5 font-mono text-[0.6875rem]',
+                            'transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',
+                            member
+                              ? 'border-accent/60 bg-accent-subtle text-accent shadow-[0_0_8px_-2px_var(--glow)]'
+                              : 'border-border text-fg-subtle hover:border-border-strong hover:text-fg',
+                          )}
+                        >
+                          {p.key}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
-
-      {message && <p className="text-fg-muted mt-2 text-[0.75rem]">{message}</p>}
-    </section>
+    </SettingsCard>
   )
 }

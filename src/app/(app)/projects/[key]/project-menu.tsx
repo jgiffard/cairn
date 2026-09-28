@@ -57,12 +57,14 @@ const DeleteDialog = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+      className="scrim fixed inset-0 z-50 grid place-items-center p-4"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="border-border bg-surface w-full max-w-[26.25rem] rounded-lg border p-5 raised-lg"
+        // Lit along the top like every raised panel, but in the danger
+        // colour: this is the one dialog whose light should be a warning.
+        className="border-border bg-surface enter-sheet relative w-full max-w-[26.25rem] rounded-xl border p-5 raised-lg before:pointer-events-none before:absolute before:inset-x-10 before:-top-px before:h-px before:bg-[linear-gradient(90deg,transparent,color-mix(in_oklab,var(--danger)_55%,transparent),transparent)]"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-fg text-[0.875rem] font-medium">Delete {projectKey}?</h2>
@@ -90,7 +92,7 @@ const DeleteDialog = ({
           <button
             type="button"
             onClick={onClose}
-            className="text-fg-muted hover:text-fg hover:bg-surface-hover h-[1.75rem] rounded-md px-3 text-[0.8125rem] transition-colors"
+            className="text-fg-muted hover:text-fg hover:bg-surface-hover h-[1.75rem] rounded-md px-3 text-[0.8125rem] transition-colors duration-[var(--dur-1)] ease-[var(--ease)]"
           >
             Cancel
           </button>
@@ -98,7 +100,7 @@ const DeleteDialog = ({
             type="button"
             disabled={!armed || busy}
             onClick={() => void submit()}
-            className="bg-danger h-[1.75rem] rounded-md px-3 text-[0.8125rem] font-medium text-white transition-opacity disabled:opacity-40"
+            className="bg-danger h-[1.75rem] rounded-md px-3 text-[0.8125rem] font-medium text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(0_0_0/0.22)] transition-[opacity,filter] duration-[var(--dur-1)] ease-[var(--ease)] hover:brightness-110 disabled:opacity-40"
           >
             {busy ? 'Deleting…' : 'Delete project'}
           </button>
@@ -203,12 +205,17 @@ export const ProjectMenu = ({
         onClick={() => setOpen((o) => !o)}
         aria-label="Project actions"
         aria-expanded={open}
-        className="text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-[1.5rem] place-items-center rounded-md transition-colors"
+        className={`grid size-[1.5rem] place-items-center rounded-md transition-colors duration-[var(--dur-1)] ease-[var(--ease)] ${
+          open ? 'bg-surface-hover text-fg' : 'text-fg-subtle hover:text-fg hover:bg-surface-hover'
+        }`}
       >
         <MoreHorizontal size={15} aria-hidden />
       </button>
       {open && (
-        <div className="border-border bg-surface absolute right-0 top-[1.75rem] z-40 w-[11.25rem] overflow-hidden rounded-md border py-1 raised">
+        <div
+          className="border-border bg-surface pop absolute right-0 top-[1.75rem] z-40 w-[11.25rem] overflow-hidden rounded-lg border py-1 raised"
+          style={{ '--origin': 'top right' } as React.CSSProperties}
+        >
           <button
             type="button"
             onClick={() => {
@@ -216,7 +223,7 @@ export const ProjectMenu = ({
               setDraft(title)
               setRenaming(true)
             }}
-            className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors"
+            className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors duration-[var(--dur-1)]"
           >
             Rename project
           </button>
@@ -226,14 +233,14 @@ export const ProjectMenu = ({
               setOpen(false)
               setChangingKey(true)
             }}
-            className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors"
+            className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors duration-[var(--dur-1)]"
           >
             Change key…
           </button>
           <button
             type="button"
             onClick={() => void setStatus(archived ? 'active' : 'archived')}
-            className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors"
+            className="text-fg-muted hover:bg-surface-hover hover:text-fg block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors duration-[var(--dur-1)]"
           >
             {archived ? 'Restore from archive' : 'Archive project'}
           </button>
@@ -243,7 +250,7 @@ export const ProjectMenu = ({
               setOpen(false)
               setConfirming(true)
             }}
-            className="text-danger hover:bg-danger-subtle block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors"
+            className="text-danger hover:bg-danger-subtle block w-full px-3 py-1.5 text-left text-[0.8125rem] transition-colors duration-[var(--dur-1)]"
           >
             Delete project…
           </button>

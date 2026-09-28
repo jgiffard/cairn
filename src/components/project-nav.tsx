@@ -12,6 +12,26 @@ import { Activity, BookOpen, Columns3, FolderKanban, HeartPulse, History, Inbox,
  * Client-side only — the set is small and already in memory, and a round trip
  * per keystroke would be absurd.
  */
+/**
+ * The active entry's marker, drawn once per list and moved rather than drawn
+ * on each row, so navigating slides it from the old entry to the new one.
+ * Rows are a fixed 1.75rem, so its position is the index and nothing is
+ * measured. Hidden when nothing in the list is active.
+ */
+const Marker = ({ index }: { index: number }) => (
+  <span
+    aria-hidden
+    className={cn(
+      'bg-surface-raised pointer-events-none absolute inset-x-0.5 top-0 h-[1.75rem] rounded-md',
+      'shadow-[var(--highlight)] transition-[transform,opacity] duration-[var(--dur-3)] ease-[var(--ease-out)]',
+      'before:bg-accent before:absolute before:inset-y-[0.375rem] before:-left-[2px] before:w-[2px] before:rounded-full',
+      'before:shadow-[0_0_8px_var(--glow)]',
+      index < 0 && 'opacity-0',
+    )}
+    style={{ transform: `translateY(${Math.max(index, 0) * 1.75}rem)` }}
+  />
+)
+
 export const ProjectNav = ({
   projects,
   onNavigate,
@@ -44,37 +64,46 @@ export const ProjectNav = ({
     { href: '/projects', label: 'Projects', icon: FolderKanban },
   ]
 
+  const isActive = (href: string) =>
+    pathname === href ||
+    // Knowledge alone has child routes (/knowledge/[slug]) that should still
+    // light up this entry — but not the map, which has its own, or both would
+    // be lit at once.
+    (href === '/knowledge' && pathname.startsWith('/knowledge/') && pathname !== '/knowledge/graph')
+  const activeLink = links.findIndex(({ href }) => isActive(href))
+  const activeProject = shown.findIndex(
+    (p) => pathname === `/projects/${p.key}` || pathname.startsWith(`/projects/${p.key}/`),
+  )
+
   return (
     <nav className="flex min-h-0 flex-1 flex-col px-2">
-      <ul className="-mx-0.5 mb-2">
+      <ul className="relative -mx-0.5 mb-2">
+        <Marker index={activeLink} />
         {links.map(({ href, label, icon: Icon }) => {
-          // Knowledge alone has a child route (/knowledge/[slug]) that
-          // should still light up this entry.
-          const active =
-            pathname === href ||
-            // Knowledge alone has child routes (/knowledge/[slug]) that should
-            // still light up this entry — but not the map, which now has its
-            // own, or both would be lit at once.
-            (href === '/knowledge' &&
-              pathname.startsWith('/knowledge/') &&
-              pathname !== '/knowledge/graph')
+          const active = isActive(href)
           return (
             <li key={href}>
               <Link
                 href={href}
                 onClick={onNavigate}
+                aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'relative flex h-[1.75rem] items-center gap-2 rounded-md px-2 text-[0.8125rem]',
+                  'group relative flex h-[1.75rem] items-center gap-2 rounded-md px-2 text-[0.8125rem]',
                   'transition-colors duration-100 ease-[var(--ease)]',
-                  // The active item gets a marker as well as a fill: a raised
-                  // background alone is a very quiet way to answer "where am
-                  // I" on a sidebar of twenty-odd entries.
-                  active
-                    ? 'bg-surface-raised text-fg before:bg-accent before:absolute before:inset-y-[0.375rem] before:-left-[2px] before:w-[2px] before:rounded-full'
-                    : 'text-fg-muted hover:bg-surface-hover hover:text-fg',
+                  // The marker (above) is the fill and the accent edge: a
+                  // raised background alone is a very quiet way to answer
+                  // "where am I" on a sidebar of twenty-odd entries.
+                  active ? 'text-fg' : 'text-fg-muted hover:bg-surface-hover/70 hover:text-fg',
                 )}
               >
-                <Icon size={13} aria-hidden />
+                <Icon
+                  size={13}
+                  aria-hidden
+                  className={cn(
+                    'transition-[color,transform] duration-[var(--dur-2)] ease-[var(--ease-out)]',
+                    active ? 'text-accent' : 'group-hover:scale-110',
+                  )}
+                />
                 {label}
               </Link>
             </li>
@@ -111,7 +140,8 @@ export const ProjectNav = ({
         </div>
       )}
 
-      <ul className="-mx-0.5 flex-1 overflow-y-auto pb-2">
+      <ul className="relative -mx-0.5 flex-1 overflow-y-auto pb-2">
+        <Marker index={activeProject} />
         {shown.map((p) => {
           const href = `/projects/${p.key}`
           const active = pathname === href || pathname.startsWith(`${href}/`)
@@ -120,12 +150,11 @@ export const ProjectNav = ({
               <Link
                 href={href}
                 onClick={onNavigate}
+                aria-current={active ? 'page' : undefined}
                 className={cn(
                   'group relative flex h-[1.75rem] items-center gap-2 rounded-md px-2',
                   'transition-colors duration-100 ease-[var(--ease)]',
-                  active
-                    ? 'bg-surface-raised text-fg before:bg-accent before:absolute before:inset-y-[0.375rem] before:-left-[2px] before:w-[2px] before:rounded-full'
-                    : 'text-fg-muted hover:bg-surface-hover hover:text-fg',
+                  active ? 'text-fg' : 'text-fg-muted hover:bg-surface-hover/70 hover:text-fg',
                 )}
               >
                 <ProjectIcon size={13} projectKey={p.key} />

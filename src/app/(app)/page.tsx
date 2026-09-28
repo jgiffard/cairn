@@ -8,6 +8,7 @@ import { LiveUpdates } from '@/components/live-updates'
 import { ProjectIcon } from '@/components/icons'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { PendingLink } from '@/components/pending-link'
+import { EmptyState } from '@/components/empty-state'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,21 +39,23 @@ const Home = async ({ searchParams }: { searchParams: Promise<{ closed?: string 
   if (projects.length === 0) {
     return (
       <div className="mx-auto flex h-dvh max-w-lg flex-col justify-center px-5 sm:px-6">
-        <h1 className="mb-2 text-[1.25rem] font-semibold tracking-[-0.01em]">Nothing here yet</h1>
-        <p className="text-fg-muted mb-5 text-[0.8125rem] leading-relaxed">
-          A cairn is built one stone at a time. Create the first project from an agent, or from
-          the CLI.
-        </p>
-        <pre className="border-border bg-surface overflow-x-auto rounded-md border p-3 font-mono text-[0.75rem]">
-          {`cairn add "first task" --project CAI --type feature`}
-        </pre>
+        <EmptyState
+          as="h1"
+          title="Nothing here yet"
+          hint="A cairn is built one stone at a time. Create the first project from an agent, or from the CLI."
+          action={
+            <pre className="surface-card max-w-full overflow-x-auto px-3 py-2.5 text-left font-mono text-[0.75rem]">
+              {`cairn add "first task" --project CAI --type feature`}
+            </pre>
+          }
+        />
       </div>
     )
   }
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
+      <header className="page-header border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
         <span className="text-fg shrink-0 text-[0.8125rem] font-medium">All tasks</span>
         <span className="text-fg-subtle hidden text-[0.8125rem] sm:block">·</span>
@@ -83,14 +86,15 @@ const Home = async ({ searchParams }: { searchParams: Promise<{ closed?: string 
           projects={projects.map((p) => ({ key: p.key, title: p.title }))}
         />
 
-        <section className="border-border mt-6 border-t px-4 py-4">
+        {/* The same fading hairline the page header ends on, not a table rule. */}
+        <section className="relative mt-6 px-4 py-4 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--border-strong)_12%,var(--border-strong)_88%,transparent)]">
           <h2 className="text-fg-muted mb-2 text-[0.6875rem] font-medium">Projects</h2>
           <ul className="flex flex-wrap gap-1.5">
             {projects.map((p) => (
               <li key={p.id}>
                 <Link
                   href={`/projects/${p.key}`}
-                  className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg flex h-[1.625rem] items-center gap-1.5 rounded-md border px-2 text-[0.75rem] transition-colors"
+                  className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg hover:border-border-strong flex h-[1.625rem] items-center gap-1.5 rounded-md border px-2 text-[0.75rem] shadow-[var(--highlight)] transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
                 >
                   <ProjectIcon size={12} projectKey={p.key} />
                   {p.title}

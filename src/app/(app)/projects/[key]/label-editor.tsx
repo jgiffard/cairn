@@ -4,6 +4,7 @@ import { InlineInput } from '@/components/ui/control'
 
 import { useEffect, useRef, useState } from 'react'
 import { LabelPill } from '@/components/icons'
+import { EmptyState } from '@/components/empty-state'
 
 /**
  * Labels are a set, so a `<select>` cannot express them — this is the one
@@ -55,7 +56,12 @@ export const LabelEditor = ({
   const options = [...new Set([...labels, ...known])]
 
   return (
-    <span ref={wrap} className="pointer-events-auto relative z-10 inline-flex items-center gap-1.5">
+    // Raised while open: at z-10 the menu shared a level with the badges on
+    // the rows below it, and they came later in the page, so they won.
+    <span
+      ref={wrap}
+      className={`pointer-events-auto relative inline-flex items-center gap-1.5 ${open ? 'z-30' : 'z-10'}`}
+    >
       {labels.slice(0, 2).map((l) => (
         <LabelPill key={l}>{l}</LabelPill>
       ))}
@@ -71,8 +77,10 @@ export const LabelEditor = ({
         }}
         aria-label={`Labels on ${taskRef}`}
         aria-expanded={open}
-        className={`text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-[1.125rem] place-items-center rounded transition ${
-          labels.length === 0 && !open ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'
+        className={`text-fg-subtle hover:text-fg grid size-[1.125rem] place-items-center rounded hover:bg-[color-mix(in_oklab,var(--fg)_7%,transparent)] transition-[opacity,scale,color,background-color] duration-[var(--dur-2)] ease-[var(--ease-out)] ${
+          labels.length === 0 && !open
+            ? 'scale-90 opacity-0 group-hover:scale-100 group-hover:opacity-100 focus-visible:scale-100 focus-visible:opacity-100'
+            : 'opacity-100'
         }`}
       >
         <svg width="10" height="10" viewBox="0 0 11 11" aria-hidden>
@@ -87,7 +95,8 @@ export const LabelEditor = ({
 
       {open && (
         <div
-          className="border-border bg-surface absolute top-[1.5rem] right-0 z-50 w-[11.875rem] overflow-hidden rounded-md border py-1 raised"
+          className="border-border bg-surface pop absolute top-[1.5rem] right-0 z-50 w-[11.875rem] overflow-hidden rounded-lg border py-1 raised"
+          style={{ '--origin': 'top right' } as React.CSSProperties}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="max-h-[11.875rem] overflow-y-auto">
@@ -96,7 +105,7 @@ export const LabelEditor = ({
                 key={l}
                 type="button"
                 onClick={() => toggle(l)}
-                className="hover:bg-surface-hover flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+                className="hover:bg-surface-hover flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors duration-[var(--dur-1)]"
               >
                 <input
                   type="checkbox"
@@ -108,9 +117,7 @@ export const LabelEditor = ({
                 <span className="text-fg-muted min-w-0 truncate text-[0.75rem]">{l}</span>
               </button>
             ))}
-            {options.length === 0 && (
-              <p className="text-fg-subtle px-2.5 py-1.5 text-[0.6875rem]">No labels yet.</p>
-            )}
+            {options.length === 0 && <EmptyState compact title="No labels yet." className="py-3" />}
           </div>
 
           <div className="border-border mt-1 border-t px-1.5 pt-1.5">

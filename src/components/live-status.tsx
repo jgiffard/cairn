@@ -75,28 +75,28 @@ const LOOK: Record<LiveState, { dot: string; label: string; title: string }> = {
       'This page does not subscribe to updates, by design. Reload to see changes. A lost connection shows as Offline, not this.',
   },
   connecting: {
-    dot: 'bg-fg-subtle animate-pulse',
+    dot: 'bg-fg-subtle text-fg-subtle live-dot',
     label: 'Connecting',
     title: 'Opening the update stream.',
   },
   live: {
-    dot: 'bg-status-done',
+    dot: 'bg-status-in-review text-status-in-review live-dot',
     label: 'Live',
     title: 'Connected. This page updates itself when anything changes.',
   },
   updating: {
-    dot: 'bg-accent animate-pulse',
+    dot: 'bg-accent text-accent live-dot',
     label: 'Updating',
     title: 'A change arrived; fetching the new state.',
   },
   reconnecting: {
-    dot: 'bg-status-in-review animate-pulse',
+    dot: 'bg-status-doing text-status-doing live-dot',
     label: 'Reconnecting',
     title:
       'The stream dropped and is retrying. The stream also closes itself every ten minutes by design, so this is normal and brief.',
   },
   offline: {
-    dot: 'bg-danger animate-pulse',
+    dot: 'bg-danger text-danger live-dot',
     label: 'Offline',
     title:
       'The connection was lost — usually a deploy, or a session that expired. Retrying; this page is not updating until it comes back.',
@@ -117,9 +117,12 @@ export const LiveStatusIndicator = () => {
       // to make. It stays reachable on demand instead.
       aria-label={`${look.label}. ${look.title}`}
       title={look.title}
-      className="border-border bg-surface/90 text-fg-subtle pointer-events-none fixed top-2.5 right-2.5 z-30 flex items-center gap-1.5 rounded-full border px-2 py-1 text-[0.6875rem] backdrop-blur-sm"
+      className="border-border bg-surface/70 text-fg-subtle pointer-events-none fixed top-2.5 right-2.5 z-30 flex items-center gap-1.5 rounded-full border px-2 py-1 text-[0.6875rem] shadow-[var(--shadow-sm),var(--highlight)] backdrop-blur-md backdrop-saturate-150"
     >
-      <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${look.dot}`} />
+      <span
+        aria-hidden
+        className={`size-1.5 shrink-0 rounded-full transition-colors duration-[var(--dur-2)] ease-[var(--ease-out)] ${look.dot}`}
+      />
       {/* Narrow screens get the dot alone. The label is the first thing worth
           dropping: the colour already carries the state, the accessible name
           still reads in full, and a phone header has no room to spare — this

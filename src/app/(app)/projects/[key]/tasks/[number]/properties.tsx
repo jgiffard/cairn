@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { ChevronsUpDown } from 'lucide-react'
 import { Avatar, LabelPill, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
 import { ResolutionDialog } from '../../resolution-dialog'
 import { AlsoIn } from './also-in'
@@ -21,6 +22,7 @@ import { RelativeTime } from '@/components/relative-time'
 import { useRenderedClaimStale } from '@/lib/use-mounted'
 import type { Task, Project, Relation } from '@/lib/data'
 import { useMutate } from '@/lib/api/use-mutate'
+import { LABEL } from './styles'
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   backlog: 'Backlog',
@@ -41,9 +43,27 @@ const Section = ({
   className?: string
 }) => (
   <div className={cn('flex flex-col gap-1.5', className)}>
-    <span className="text-fg-subtle text-[0.6875rem] font-medium">{title}</span>
+    <span className={LABEL}>{title}</span>
     {children}
   </div>
+)
+
+/**
+ * An editable value: the row lights as a list row does — a fill and the trail
+ * marker — and a chevron surfaces to say it opens. Keyboard focus on the
+ * invisible select lights it the same way, since the select itself cannot show
+ * a ring.
+ */
+const EDITABLE =
+  'row-hover group/edit relative -mx-1.5 flex h-[1.75rem] items-center gap-2 rounded-md px-1.5 ' +
+  'has-[:focus-visible]:bg-surface-hover has-[:focus-visible]:shadow-[inset_2px_0_0_var(--accent)]'
+
+const Affordance = () => (
+  <ChevronsUpDown
+    size={11}
+    aria-hidden
+    className="text-fg-subtle ml-auto shrink-0 opacity-0 transition-opacity duration-[var(--dur-1)] ease-[var(--ease-out)] group-hover/edit:opacity-100 group-has-[:focus-visible]/edit:opacity-100"
+  />
 )
 
 /**
@@ -66,9 +86,10 @@ const SelectRow = <T extends string>({
   onChange: (v: T) => void
   disabled?: boolean
 }) => (
-  <div className="hover:bg-surface-hover relative -mx-1.5 flex h-[1.75rem] items-center gap-2 rounded-md px-1.5 transition-colors">
+  <div className={EDITABLE}>
     {icon}
     <span className="text-fg text-[0.8125rem]">{labels?.[value] ?? value}</span>
+    <Affordance />
     <select
       value={value}
       disabled={disabled}
@@ -142,7 +163,7 @@ export const Properties = ({
 
   return (
     <aside
-      className="border-border flex shrink-0 flex-row flex-wrap gap-x-5 gap-y-3 border-b px-4 py-3 lg:w-[13.75rem] lg:flex-col lg:gap-5 lg:border-b-0 lg:border-l lg:px-4 lg:py-5"
+      className="border-border flex shrink-0 flex-row flex-wrap gap-x-5 gap-y-3 border-b px-4 py-3 lg:w-[13.75rem] lg:flex-col lg:gap-5 lg:border-b-0 lg:px-4 lg:py-5"
     >
       <Section title="Properties">
         <SelectRow
@@ -158,7 +179,7 @@ export const Properties = ({
           icon={<PriorityIcon priority={shown.priority} />}
           onChange={(v: TaskPriority) => void patch({ priority: v })}
         />
-        <div className="flex h-[1.75rem] items-center gap-2 px-0">
+        <div className="flex h-[1.75rem] items-center gap-2">
           {task.claimed_by ? (
             <>
               <Avatar name={task.claimed_by} size={16} />
@@ -174,7 +195,7 @@ export const Properties = ({
             </>
           ) : (
             <>
-              <span className="border-border size-[1rem] rounded-full border border-dashed" />
+              <span className="border-border-strong size-[1rem] rounded-full border border-dashed" />
               <span className="text-fg-subtle text-[0.8125rem]">Unassigned</span>
             </>
           )}
@@ -182,8 +203,9 @@ export const Properties = ({
       </Section>
 
       <Section title="Type">
-        <div className="hover:bg-surface-hover relative -mx-1.5 flex h-[1.75rem] items-center rounded-md px-1.5">
+        <div className={EDITABLE}>
           <TypePill type={shown.type} />
+          <Affordance />
           <select
             value={shown.type}
             onChange={(e) => void patch({ type: e.target.value as TaskType })}
@@ -211,9 +233,9 @@ export const Properties = ({
 
       <div className="hidden lg:block">
       <Section title="Project">
-        <span className="text-fg-muted flex items-center gap-1.5 text-[0.8125rem]">
+        <span className="text-fg-muted flex h-[1.75rem] min-w-0 items-center gap-2 text-[0.8125rem]">
           <ProjectIcon size={13} projectKey={project.key} />
-          {project.title}
+          <span className="truncate">{project.title}</span>
         </span>
       </Section>
       </div>
@@ -231,7 +253,9 @@ export const Properties = ({
 
       {task.external_ref && (
         <Section title="Imported from" className="hidden lg:flex">
-          <code className="text-fg-subtle text-[0.75rem]">{task.external_ref}</code>
+          <code className="border-border bg-surface-raised/60 text-fg-muted self-start rounded-md border px-1.5 py-px font-mono text-[0.75rem]">
+            {task.external_ref}
+          </code>
         </Section>
       )}
 
@@ -249,7 +273,7 @@ export const Properties = ({
             .map(([label, value]) => (
               <div key={label} className="flex items-baseline justify-between gap-2">
                 <dt className="text-fg-subtle text-[0.75rem]">{label}</dt>
-                <dd className="text-fg-muted text-[0.75rem]">
+                <dd className="text-fg-muted text-[0.75rem] tabular-nums">
                   {label === 'Due' ? shortDateWithYear(value as string) : (
                     <RelativeTime iso={value as string} />
                   )}

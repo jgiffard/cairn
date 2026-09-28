@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button, InlineInput } from '@/components/ui/control'
 import { mutate } from '@/lib/api/mutate'
 import { keyChangeProblem } from '@/lib/project-rename'
@@ -61,73 +62,84 @@ export const ChangeKeyDialog = ({
     onChanged(next)
   }
 
-  return (
+  // Portalled to <body>, like the resolution dialog: a `fixed` layer inside
+  // any transformed or filtered ancestor is positioned by that ancestor.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 grid place-items-center p-4"
       onClick={onClose}
       role="presentation"
     >
+      <div className="scrim absolute inset-0" aria-hidden />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="change-key-title"
-        className="border-border bg-surface raised-lg flex w-full max-w-[28rem] flex-col gap-3 rounded-lg border p-4 sm:p-5"
+        className={cn(
+          'border-border bg-surface/85 raised-lg enter-sheet relative flex w-full max-w-[28rem] flex-col overflow-hidden rounded-xl border backdrop-blur-xl backdrop-saturate-150',
+          'before:pointer-events-none before:absolute before:inset-x-10 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]',
+        )}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="change-key-title" className="text-fg text-[0.875rem] font-medium">
+        <h2
+          id="change-key-title"
+          className="border-border text-fg border-b px-4 py-3 text-[0.875rem] font-medium sm:px-5"
+        >
           Change the key of {project.title}
         </h2>
-        <p className="text-fg-muted text-[0.8125rem] leading-relaxed">
-          Every task here is referred to as{' '}
-          <span className="text-fg font-mono">{next && !problem ? next : 'NEW'}-n</span> from now
-          on. Old refs keep working: <span className="font-mono">{project.key}-42</span> in a
-          commit message, a PR title or an agent&apos;s note still leads to its task, and the task
-          says what it used to be called.
-        </p>
-        <p className="text-fg-subtle text-[0.75rem] leading-relaxed">
-          {project.key} stays reserved for this project. No other project can ever take it, because
-          its old refs would then lead to two tasks.
-        </p>
+        <div className="flex flex-col gap-3 px-4 py-3.5 sm:px-5">
+          <p className="text-fg-muted text-[0.8125rem] leading-relaxed">
+            Every task here is referred to as{' '}
+            <span className="text-fg font-mono">{next && !problem ? next : 'NEW'}-n</span> from now
+            on. Old refs keep working: <span className="font-mono">{project.key}-42</span> in a
+            commit message, a PR title or an agent&apos;s note still leads to its task, and the task
+            says what it used to be called.
+          </p>
+          <p className="text-fg-subtle text-[0.75rem] leading-relaxed">
+            {project.key} stays reserved for this project. No other project can ever take it, because
+            its old refs would then lead to two tasks.
+          </p>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-fg-subtle text-[0.6875rem] font-medium">New key</span>
-          <InlineInput
-            autoFocus
-            value={draft}
-            placeholder={project.key}
-            maxLength={10}
-            autoCapitalize="characters"
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => {
-              setDraft(e.target.value.toUpperCase())
-              setError(null)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void submit()
-              if (e.key === 'Escape') onClose()
-            }}
-            aria-invalid={Boolean(draft && problem)}
-            aria-describedby="change-key-hint"
-            className="w-[8rem] font-mono uppercase"
-          />
-        </label>
-        <p
-          id="change-key-hint"
-          className={cn(
-            'text-[0.75rem]',
-            error || (draft && problem) ? 'text-danger' : 'text-fg-subtle',
-          )}
-        >
-          {error ??
-            (draft && problem
-              ? problem
-              : reclaiming
-                ? `${next} was this project's key before — taking it back makes it live again.`
-                : 'Two to ten letters or digits, starting with a letter.')}
-        </p>
+          <label className="flex flex-col gap-1">
+            <span className="text-fg-subtle text-[0.6875rem] font-medium">New key</span>
+            <InlineInput
+              autoFocus
+              value={draft}
+              placeholder={project.key}
+              maxLength={10}
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => {
+                setDraft(e.target.value.toUpperCase())
+                setError(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submit()
+                if (e.key === 'Escape') onClose()
+              }}
+              aria-invalid={Boolean(draft && problem)}
+              aria-describedby="change-key-hint"
+              className="w-[8rem] font-mono uppercase"
+            />
+          </label>
+          <p
+            id="change-key-hint"
+            className={cn(
+              'text-[0.75rem]',
+              error || (draft && problem) ? 'text-danger' : 'text-fg-subtle',
+            )}
+          >
+            {error ??
+              (draft && problem
+                ? problem
+                : reclaiming
+                  ? `${next} was this project's key before — taking it back makes it live again.`
+                  : 'Two to ten letters or digits, starting with a letter.')}
+          </p>
+        </div>
 
-        <div className="flex justify-end gap-2">
+        <div className="border-border bg-surface-raised/40 flex justify-end gap-2 border-t px-4 py-3 sm:px-5">
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
@@ -136,6 +148,7 @@ export const ChangeKeyDialog = ({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

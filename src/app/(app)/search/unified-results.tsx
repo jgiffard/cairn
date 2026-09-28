@@ -3,6 +3,7 @@ import { BookMarked, FileText, ListTodo, Radio } from 'lucide-react'
 import { ProjectIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import type { SearchAllRow } from '@/lib/api/search'
+import { Highlight, queryTerms } from './highlight'
 
 /**
  * Results across all four stores.
@@ -14,12 +15,35 @@ import type { SearchAllRow } from '@/lib/api/search'
 
 const KIND_META: Record<
   SearchAllRow['kind'],
-  { label: string; Icon: typeof ListTodo; tone: string }
+  { label: string; Icon: typeof ListTodo; tone: string; color: string }
 > = {
-  task: { label: 'Task', Icon: ListTodo, tone: 'text-accent' },
-  note: { label: 'Note', Icon: FileText, tone: 'text-fg-muted' },
-  knowledge: { label: 'Knowledge', Icon: BookMarked, tone: 'text-status-done' },
-  session: { label: 'Session', Icon: Radio, tone: 'text-fg-subtle' },
+  task: { label: 'Task', Icon: ListTodo, tone: 'text-accent', color: 'var(--accent)' },
+  note: { label: 'Note', Icon: FileText, tone: 'text-fg-muted', color: 'var(--fg-muted)' },
+  knowledge: {
+    label: 'Knowledge',
+   
+    Icon: BookMarked,
+    tone: 'text-status-done',
+    color: 'var(--status-done)',
+  },
+  session: { label: 'Session', Icon: Radio, tone: 'text-fg-subtle', color: 'var(--fg-subtle)' },
+}
+
+/** The kind of a hit, as a small pill in its own colour. */
+const KindBadge = ({ kind }: { kind: SearchAllRow['kind'] }) => {
+  const { label, color } = KIND_META[kind]
+  return (
+    <span
+      className="inline-flex h-[1rem] shrink-0 items-center rounded-full border px-1.5 text-[0.625rem] font-medium tracking-[0.04em] uppercase"
+      style={{
+        color,
+        backgroundColor: `color-mix(in oklab, ${color} 10%, transparent)`,
+        borderColor: `color-mix(in oklab, ${color} 28%, transparent)`,
+      }}
+    >
+      {label}
+    </span>
+  )
 }
 
 /**
@@ -37,8 +61,8 @@ const hrefFor = (row: SearchAllRow): string | null => {
   return null
 }
 
-const Row = ({ row }: { row: SearchAllRow }) => {
-  const { label, Icon, tone } = KIND_META[row.kind]
+const Row = ({ row, terms }: { row: SearchAllRow; terms: string[] }) => {
+  const { Icon, tone } = KIND_META[row.kind]
   const href = hrefFor(row)
 
   const body = (
@@ -56,7 +80,7 @@ const Row = ({ row }: { row: SearchAllRow }) => {
               <ProjectIcon size={11} projectKey={row.project_key} />
             </span>
           )}
-          <span className="text-fg-subtle text-[0.6875rem]">{label}</span>
+          <KindBadge kind={row.kind} />
           {row.answered && (
             <span className="text-status-done text-[0.6875rem]">
               {row.kind === 'task' ? 'answered' : row.kind === 'session' ? 'has next steps' : 'verified'}
@@ -67,10 +91,14 @@ const Row = ({ row }: { row: SearchAllRow }) => {
           )}
         </div>
 
-        <p className="text-fg mt-1 text-[0.8125rem] leading-snug">{row.title}</p>
+        <p className="text-fg mt-1 text-[0.8125rem] leading-snug">
+          <Highlight text={row.title} terms={terms} />
+        </p>
 
         {row.subtitle && (
-          <p className="text-fg-subtle mt-0.5 truncate text-[0.6875rem]">{row.subtitle}</p>
+          <p className="text-fg-subtle mt-0.5 truncate text-[0.6875rem]">
+            <Highlight text={row.subtitle} terms={terms} />
+          </p>
         )}
       </div>
 
@@ -87,10 +115,10 @@ const Row = ({ row }: { row: SearchAllRow }) => {
     </div>
   )
 
-  const className = 'border-border block border-b px-4 py-2.5'
+  const className = 'border-border/70 block border-b px-4 py-2.5 last:border-0'
 
   return href ? (
-    <Link href={href} className={cn(className, 'hover:bg-surface-hover transition-colors')}>
+    <Link href={href} className={cn(className, 'row-hover')}>
       {body}
     </Link>
   ) : (
@@ -98,10 +126,22 @@ const Row = ({ row }: { row: SearchAllRow }) => {
   )
 }
 
-export const UnifiedResults = ({ rows }: { rows: SearchAllRow[] }) => (
-  <div>
-    {rows.map((row) => (
-      <Row key={`${row.kind}:${row.id}`} row={row} />
-    ))}
-  </div>
-)
+/**
+ * Grouped by kind, in rank order within each group, and the groups in the
+ * order of their best hit — so the top result is still the first thing on the
+ * page, and a question answered by a fact is not buried under ten tasks that
+ * merely mention it.
+ */
+export const UnifiedResults = ({ rows, query = '' }: { rows: SearchAllRow[]; query?: string }) => {
+  const terms = queryTerms(query)
+  // Rank order, not grouped by kind: the ranking already puts the best answer
+  // first whatever it is, and grouping would bury a fact under ten tasks. The
+  // badge on each row says what it is.
+  return (
+    <div className="stagger">
+      {rows.map((row) => (
+        <Row key={`${row.kind}:${row.id}`} row={row} terms={terms} />
+      ))}
+    </div>
+  )
+}

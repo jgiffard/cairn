@@ -90,6 +90,29 @@
   --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  /* Motion. One vocabulary for the whole product (CAIRN-308).
+     --ease-out is the settle: fast off the mark, long soft landing — what a
+     stone does when it comes to rest on the stack. --ease-spring overshoots a
+     hair, for the few things that should feel placed (the sidebar marker, a
+     popover). Three durations and nothing between them. */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+
+  /* Material. The ground is not a flat fill: a film grain too fine to see as
+     texture, only as the absence of the plastic look a pure hex has, and a
+     wash of the accent where light would fall — top of the page, top of the
+     sidebar. Both carry the instance's accent, so each Cairn glows its own
+     colour. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --aurora: color-mix(in oklab, var(--accent) 12%, transparent);
+  --aurora-far: color-mix(in oklab, var(--accent) 5%, transparent);
+  --hairline-strong: color-mix(in oklab, var(--fg) 12%, transparent);
+  --card-top: color-mix(in oklab, var(--surface-raised) 70%, var(--surface));
+  --glow: color-mix(in oklab, var(--accent) 45%, transparent);
 }
 
 :root.dark {
@@ -133,6 +156,12 @@
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.40), 0 8px 24px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.45), 0 24px 56px rgba(0, 0, 0, 0.55);
   --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --aurora: color-mix(in oklab, var(--accent) 20%, transparent);
+  --aurora-far: color-mix(in oklab, var(--accent) 8%, transparent);
+  --hairline-strong: color-mix(in oklab, var(--fg) 10%, transparent);
+  --card-top: color-mix(in oklab, var(--surface-raised) 80%, var(--surface));
 
   --type-feature:     #bb87fc;
   --type-bug:         #eb5757;
@@ -238,10 +267,13 @@
   /* Counts and dates change in place; they must not reflow the row. */
   .tabular { font-variant-numeric: tabular-nums; }
 
+  /* The ring plus a soft halo of the accent: visible on a dense row without
+     reading as an error box. */
   :focus-visible {
-    outline: 2px solid var(--ring);
+    outline: 2px solid color-mix(in oklab, var(--ring) 85%, transparent);
     outline-offset: -1px;
     border-radius: var(--radius-sm);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--ring) 16%, transparent);
   }
 
   ::selection { background-color: color-mix(in srgb, var(--accent) 35%, transparent); }
@@ -260,6 +292,166 @@
 }
 
 @layer utilities {
+  /* ---------------------------------------------------------------------------
+     Shell material (CAIRN-308)
+     ------------------------------------------------------------------------ */
+
+  /* The content area: grain over an accent wash that falls from the top edge
+     and fades out within the first screen, so a page reads as lit from above
+     rather than printed on black. Fixed to the scroll container, not the
+     content, so it never scrolls away mid-read. */
+  .app-canvas {
+    background-color: var(--bg);
+    background-image:
+      var(--grain),
+      radial-gradient(70% 280px at 50% -60px, var(--aurora), transparent 72%),
+      radial-gradient(40% 220px at 92% -40px, var(--aurora-far), transparent 70%);
+    background-repeat: repeat, no-repeat, no-repeat;
+  }
+
+  /* The sidebar is a different material from the page: a shade lifted, lit
+     from the brand mark down, with a hairline on its inner edge where the
+     light catches. */
+  .app-sidebar {
+    background-color: var(--bg-elevated);
+    background-image:
+      var(--grain),
+      radial-gradient(120% 180px at 0% 0%, var(--aurora-far), transparent 70%),
+      linear-gradient(180deg, color-mix(in oklab, var(--surface-raised) 35%, transparent), transparent 240px);
+    box-shadow: inset -1px 0 0 var(--border);
+  }
+
+  /* The mark carries a little of its own light. */
+  .brand-glow { filter: drop-shadow(0 0 8px var(--glow)); }
+
+  /* Every page's top bar: a hairline that fades out at both ends instead of
+     running edge to edge like a table rule. */
+  .page-header {
+    position: relative;
+    border-bottom-color: transparent !important;
+  }
+  .page-header::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-strong) 12%, var(--border-strong) 88%, transparent);
+    pointer-events: none;
+  }
+
+  /* A card: lit top edge, a face that darkens towards the bottom, a contact
+     shadow. The interactive one lifts a pixel and brightens its rim on hover. */
+  .surface-card {
+    background-image: linear-gradient(180deg, var(--card-top), var(--surface) 70%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm), var(--highlight);
+  }
+  .surface-card-interactive {
+    transition:
+      transform var(--dur-2) var(--ease-out),
+      box-shadow var(--dur-2) var(--ease-out),
+      border-color var(--dur-2) var(--ease-out);
+  }
+  .surface-card-interactive:hover {
+    transform: translateY(-1px);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md), var(--highlight);
+  }
+
+  /* A list row's hover: the fill, and a two-pixel mark of the accent at the
+     left edge — the trail marker. Inset shadow, so it costs no layout. */
+  .row-hover {
+    transition: background-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+  }
+  .row-hover:hover {
+    background-color: var(--surface-hover);
+    box-shadow: inset 2px 0 0 color-mix(in oklab, var(--accent) 70%, transparent);
+  }
+
+  /* A group band (status, date): sticky-able, with a faint wash of its own
+     colour from the left. Set --band to the group's colour. */
+  .group-band {
+    background-color: color-mix(in oklab, var(--bg-elevated) 88%, transparent);
+    background-image: linear-gradient(90deg, color-mix(in oklab, var(--band, var(--fg-subtle)) 9%, transparent), transparent 40%);
+    backdrop-filter: saturate(140%) blur(8px);
+  }
+
+  /* ---------------------------------------------------------------------------
+     Motion (CAIRN-308). Entrances only: nothing loops except what reports
+     something live, and every one of these stands still under reduced motion
+     (the global rule at the end of this file).
+     ------------------------------------------------------------------------ */
+
+  @keyframes enter-fade { from { opacity: 0; } }
+  @keyframes enter-rise {
+    from { opacity: 0; transform: translateY(6px); }
+  }
+  @keyframes enter-pop {
+    from { opacity: 0; transform: translateY(-4px) scale(0.97); filter: blur(2px); }
+  }
+  @keyframes enter-sheet {
+    from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  }
+  @keyframes arrive {
+    from { background-color: color-mix(in oklab, var(--accent) 16%, transparent); }
+  }
+  @keyframes shimmer {
+    from { background-position: 150% 0; }
+    to   { background-position: -50% 0; }
+  }
+  @keyframes live-ring {
+    0%   { box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 45%, transparent); }
+    70%  { box-shadow: 0 0 0 6px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+
+  /* A page arriving. Opacity only: a transform on this wrapper would make it
+     the containing block of every `fixed` dialog inside the page while it ran. */
+  /* Every entrance fills `backwards`, never `both`: holding the last keyframe
+     after it ends would leave a `transform` on the element for ever, making
+     it a stacking context and the containing block of every fixed dialog and
+     popover inside it — a row's label menu under the next row, a dialog
+     trapped in a 36px row (found in review, CAIRN-308). */
+  .enter-page { animation: enter-fade var(--dur-2) var(--ease-out) backwards; }
+  .enter-fade { animation: enter-fade var(--dur-2) var(--ease-out) backwards; }
+  .enter-rise { animation: enter-rise var(--dur-3) var(--ease-out) backwards; }
+  .enter-pop  { animation: enter-pop var(--dur-2) var(--ease-spring) backwards; transform-origin: var(--origin, top); }
+  .enter-sheet { animation: enter-sheet var(--dur-3) var(--ease-out) backwards; }
+
+  /* The first rows of a list settle in one after another; the rest are simply
+     there. Bounded at fourteen so a 300-row list costs fourteen animations, and
+     a row inserted at the top by a live update gets the same arrival. */
+  .stagger > :nth-child(-n + 14) { animation: enter-rise var(--dur-3) var(--ease-out) backwards; }
+  .stagger > :nth-child(2)  { animation-delay: 18ms; }
+  .stagger > :nth-child(3)  { animation-delay: 36ms; }
+  .stagger > :nth-child(4)  { animation-delay: 54ms; }
+  .stagger > :nth-child(5)  { animation-delay: 72ms; }
+  .stagger > :nth-child(6)  { animation-delay: 90ms; }
+  .stagger > :nth-child(7)  { animation-delay: 108ms; }
+  .stagger > :nth-child(8)  { animation-delay: 126ms; }
+  .stagger > :nth-child(9)  { animation-delay: 144ms; }
+  .stagger > :nth-child(10) { animation-delay: 162ms; }
+  .stagger > :nth-child(11) { animation-delay: 180ms; }
+  .stagger > :nth-child(12) { animation-delay: 198ms; }
+  .stagger > :nth-child(13) { animation-delay: 216ms; }
+  .stagger > :nth-child(14) { animation-delay: 234ms; }
+
+  /* Something that just changed under a live update: a wash of the accent
+     that drains away. */
+  .arrive { animation: arrive 1.6s var(--ease-out) backwards; }
+
+  /* Loading placeholders: a slow band of light across the shape. */
+  .skeleton {
+    background-color: var(--surface-raised);
+    background-image: linear-gradient(90deg, transparent 30%, color-mix(in oklab, var(--fg) 7%, transparent) 50%, transparent 70%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  /* A dot that is reporting something live. */
+  .live-dot { animation: live-ring 2.4s var(--ease-out) infinite; border-radius: 999px; }
+
   /* A heading, set as Cairn Cloud sets its own: with `font-display`, a book
      weight between regular and medium, tracked in, and balanced so a
      two-line heading never leaves one word alone on the second. The face
@@ -302,11 +494,16 @@
   @media (min-width: 40rem) { .pr-live-status { padding-right: 7.5rem; } }
   @media (min-width: 48rem) { .pr-live-status { padding-right: 11.5rem; } }
 
-  @keyframes pop {
-    from { opacity: 0; transform: translateY(-4px) scale(0.99); }
-    to   { opacity: 1; transform: none; }
+  /* Popovers and dialogs: the same entrance as .enter-pop, kept under its
+     old name because a dozen overlays already carry it. */
+  .pop { animation: enter-pop var(--dur-2) var(--ease-spring) backwards; transform-origin: var(--origin, top); }
+
+  /* Behind a dialog: the page dims and softens rather than going black. */
+  .scrim {
+    background: color-mix(in oklab, #000 50%, transparent);
+    backdrop-filter: blur(3px) saturate(120%);
+    animation: enter-fade var(--dur-2) var(--ease-out) backwards;
   }
-  .pop { animation: pop 140ms var(--ease) both; }
 
   /* -------------------------------------------------------------------------
      The login page: the one screen with room for atmosphere. Light from the
@@ -336,7 +533,7 @@
     70%  { opacity: 1; transform: translateY(1.5px); }
     to   { opacity: 1; transform: none; }
   }
-  .login-stone { animation: stone-settle 620ms var(--ease) var(--d, 0ms) both; }
+  .login-stone { animation: stone-settle 620ms var(--ease) var(--d, 0ms) backwards; }
 
   @media (prefers-reduced-motion: reduce) {
     .login-stone { animation: none; }
@@ -601,5 +798,20 @@
   /* Legacy Edge/IE. Harmless where unsupported. */
   select::-ms-expand {
     display: none;
+  }
+}
+
+/* One rule for everyone who asked for less motion, rather than a media query
+   per animation that the next animation forgets. Transitions shorten to a
+   frame so state still changes; nothing slides, settles or shimmers. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
   }
 }

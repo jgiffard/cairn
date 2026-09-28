@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { cn } from '@/lib/utils'
 import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
 
@@ -8,6 +9,12 @@ import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
  * both — so they are worth drawing exactly. A status ring encodes progress in
  * its fill, which reads down a column far faster than a word, and priority is
  * a bar chart for the same reason.
+ *
+ * Every layer is always drawn and only its attributes change, so a status or
+ * priority edited in place moves to its new value — the pie sweeps, the disk
+ * fills, the tick draws, a bar grows — rather than being swapped for a
+ * different drawing. A transition never runs on first paint, so a list that
+ * is only arriving stays still.
  */
 
 const STATUS_META: Record<TaskStatus, { label: string; color: string; fill: number }> = {
@@ -19,7 +26,15 @@ const STATUS_META: Record<TaskStatus, { label: string; color: string; fill: numb
   cancelled: { label: 'Cancelled', color: 'var(--status-cancelled)', fill: 1 },
 }
 
-export const StatusIcon = ({
+const UNKNOWN_STATUS = { label: 'Unknown status', color: 'var(--fg-subtle)', fill: 0 }
+
+// One motion for every layer of both marks: the settle, at the longest step.
+const SETTLE = 'duration-[var(--dur-3)] ease-[var(--ease-out)]'
+
+// Scaled about its own middle, not the SVG origin.
+const OWN_CENTRE = { transformBox: 'fill-box', transformOrigin: 'center' } as const
+
+const StatusIconBase = ({
   status,
   size = 14,
   className,
@@ -28,11 +43,17 @@ export const StatusIcon = ({
   size?: number
   className?: string
 }) => {
-  const meta = STATUS_META[status]
+  // A status this build does not know (an older API, a hit from another
+  // index) draws a neutral ring rather than taking the whole palette down.
+  const meta = STATUS_META[status] ?? UNKNOWN_STATUS
   const r = 6.5
+  const closed = status === 'done' || status === 'cancelled'
   // A stroke-dasharray arc is how the partial fill is drawn: the ring is one
-  // circle and the progress is a second, thicker one clipped by its dash.
+  // circle and the progress is a second, thicker one clipped by its dash. The
+  // dash is a full circumference and the offset hides what is not yet done,
+  // so a change of status is a change of one number the browser can tween.
   const circumference = 2 * Math.PI * 3.5
+  const progress = closed ? 1 : meta.fill
 
   return (
     <svg
@@ -40,66 +61,81 @@ export const StatusIcon = ({
       height={size}
       viewBox="0 0 16 16"
       fill="none"
-      className={cn('shrink-0', className)}
+      className={cn('shrink-0 transition-[color]', SETTLE, className)}
+      style={{ color: meta.color }}
       aria-label={meta.label}
       role="img"
     >
       <title>{meta.label}</title>
 
-      {status === 'backlog' ? (
-        <circle
-          cx="8"
-          cy="8"
-          r={r}
-          stroke={meta.color}
-          strokeWidth="1.5"
-          strokeDasharray="1.6 1.8"
-        />
-      ) : (
-        <circle cx="8" cy="8" r={r} stroke={meta.color} strokeWidth="1.5" />
-      )}
+      <circle
+        cx="8"
+        cy="8"
+        r={r}
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeDasharray={status === 'backlog' ? '1.6 1.8' : undefined}
+      />
 
-      {meta.fill > 0 && meta.fill < 1 && (
-        <circle
-          cx="8"
-          cy="8"
-          r="3.5"
-          stroke={meta.color}
-          strokeWidth="7"
-          strokeDasharray={`${circumference * meta.fill} ${circumference}`}
-          transform="rotate(-90 8 8)"
-        />
-      )}
+      <circle
+        cx="8"
+        cy="8"
+        r="3.5"
+        stroke="currentColor"
+        strokeWidth="7"
+        // The gap is a hair longer than the path, so a fully hidden arc
+        // leaves no sliver at its seam.
+        strokeDasharray={`${circumference} ${circumference + 1}`}
+        transform="rotate(-90 8 8)"
+        style={{ strokeDashoffset: circumference * (1 - progress) }}
+        className={cn('transition-[stroke-dashoffset]', SETTLE)}
+      />
 
-      {status === 'done' && (
-        <>
-          <circle cx="8" cy="8" r={r} fill={meta.color} />
-          <path
-            d="M5 8.2l2.1 2.1L11 6.4"
-            stroke="var(--bg)"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </>
-      )}
+      <circle
+        cx="8"
+        cy="8"
+        r={r}
+        fill="currentColor"
+        style={{ fillOpacity: closed ? 1 : 0 }}
+        className={cn('transition-[fill-opacity]', SETTLE)}
+      />
 
-      {status === 'cancelled' && (
-        <>
-          <circle cx="8" cy="8" r={r} fill={meta.color} />
-          <path
-            d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8"
-            stroke="var(--bg)"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-        </>
-      )}
+      {/* The tick draws itself once the disk has filled behind it. */}
+      <path
+        d="M5 8.2l2.1 2.1L11 6.4"
+        stroke="var(--bg)"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        pathLength={1}
+        strokeDasharray="1 1"
+        style={{ strokeDashoffset: status === 'done' ? 0 : 1, opacity: status === 'done' ? 1 : 0 }}
+        className={cn('transition-[stroke-dashoffset,opacity] delay-[var(--dur-1)]', SETTLE)}
+      />
+
+      <path
+        d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8"
+        stroke="var(--bg)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        style={{
+          ...OWN_CENTRE,
+          opacity: status === 'cancelled' ? 1 : 0,
+          transform: status === 'cancelled' ? undefined : 'scale(0.6)',
+        }}
+        className={cn('transition-[opacity,transform] delay-[var(--dur-1)]', SETTLE)}
+      />
     </svg>
   )
 }
 
 const PRIORITY_BARS: Record<TaskPriority, number> = { urgent: 0, high: 3, medium: 2, low: 1 }
+
+const BARS = [
+  { x: 1.5, y: 9.5, h: 5 },
+  { x: 6.5, y: 6.5, h: 8 },
+  { x: 11.5, y: 3.5, h: 11 },
+]
 
 /**
  * `aria-label` carries the accessible name; the `<title>` is belt and braces.
@@ -110,7 +146,7 @@ const PRIORITY_BARS: Record<TaskPriority, number> = { urgent: 0, high: 3, medium
  * up as React #418 twenty-four times on a list page, and looked exactly like a
  * broken page.
  */
-export const PriorityIcon = ({
+const PriorityIconBase = ({
   priority,
   size = 14,
   className,
@@ -147,17 +183,23 @@ export const PriorityIcon = ({
       width={size}
       height={size}
       viewBox="0 0 16 16"
-      className={cn('shrink-0', className)}
+      // Per priority, not one grey for all three. High, medium and low
+      // differed only by how many bars were filled, which is a difference
+      // you have to stop and count — invisible while scanning a list.
+      className={cn('shrink-0 transition-[color]', SETTLE, className)}
+      style={{ color: `var(--priority-${priority})` }}
       aria-label={`${label} priority`}
       role="img"
     >
       {/* One string child, not two: see the note on `aria-label` below. */}
       <title>{`${label} priority`}</title>
-      {[
-        { x: 1.5, y: 9.5, h: 5 },
-        { x: 6.5, y: 6.5, h: 8 },
-        { x: 11.5, y: 3.5, h: 11 },
-      ].map((bar, i) => (
+      {/* A faint track under every bar, and the filled bar over it, grown up
+          from its base — so raising a priority fills the next bar in rather
+          than switching it on. */}
+      {BARS.map((bar) => (
+        <rect key={`t${bar.x}`} x={bar.x} y={bar.y} width="3" height={bar.h} rx="1" fill="currentColor" opacity={0.22} />
+      ))}
+      {BARS.map((bar, i) => (
         <rect
           key={bar.x}
           x={bar.x}
@@ -165,11 +207,14 @@ export const PriorityIcon = ({
           width="3"
           height={bar.h}
           rx="1"
-          // Per priority, not one grey for all three. High, medium and low
-          // differed only by how many bars were filled, which is a difference
-          // you have to stop and count — invisible while scanning a list.
-          fill={`var(--priority-${priority})`}
-          opacity={i < filled ? 1 : 0.22}
+          fill="currentColor"
+          style={{
+            transformBox: 'fill-box',
+            transformOrigin: 'bottom',
+            transform: i < filled ? undefined : 'scaleY(0)',
+            transitionDelay: `${i * 40}ms`,
+          }}
+          className={cn('transition-transform', SETTLE)}
         />
       ))}
     </svg>
@@ -193,38 +238,44 @@ const TYPE_LABEL: Record<TaskType, string> = {
  * The text now carries it too, and the border takes a wash of it — each value
  * has a theme-specific hex chosen to clear 4.5 against that theme's ground,
  * which is why they are tokens rather than one shared palette.
+ *
+ * Both pills are one shape: the same height, a soft fill of their own colour,
+ * a hairline rim of it, and a lit top edge, so a row carrying a type and two
+ * labels reads as one set of chips rather than three styles.
  */
+const PILL =
+  'inline-flex h-[1.25rem] shrink-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] leading-none whitespace-nowrap ' +
+  'transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]'
+
+// An unsupported color-mix is simply ignored, leaving the border the class
+// underneath draws.
+const tint = (color: string, rim: number, wash: number): React.CSSProperties => ({
+  borderColor: `color-mix(in oklab, ${color} ${rim}%, transparent)`,
+  backgroundColor: `color-mix(in oklab, ${color} ${wash}%, transparent)`,
+  boxShadow: `inset 0 1px 0 color-mix(in oklab, ${color} 9%, transparent)`,
+})
+
 export const TypePill = ({ type }: { type: TaskType }) => {
   const color = `var(--type-${type})`
   return (
-    <span
-      className="inline-flex h-[1.25rem] shrink-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] whitespace-nowrap"
-      style={{
-        color,
-        // An unsupported color-mix is simply ignored, leaving the border the
-        // class underneath draws.
-        borderColor: `color-mix(in srgb, ${color} 38%, transparent)`,
-        backgroundColor: `color-mix(in srgb, ${color} 8%, transparent)`,
-      }}
-    >
+    <span className={PILL} style={{ color, ...tint(color, 34, 10) }}>
       <span className="size-[0.4375rem] rounded-full" style={{ backgroundColor: color }} />
       {TYPE_LABEL[type]}
     </span>
   )
 }
 
-export const LabelPill = ({ children }: { children: React.ReactNode }) => (
-  <span className="border-border text-fg-muted inline-flex h-[1.25rem] shrink-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] whitespace-nowrap">
-    <span
-      className="size-[0.4375rem] rounded-full"
-      style={{
-        backgroundColor:
-          typeof children === 'string' ? labelColor(children) : 'var(--fg-subtle)',
-      }}
-    />
-    {children}
-  </span>
-)
+export const LabelPill = ({ children }: { children: React.ReactNode }) => {
+  const color = typeof children === 'string' ? labelColor(children) : 'var(--fg-subtle)'
+  // The text stays grey: the derived palette is not measured against either
+  // ground the way the type tokens are, so it colours the chip, not the word.
+  return (
+    <span className={cn(PILL, 'text-fg-muted')} style={tint(color, 28, 8)}>
+      <span className="size-[0.4375rem] rounded-full" style={{ backgroundColor: color }} />
+      {children}
+    </span>
+  )
+}
 
 /**
  * Initials avatar. Colour is derived from the name so the same actor is always
@@ -325,3 +376,11 @@ export const ProjectIcon = ({ size = 13, projectKey }: { size?: number; projectK
   </svg>
   )
 }
+
+/**
+ * Memoised: every row of a 300-task list draws both, and each now carries
+ * every layer of its shape so a change can animate between them. Pure by
+ * props, so a row that re-renders for any other reason skips them.
+ */
+export const StatusIcon = memo(StatusIconBase)
+export const PriorityIcon = memo(PriorityIconBase)

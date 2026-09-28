@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { Archive, ArchiveRestore, Check, KeyRound, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { Button, InlineInput } from '@/components/ui/control'
 import { ProjectIcon } from '@/components/icons'
+import { EmptyState } from '@/components/empty-state'
 import { ChangeKeyDialog, type RetiredKeyOwner } from '@/components/change-key-dialog'
 import { useMutate } from '@/lib/api/use-mutate'
 import { shortDateWithYear } from '@/lib/dates'
@@ -123,7 +124,7 @@ export const ProjectsManager = ({
   const row = (p: Row) => (
     <li
       key={p.id}
-      className="border-border hover:bg-surface-raised group flex items-center gap-3 border-b px-3 py-2.5 transition-colors last:border-b-0"
+      className="border-border row-hover group flex items-center gap-3 border-b px-3 py-2.5 last:border-b-0"
     >
       <ProjectIcon size={15} projectKey={p.key} />
 
@@ -143,7 +144,7 @@ export const ProjectsManager = ({
         ) : (
           <Link
             href={`/projects/${p.key}`}
-            className="text-fg hover:text-accent min-w-0 truncate text-[0.875rem] font-medium transition-colors"
+            className="text-fg hover:text-accent min-w-0 truncate text-[0.875rem] font-medium transition-colors duration-[var(--dur-1)]"
           >
             {p.title}
           </Link>
@@ -158,7 +159,7 @@ export const ProjectsManager = ({
 
       {/* Visible on hover at a pointer, always visible on touch, where there
           is no hover and an invisible control is an absent one. */}
-      <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+      <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity duration-[var(--dur-1)] ease-[var(--ease-out)] md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
         <Button
           size="sm"
           variant="ghost"
@@ -198,7 +199,8 @@ export const ProjectsManager = ({
 
         <Button
           size="sm"
-          variant="danger"
+          variant="ghost"
+          className="hover:bg-danger-subtle hover:text-danger"
           title="Delete"
           onClick={() => {
             setConfirming(p.id)
@@ -228,7 +230,7 @@ export const ProjectsManager = ({
       </div>
 
       {creating && (
-        <div className="border-border bg-surface raised flex flex-col gap-3 rounded-lg border p-3">
+        <div className="surface-card enter-rise flex flex-col gap-3 p-3">
           <div className="flex flex-wrap items-start gap-2">
             <label className="flex flex-col gap-1">
               <span className="text-fg-subtle text-[0.6875rem] font-medium">Key</span>
@@ -273,12 +275,12 @@ export const ProjectsManager = ({
         </div>
       )}
 
-      <ul className="border-border bg-surface overflow-hidden rounded-lg border">
+      <ul className="surface-card stagger overflow-hidden">
         {active.length > 0 ? (
           active.map(row)
         ) : (
-          <li className="text-fg-subtle px-3 py-8 text-center text-[0.8125rem]">
-            No active projects yet.
+          <li>
+            <EmptyState title="No active projects yet." />
           </li>
         )}
       </ul>
@@ -286,7 +288,7 @@ export const ProjectsManager = ({
       {archived.length > 0 && (
         <>
           <h2 className="text-fg-muted text-[0.875rem] font-medium">Archived</h2>
-          <ul className="border-border bg-surface overflow-hidden rounded-lg border opacity-70">
+          <ul className="surface-card overflow-hidden opacity-70 transition-opacity duration-[var(--dur-2)] ease-[var(--ease-out)] hover:opacity-100">
             {archived.map(row)}
           </ul>
         </>
@@ -307,35 +309,43 @@ export const ProjectsManager = ({
 
       {target && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
           onClick={() => setConfirming(null)}
         >
+          <div className="scrim absolute inset-0" aria-hidden />
           <div
-            className="border-border bg-bg-elevated raised-lg flex w-full max-w-[26rem] flex-col gap-3 rounded-lg border p-4"
+            className={cn(
+              'border-border bg-surface/85 raised-lg enter-sheet relative flex w-full max-w-[26rem] flex-col overflow-hidden rounded-xl border backdrop-blur-xl backdrop-saturate-150',
+              'before:pointer-events-none before:absolute before:inset-x-10 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,color-mix(in_oklab,var(--danger)_55%,transparent),transparent)]',
+            )}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-fg text-[0.875rem] font-medium">Delete {target.key}?</h3>
-            <p className="text-fg-muted text-[0.8125rem] leading-relaxed">
-              This removes <strong className="text-fg">{target.total}</strong>{' '}
-              {target.total === 1 ? 'task' : 'tasks'} and everything attached to them — notes,
-              comments, attachments and history. It cannot be undone.
-            </p>
-            <p className="text-fg-subtle text-[0.75rem]">
-              Archiving hides a project and keeps its tasks searchable. If you only want it out of
-              the way, close this and archive it instead.
-            </p>
-            <label className="flex flex-col gap-1">
-              <span className="text-fg-subtle text-[0.6875rem] font-medium">
-                Type {target.key} to confirm
-              </span>
-              <InlineInput
-                autoFocus
-                value={confirmKey}
-                onChange={(e) => setConfirmKey(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === 'Enter' && confirmKey === target.key && remove(target)}
-              />
-            </label>
-            <div className="flex justify-end gap-2">
+            <h3 className="border-border text-fg border-b px-4 py-3 text-[0.875rem] font-medium">
+              Delete {target.key}?
+            </h3>
+            <div className="flex flex-col gap-3 px-4 py-3.5">
+              <p className="text-fg-muted text-[0.8125rem] leading-relaxed">
+                This removes <strong className="text-fg">{target.total}</strong>{' '}
+                {target.total === 1 ? 'task' : 'tasks'} and everything attached to them — notes,
+                comments, attachments and history. It cannot be undone.
+              </p>
+              <p className="text-fg-subtle text-[0.75rem]">
+                Archiving hides a project and keeps its tasks searchable. If you only want it out of
+                the way, close this and archive it instead.
+              </p>
+              <label className="flex flex-col gap-1">
+                <span className="text-fg-subtle text-[0.6875rem] font-medium">
+                  Type {target.key} to confirm
+                </span>
+                <InlineInput
+                  autoFocus
+                  value={confirmKey}
+                  onChange={(e) => setConfirmKey(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && confirmKey === target.key && remove(target)}
+                />
+              </label>
+            </div>
+            <div className="border-border bg-surface-raised/40 flex justify-end gap-2 border-t px-4 py-3">
               <Button variant="secondary" onClick={() => setConfirming(null)}>
                 Cancel
               </Button>

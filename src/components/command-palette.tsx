@@ -8,6 +8,9 @@ import { useTheme } from 'next-themes'
 import { ProjectIcon, StatusIcon } from '@/components/icons'
 import type { TaskStatus, TaskType } from '@/schemas/task'
 import { useCreateTask } from '@/components/task-creation'
+import { EmptyState } from '@/components/empty-state'
+import { Spinner } from '@/components/spinner'
+import { cn } from '@/lib/utils'
 
 type Hit = {
   ref: string
@@ -36,14 +39,23 @@ const Keys = ({ keys }: { keys: string[] }) => (
   </span>
 )
 
+// The selected row carries the trail marker: the accent-subtle fill and a
+// two-pixel edge of the accent at the left, lit rather than painted.
 const itemClass =
-  'flex h-[2.375rem] cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[0.8125rem] ' +
-  'data-[selected=true]:bg-surface-hover'
+  'group relative flex h-[2.375rem] cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[0.8125rem] ' +
+  'transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)] ' +
+  'data-[selected=true]:bg-accent-subtle/80 ' +
+  'before:absolute before:inset-y-2 before:left-0 before:w-[2px] before:rounded-full before:bg-accent ' +
+  'before:opacity-0 before:shadow-[0_0_8px_var(--glow)] before:transition-opacity before:duration-[var(--dur-1)] ' +
+  'data-[selected=true]:before:opacity-100'
+
+const iconClass = 'text-fg-subtle transition-colors duration-[var(--dur-1)] group-data-[selected=true]:text-accent'
 
 const groupClass =
   '[&_[cmdk-group-heading]]:text-fg-subtle [&_[cmdk-group-heading]]:px-2.5 ' +
-  '[&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 ' +
-  '[&_[cmdk-group-heading]]:text-[0.6875rem]'
+  '[&_[cmdk-group-heading]]:pt-2.5 [&_[cmdk-group-heading]]:pb-1 ' +
+  '[&_[cmdk-group-heading]]:text-[0.65625rem] [&_[cmdk-group-heading]]:font-medium ' +
+  '[&_[cmdk-group-heading]]:tracking-[0.06em] [&_[cmdk-group-heading]]:uppercase'
 
 export const CommandPalette = ({ projects }: { projects: { key: string; title: string }[] }) => {
   const router = useRouter()
@@ -107,34 +119,44 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-[14vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[14vh]"
       onClick={() => setOpen(false)}
     >
+      <div className="scrim absolute inset-0" aria-hidden />
       <Command
-        className="bg-surface border-border pop w-full max-w-[35rem] overflow-hidden rounded-lg border raised-lg"
+        className={cn(
+          'border-border bg-surface/85 raised-lg enter-pop relative w-full max-w-[35rem] overflow-hidden rounded-xl border backdrop-blur-xl backdrop-saturate-150',
+          'before:pointer-events-none before:absolute before:inset-x-12 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--glow),transparent)]',
+        )}
+        style={{ '--origin': 'top' } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
         shouldFilter={!searchable}
         loop
       >
-        <div className="border-border flex items-center gap-2.5 border-b px-3.5">
-          <SearchIcon size={14} className="text-fg-subtle shrink-0" />
+        <div className="border-border flex items-center gap-2.5 border-b px-4">
+          <SearchIcon size={15} className="text-fg-subtle shrink-0" />
           <Command.Input
             autoFocus
             value={query}
             onValueChange={setQuery}
             placeholder="Search tasks, or jump to a project…"
-            className="placeholder:text-fg-subtle h-[2.875rem] w-full bg-transparent text-[0.875rem] outline-none"
+            className="placeholder:text-fg-subtle text-fg h-[3.25rem] w-full bg-transparent text-[0.9375rem] outline-none"
           />
           {loading ? (
-            <span className="text-fg-subtle shrink-0 text-[0.6875rem]">…</span>
+            <span className="text-fg-subtle shrink-0">
+              <Spinner size={12} />
+            </span>
           ) : (
             <kbd className="kbd inline-flex shrink-0">esc</kbd>
           )}
         </div>
 
-        <Command.List className="max-h-[21.25rem] overflow-y-auto p-1.5">
-          <Command.Empty className="text-fg-subtle px-2.5 py-8 text-center text-[0.75rem]">
-            {searchable ? 'Nothing found — this subject looks new.' : 'Type to search.'}
+        <Command.List className="max-h-[21.25rem] overflow-y-auto p-1.5 pb-2">
+          <Command.Empty>
+            <EmptyState
+              compact
+              title={searchable ? 'Nothing found — this subject looks new.' : 'Type to search.'}
+            />
           </Command.Empty>
 
           {searchable && (
@@ -144,7 +166,7 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
                 onSelect={() => go(`/search?q=${encodeURIComponent(query.trim())}`)}
                 className={itemClass}
               >
-                <SearchIcon size={13} className="text-fg-subtle" />
+                <SearchIcon size={13} className={iconClass} />
                 <span className="min-w-0 flex-1 truncate">
                   All results for <span className="text-fg-muted">{query.trim()}</span>
                 </span>
@@ -201,7 +223,7 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
                   }}
                   className={itemClass}
                 >
-                  <Plus size={14} className="text-fg-subtle" />
+                  <Plus size={14} className={iconClass} />
                   New task
                   <Keys keys={['C']} />
                 </Command.Item>
@@ -209,12 +231,12 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
 
               <Command.Group heading="Go to" className={groupClass}>
                 <Command.Item value="settings" onSelect={() => go('/settings')} className={itemClass}>
-                  <Settings size={14} className="text-fg-subtle" />
+                  <Settings size={14} className={iconClass} />
                   Settings
                   <Keys keys={['G', 'then', 'S']} />
                 </Command.Item>
                 <Command.Item value="api reference" onSelect={() => go('/api-docs')} className={itemClass}>
-                  <FileJson size={14} className="text-fg-subtle" />
+                  <FileJson size={14} className={iconClass} />
                   API reference
                   <Keys keys={['G', 'then', 'A']} />
                 </Command.Item>
@@ -223,7 +245,7 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
                   onSelect={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
                   className={itemClass}
                 >
-                  <Moon size={14} className="text-fg-subtle" />
+                  <Moon size={14} className={iconClass} />
                   Toggle theme
                   <Keys keys={['⌘', '⇧', 'L']} />
                 </Command.Item>

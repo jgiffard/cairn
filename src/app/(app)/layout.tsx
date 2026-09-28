@@ -44,13 +44,13 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
         <TaskCreationProvider projects={projectList}>
           <MobileNavProvider email={email} role={user.role} projects={projectList}>
             <div className="bg-bg flex h-dvh">
-              <aside className="border-border bg-bg-elevated hidden w-[13.75rem] shrink-0 flex-col border-r md:flex">
+              <aside className="app-sidebar hidden w-[13.75rem] shrink-0 flex-col md:flex">
                 <AppSidebar email={email} role={user.role} projects={projectList} />
               </aside>
 
               {/* Beside the content, not above the sidebar: the shell is a flex
                 row, and a banner spanning it would push the whole app down. */}
-            <div className="flex min-w-0 flex-1 flex-col">
+            <div className="app-canvas flex min-w-0 flex-1 flex-col">
               <HealthBanner userId={user.id} />
               <main className="min-w-0 flex-1 overflow-hidden">{children}</main>
             </div>

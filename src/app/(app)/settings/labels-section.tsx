@@ -6,6 +6,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { mutate } from '@/lib/api/mutate'
 import { LabelPill } from '@/components/icons'
+import { EmptyState } from '@/components/empty-state'
+import { SettingsCard } from './settings-card'
 
 export type LabelRow = { label: string; task_count: number }
 
@@ -45,22 +47,27 @@ export const LabelsSection = ({ labels }: { labels: LabelRow[] }) => {
   }
 
   return (
-    <section>
-      <h2 className="text-fg text-[0.8125rem] font-medium">Labels</h2>
-      <p className="text-fg-subtle mt-1 text-[0.75rem]">
-        Renaming onto a label that already exists merges the two. Nothing else keeps
-        <code className="mx-1">db</code>,<code className="mx-1">database</code> and
-        <code className="mx-1">postgres</code> from becoming three separate things.
-      </p>
-
+    <SettingsCard
+      title="Labels"
+      flush
+      description={
+        <>
+          Renaming onto a label that already exists merges the two. Nothing else keeps
+          <code className="mx-1">db</code>,<code className="mx-1">database</code> and
+          <code className="mx-1">postgres</code> from becoming three separate things.
+        </>
+      }
+      footer={message ? <p className="text-fg-muted enter-rise text-[0.75rem]">{message}</p> : undefined}
+    >
       {labels.length === 0 ? (
-        <p className="text-fg-subtle border-border mt-3 rounded-md border border-dashed px-3 py-4 text-center text-[0.75rem]">
-          No labels in use.
-        </p>
+        <EmptyState compact title="No labels in use." />
       ) : (
-        <ul className="border-border divide-border mt-3 divide-y rounded-md border">
+        <ul className="divide-border stagger divide-y">
           {labels.map((l) => (
-            <li key={l.label} className="flex min-h-[2.375rem] items-center gap-2 px-3 py-1.5">
+            <li
+              key={l.label}
+              className="row-hover group flex min-h-[2.375rem] items-center gap-2 px-4 py-1.5 md:px-5"
+            >
               {editing === l.label ? (
                 <>
                   <InlineInput
@@ -88,7 +95,7 @@ export const LabelsSection = ({ labels }: { labels: LabelRow[] }) => {
                   <button
                     type="button"
                     onClick={() => setEditing(null)}
-                    className="text-fg-subtle hover:text-fg shrink-0 text-[0.75rem]"
+                    className="text-fg-subtle hover:text-fg shrink-0 text-[0.75rem] transition-colors duration-[var(--dur-1)]"
                   >
                     Cancel
                   </button>
@@ -99,32 +106,34 @@ export const LabelsSection = ({ labels }: { labels: LabelRow[] }) => {
                   <span className="text-fg-subtle tabular ml-auto shrink-0 text-[0.6875rem]">
                     {l.task_count} task{l.task_count === 1 ? '' : 's'}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditing(l.label)
-                      setDraft(l.label)
-                    }}
-                    className="text-fg-muted hover:text-fg shrink-0 text-[0.75rem] transition-colors"
-                  >
-                    Rename
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void apply(l.label, null)}
-                    className="text-fg-subtle hover:text-danger shrink-0 text-[0.75rem] transition-colors"
-                  >
-                    Remove
-                  </button>
+                  {/* Quiet until the row is under the pointer; always there on
+                      touch, where there is no hover to reveal them. */}
+                  <span className="flex shrink-0 items-center gap-2 transition-opacity duration-[var(--dur-1)] ease-[var(--ease-out)] md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditing(l.label)
+                        setDraft(l.label)
+                      }}
+                      className="text-fg-muted hover:text-fg text-[0.75rem] transition-colors duration-[var(--dur-1)]"
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void apply(l.label, null)}
+                      className="text-fg-subtle hover:text-danger text-[0.75rem] transition-colors duration-[var(--dur-1)]"
+                    >
+                      Remove
+                    </button>
+                  </span>
                 </>
               )}
             </li>
           ))}
         </ul>
       )}
-
-      {message && <p className="text-fg-muted mt-2 text-[0.75rem]">{message}</p>}
-    </section>
+    </SettingsCard>
   )
 }
