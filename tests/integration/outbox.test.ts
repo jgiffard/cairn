@@ -1,8 +1,10 @@
 import { createServer, type Server } from 'node:http'
+import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 const cli = join(process.cwd(), 'cli', 'cairn.mjs')
@@ -43,6 +45,11 @@ describe('durable CLI outbox', () => {
   let server: Server
   let base: string
   let mode: 'fail' | 'success' = 'fail'
+  let transientPath: string | null = null
+  let heldPath: string | null = null
+  let heldResponse: import('node:http').ServerResponse | null = null
+  let signalHeld: (() => void) | null = null
+  const requestPaths: string[] = []
   const received: { id: string | undefined; body: string }[] = []
   const attempts: string[] = []
   const seen = new Map<string, number>()
@@ -51,13 +58,24 @@ describe('durable CLI outbox', () => {
     home = await mkdtemp(join(tmpdir(), 'cairn-outbox-'))
     received.length = 0
     attempts.length = 0
+    requestPaths.length = 0
+    transientPath = null
+    heldPath = null
+    heldResponse = null
+    signalHeld = null
     seen.clear()
     mode = 'fail'
     server = createServer((req, res) => {
       let body = ''
       req.on('data', (chunk) => { body += chunk })
       req.on('end', () => {
-        if (mode === 'fail') {
+        requestPaths.push(req.url ?? '')
+        if (req.url === heldPath && heldResponse === null) {
+          heldResponse = res
+          signalHeld?.()
+          return
+        }
+        if (mode === 'fail' || req.url === transientPath) {
           res.writeHead(503, { 'content-type': 'application/json' })
           res.end(JSON.stringify({ success: false, error: 'offline' }))
           return
@@ -117,6 +135,41 @@ describe('durable CLI outbox', () => {
     expect(replay.stdout).toContain('sent 12, rejected 0, still queued 0')
     expect(received).toHaveLength(12)
     expect(new Set(received.map((request) => request.id)).size).toBe(12)
+  })
+
+  it('stops the whole drain at the oldest transient failure and leaves newer shards queued', async () => {
+    const outboxDir = join(home, '.cairn')
+    await mkdir(outboxDir, { recursive: true })
+    const key = 'crn_integration_key'
+    const makeItem = (id: string, queuedAt: string) => ({
+      id,
+      t: queuedAt,
+      method: 'POST',
+      path: `/api/v1/tasks/${id}`,
+      body: { id },
+      agent: 'integration-agent',
+      base,
+      keyId: createHash('sha256').update(key).digest('hex').slice(0, 24),
+    })
+    const older = join(outboxDir, 'outbox.jsonl.pending-older')
+    const newer = join(outboxDir, 'outbox.jsonl.pending-newer')
+    await writeFile(older, `${JSON.stringify(makeItem('older', '2026-09-28T08:00:00.000Z'))}\n`)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    await writeFile(newer, `${JSON.stringify(makeItem('newer', '2026-09-28T08:01:00.000Z'))}\n`)
+    mode = 'success'
+    transientPath = '/api/v1/tasks/older'
+
+    const replay = await run(home, base, ['replay'], key)
+
+    expect(replay.code).toBe(0)
+    expect(requestPaths).toEqual(['/api/v1/tasks/older'])
+    expect(replay.stdout).toContain('still queued 2')
+
+    transientPath = null
+    const recovered = await run(home, base, ['replay'], key)
+    expect(recovered.code).toBe(0)
+    expect(requestPaths).toEqual(['/api/v1/tasks/older', '/api/v1/tasks/older', '/api/v1/tasks/newer'])
+    expect(recovered.stdout).toContain('still queued 0')
   })
 
   it('quarantines records when the runtime key identity changes', async () => {
@@ -272,6 +325,63 @@ describe('durable CLI outbox', () => {
     expect(results.every((result) => result.code === 0)).toBe(true)
     expect(received).toHaveLength(12)
     expect(new Set(received.map((request) => request.id)).size).toBe(12)
+  })
+
+  it.each([
+    ['a reused live PID', () => process.pid],
+    ['a dead PID', () => 2147483647],
+  ])('recovers an abandoned replay lease with %s', async (_case, pid) => {
+    await run(home, base, ['comment', 'CAIRN-163', 'recover after PID reuse'])
+    await writeFile(join(home, '.cairn', 'outbox.jsonl.replay.lock'), JSON.stringify({
+      pid: pid(), start: 'previous-process-incarnation', token: 'abandoned',
+    }))
+    mode = 'success'
+
+    const replay = await run(home, base, ['replay'])
+    expect(replay.code).toBe(0)
+    expect(received).toHaveLength(1)
+    expect(existsSync(join(home, '.cairn', 'outbox.jsonl.replay.lock'))).toBe(false)
+  })
+
+  it('recovers a legacy pid-token lease held by an unrelated live process', async () => {
+    await run(home, base, ['comment', 'CAIRN-163', 'recover legacy lease'])
+    const lock = join(home, '.cairn', 'outbox.jsonl.replay.lock')
+    await writeFile(lock, `${process.pid}-abandoned-owner`)
+    mode = 'success'
+
+    const replay = await run(home, base, ['replay'])
+    expect(replay.code).toBe(0)
+    expect(received).toHaveLength(1)
+    expect(existsSync(lock)).toBe(false)
+  })
+
+  it('does not send a newer shard while an older worker is in flight and then fails transiently', async () => {
+    const outboxDir = join(home, '.cairn')
+    await mkdir(outboxDir, { recursive: true })
+    const makeItem = (id: string, t: string) => ({
+      id, t, method: 'POST', path: `/api/v1/tasks/${id}`, body: { id },
+      agent: 'integration-agent', base,
+      keyId: createHash('sha256').update('crn_integration_key').digest('hex').slice(0, 24),
+    })
+    await writeFile(join(outboxDir, 'outbox.jsonl.pending-older'),
+      `${JSON.stringify(makeItem('older', '2026-09-28T08:00:00.000Z'))}\n`)
+    mode = 'success'
+    transientPath = '/api/v1/tasks/older'
+    heldPath = transientPath
+    const held = new Promise<void>((resolve) => { signalHeld = resolve })
+    const workerA = run(home, base, ['replay'])
+    await held
+    await writeFile(join(outboxDir, 'outbox.jsonl.pending-newer'),
+      `${JSON.stringify(makeItem('newer', '2026-09-28T08:01:00.000Z'))}\n`)
+    const workerB = run(home, base, ['replay'])
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(requestPaths).toEqual(['/api/v1/tasks/older'])
+    heldResponse!.writeHead(503, { 'content-type': 'application/json' })
+    heldResponse!.end(JSON.stringify({ success: false, error: 'offline' }))
+    const results = await Promise.all([workerA, workerB])
+    expect(results.every((result) => result.code === 0)).toBe(true)
+    expect(requestPaths).toEqual(['/api/v1/tasks/older', '/api/v1/tasks/older'])
+    expect(requestPaths).not.toContain('/api/v1/tasks/newer')
   })
 
   it('reserves monotonic checkpoint sequences under concurrent offline writes', async () => {
