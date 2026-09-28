@@ -16,7 +16,7 @@ describe('browser session generations', () => {
   })
 
   it('rotates browser sessions without silently invalidating agent keys', () => {
-    const operator = read('scripts/create-operator.ts')
+    const operator = read('scripts/create-operator.mjs')
     expect(operator).toContain('session_epoch = session_epoch + 1')
     expect(operator).not.toContain('auth_epoch = auth_epoch + 1')
   })
