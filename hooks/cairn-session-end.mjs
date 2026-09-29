@@ -244,8 +244,11 @@ const parseTranscript = async (path) => {
       const text = humanText(raw)
       // Before any person spoke, not merely first: a SessionStart hook's
       // output can land ahead of the prompt.
-      if (!spoke && SUMMARISER_PROMPT.test(raw)) out.summariser = true
-      if (text || SUMMARISER_PROMPT.test(raw)) spoke = true
+      // Through the wrapper: OpenClaw puts its conversation header in front of
+      // whatever it relays, a summariser prompt included.
+      const summariser = SUMMARISER_PROMPT.test(unwrap(raw))
+      if (!spoke && summariser) out.summariser = true
+      if (text || summariser) spoke = true
       if (text) {
         out.prompts.push(text)
         // Only what the human asked about. Scraping every user turn would pull
@@ -354,8 +357,9 @@ const parseCodexRollout = async (path) => {
       if (p.role === 'user' && text) {
         if (SCHEDULED_PROMPT.test(text)) out.scheduled = true
         const human = humanText(text)
-        if (!spoke && SUMMARISER_PROMPT.test(text)) out.summariser = true
-        if (human || SUMMARISER_PROMPT.test(text)) spoke = true
+        const summariser = SUMMARISER_PROMPT.test(unwrap(text))
+        if (!spoke && summariser) out.summariser = true
+        if (human || summariser) spoke = true
         if (human) {
           out.prompts.push(human)
           for (const m of human.matchAll(TASK_REF)) out.refs.add(m[0])

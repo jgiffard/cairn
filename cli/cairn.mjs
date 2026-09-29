@@ -911,6 +911,17 @@ const detectAgent = () => {
 const AGENT = detectAgent()
 
 /**
+ * The session platform for `session end|checkpoint` without `--platform`.
+ * A session is one row per (platform, id), so an agent that follows the skill's
+ * manual handoff from Codex or OpenClaw and is filed as `claude` writes a
+ * second row beside its hook's (CAIRN-321). The hook always says; this only
+ * decides for a caller that did not.
+ */
+const SESSION_PLATFORMS = { 'claude-code': 'claude', codex: 'codex', openclaw: 'openclaw' }
+const defaultPlatform = () =>
+  process.env.CAIRN_PLATFORM?.trim() || (AGENT ? (SESSION_PLATFORMS[AGENT] ?? 'other') : 'claude')
+
+/**
  * An explicit CAIRN_API_KEY in the environment always wins -- it is how a
  * one-off command borrows another identity. Otherwise the runtime's own key is
  * preferred, and the plain one is the fallback, so a machine that has not been
@@ -5036,7 +5047,7 @@ const commands = {
     if (verb === 'end' || verb === 'checkpoint') {
       const payload = {
         externalId: need(flags.id, `usage: cairn session ${verb} --id <session-id>`),
-        platformSource: flags.platform ?? 'claude',
+        platformSource: flags.platform ?? defaultPlatform(),
         cwd: flags.cwd ?? process.cwd(),
         files: splitList(flags.files),
         taskRefs: splitList(flags.tasks),

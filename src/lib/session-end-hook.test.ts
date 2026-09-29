@@ -237,6 +237,16 @@ describe('the session-end hook', () => {
     expect(lines('cli.jsonl')).toEqual([])
   })
 
+  it('never records a summariser run relayed through OpenClaw\'s conversation wrapper', async () => {
+    const path = transcript('rollout-2026-09-25T09-00-00-77777777-2222-3333-4444-555555555555', [
+      { type: 'session_meta', payload: { id: 'x' } },
+      { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: `[OpenClaw conversation info: sender={"id":"42"}]\n${SUMMARISER_PROMPT}\n---\nedited src/a.ts` }] } },
+      { type: 'response_item', payload: { type: 'function_call', arguments: '{"cmd":"edit src/a.ts"}' } },
+    ])
+    await run({ transcript_path: path }, { CAIRN_PLATFORM: 'openclaw' })
+    expect(lines('cli.jsonl')).toEqual([])
+  })
+
   it('takes what was typed after a slash command as the request', async () => {
     const path = transcript('slash', [
       user('<command-name>/fix</command-name>\n<command-message>fix</command-message>\n<command-args>the login redirect loops</command-args>'),
