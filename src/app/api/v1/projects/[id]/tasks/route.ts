@@ -6,6 +6,7 @@ import { admin } from '@/lib/db/client'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 import { resolveProject } from '@/lib/api/project-keys'
 import { resolveAssignee, withAssignees } from '@/lib/api/people'
+import { refuseUnreadableBody } from '@/lib/api/task-body'
 import { createTaskSchema, TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 
 export const dynamic = 'force-dynamic'
@@ -123,6 +124,9 @@ export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
     const resolved = await resolveProject(params.id)
     if (!resolved) return fail('not_found', `No project ${params.id}.`)
     const { project, renamed } = resolved
+
+    const unreadable = refuseUnreadableBody(actor, body.description, `cairn add "<title>" --project ${project.key} --body -`)
+    if (unreadable) return unreadable
 
     // A new task has no id yet, so it cannot be its own ancestor — the cycle
     // walk that re-parenting needs is unnecessary here.

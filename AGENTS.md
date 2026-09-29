@@ -19,7 +19,8 @@ cairn check "supabase pooler connection timeouts"
 You get back an index of prior work — open *and* closed — with whether each has a
 recorded answer, and roughly what it costs to read. Open the one or two that look
 relevant. **Do not re-debug something that has already been answered.** `cairn add` runs
-the same query and warns before you file a near-duplicate.
+the same query and warns before you file a near-duplicate. Write the body as markdown —
+`##` headings, lists, code in backticks: the API refuses an agent's wall of text.
 
 ## 2. The retrieval contract: check → show → act
 

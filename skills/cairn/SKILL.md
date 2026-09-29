@@ -27,8 +27,8 @@ config change, a deploy, a migration, an investigation, a delegation. Size is ir
    **Dead ends are `--kind attempt`** — "tried X, no change" is the note the next agent
    needs most, because the trying is the expensive part.
 4. **Checkpoint before you yield.** `cairn checkpoint <ref> --summary "state + next step"`
-   after each milestone and before pausing, delegating or ending the turn. It is the only
-   thing that tells whoever resumes where you got to.
+   after each milestone and before pausing, delegating or ending the turn. It alone
+   tells whoever resumes where you got to.
 5. **Written but not landed → `cairn update <ref> --status in-review`**, with a note saying
    which: uncommitted, unmerged, or awaiting deploy. `done` would be a lie and `doing` says
    someone is still typing.
@@ -44,8 +44,8 @@ the turn is ending. `release` only when you are handing it back and will not con
 **Sweeping a backlog: one claimed task per sweep.** File one task for the triage, hold that,
 and work the rest without claiming them: `note` what you find on each, `update --status`
 where the state is now clear, close what you can with an honest `--kind`. Claiming thirty
-tasks asserts thirty pieces of in-flight work that nobody is doing. File any new tasks
-during a sweep with `--no-start`.
+asserts thirty pieces of in-flight work nobody is doing. File new tasks during a sweep
+with `--no-start`.
 
 **When not to file.** A tracker that fires on everything costs more than it records.
 - **A task you hold already covers it** — note on it, or `--parent` a genuinely separate piece.
@@ -56,9 +56,8 @@ during a sweep with `--no-start`.
 - **A fact that expires** ("staging is three commits behind") — a note, or nothing.
 - **Narrating your bookkeeping** — notes are for the next agent, not a progress log.
 
-A session that files nothing is fine: sessions are recorded whether or not you write. The
-failure is the other way round — a session that changed or ruled something out and left no
-trace of it.
+A session that files nothing is fine: sessions are recorded regardless. The failure is a
+session that changed or ruled something out and left no trace.
 
 ---
 
@@ -74,8 +73,8 @@ cairn know <slug>                   # read a knowledge hit
 ```
 
 `#0` means the subject is new. `--kinds task,note,knowledge,session` narrows `check`; the
-default searches everything because you do not know which store holds the answer. Never
-pull bodies in bulk — the index exists so you choose what is worth reading.
+default searches everything, since you cannot know which store holds the answer. Never
+pull bodies in bulk — the index is for choosing what to read.
 
 `recall` starts from the task: resolutions and decision/finding notes on related tasks
 (linked, parent, children, blockers, similar closed work) and knowledge on its files, each
@@ -90,11 +89,11 @@ cairn push   ACME-42 a1b2c3d --branch main
 cairn run    ACME-42 "npm test" --status passed --exit-code 0
 ```
 
-They record; none of them executes anything. "I fixed it" and `run_result failed exit 1`
+They record; none executes anything. "I fixed it" and `run_result failed exit 1`
 are different claims and only one can be checked. Repeats are deduplicated, so a retry is
 safe. Name another task's ref in a `decision` or `finding` note when your work constrains
 it — it shows under that task's `mentionedIn`; the ref in prose is the link. `cairn comment`
-is for addressing the human rather than the next agent.
+addresses the human, not the next agent.
 
 ## Filing, and the body
 
@@ -106,10 +105,21 @@ cairn add "title" --project ACME --type bug --body - --assignee bob@acme.io   # 
 `add` lists similar existing work — read it before continuing.
 
 The title says which task; the body says what it is. **The server refuses a bug or spike
-whose body is under 40 characters**, from any client; `--force-empty` is for the rare
-title that is the whole story. What earns its place: what happens versus what you expected;
-how to see it (request, command, log line); what you already ruled out; why it matters now. Write it when you file — context is never cheaper. A `chore`/`docs` title is
-often enough; never pad with "n/a".
+whose body is under 40 characters**; `--force-empty` is for the rare title that is the
+whole story. What earns its place: what happens versus what you expected; how to see it
+(request, command, log line); what you ruled out; why it matters now. Write it when you
+file — context is never cheaper. A `chore`/`docs` title is often enough; never pad with "n/a".
+
+**Bodies are markdown; an agent's wall of text is refused**, naming what to fix:
+headings, not `WHY:` in capitals; lists and short paragraphs; paths, calls and identifiers
+in backticks. Like this:
+
+```markdown
+## Cause
+`db/pool.ts:40` caps it at 15.
+## Fix
+- raise it to 40
+```
 
 The API refuses `done`/`cancelled` without a resolution (it suggests one from your last
 checkpoint), and refuses a resolution unless the status is closing. Reopening clears the
@@ -130,8 +140,8 @@ it is a note.
 
 - **Scope is explicit or inferred, never assumed global.** `--project ACME`, `--entity acme`
   (a business, stack or subsystem — `cairn entities`), or `--global`. With none, `learn`
-  takes this directory's project and **refuses where there is none** — so a runtime working
-  outside a mapped checkout must pass a scope. Scope narrowly only when the fact is narrow;
+  takes this directory's project and **refuses where there is none** — outside a mapped
+  checkout, pass a scope. Scope narrowly only when the fact is narrow;
   the narrower one is shown first ("true for this business, except here").
 - **A body is required** on `learn`, and a `relearn` body cannot be blank.
 - **Provenance is automatic:** the session is recorded with the fact, and so is the task
@@ -142,7 +152,7 @@ it is a note.
 - **The title is the claim; the slug is the handle** — give a long claim a short `--slug`.
 - **`[[slug]]` in a body is a link**, followable in browser and terminal. A reference that
   misses while a near-named entry exists is refused, naming the slug you probably meant —
-  take it; that is almost always a misspelling, not a gap. With nothing close it is accepted
+  take it: it is almost always a misspelling. With nothing close it is accepted
   with a warning (two entries can cite each other). `[[ACME-42]]` is refused: write task
   refs bare. `--allow-dangling` is for when the refusal is genuinely wrong.
 - **Correct rather than add.** Two contradictory claims, equally findable, is how every
@@ -160,7 +170,7 @@ A fact is linked to the backticked paths in its body, its source task's files, a
 `--files a,b`. **`stale`** means those files were reworked since it was confirmed;
 **`unverified Nd`** means a fact naming no file has gone 14+ days unconfirmed — age, not
 evidence of change. Either way: check it, then `verify` or `relearn`. Confirming an old
-fact is as useful as writing a new one and far faster.
+fact is as useful as a new one, and faster.
 
 `know --unused|--gaps|--orphans|--dangling` show what is *not* connected. **Scripted reads are not recalls:** pass `--sweep` (or
 `CAIRN_SWEEP=1`) when looping over entries.
@@ -178,19 +188,19 @@ cairn checkpoint ACME-42 --summary "migration written, tests not run"
 cairn release ACME-42    # handing it back: a held doing task returns to todo
 ```
 
-- A claim is execution state, independent of status: `doing` and unclaimed is what a human
-  working on it looks like. Only claim open work — move settled work back to an open status
-  first if it truly needs revision.
+- A claim is execution state, independent of status: `doing` and unclaimed means a human
+  is on it. Only claim open work — reopen settled work first if it truly
+  needs revision.
 - **A claim is not ownership.** The assignee is the human accountable before and after
   it. `list --mine` is what you hold; `--assignee me`, what your human owns.
 - **A checkpoint on an unheld open task claims it** (and says so); a note does not. Neither
   steals: a checkpoint on someone else's claim is refused.
 - **After 15 silent minutes** a lease is stale and another agent may take it over.
 - **After 2 hours with no sign of life** the maintenance sweep (`reconcile`, where
-  installed) releases the claim and leaves a note: `doing` goes back to `todo`, `in-review`
-  keeps its status. Sign of life is a beat, a note, a checkpoint you wrote, an edit, or your
-  own commit/push/run — so evidence keeps a claim alive. Notes and checkpoints survive the
-  release; the checkpoint is where the next agent starts.
+  installed) releases the claim and leaves a note: `doing` → `todo`, `in-review` keeps its
+  status. Sign of life is a beat, a note, a checkpoint you wrote, an edit, or your own
+  commit/push/run. Notes and checkpoints survive the release; the checkpoint is where the
+  next agent starts.
 - **At session end the runtime checkpoints tasks the session worked on, never over a
   checkpoint you wrote** unless this very session holds the claim; a checkpoint written
   meanwhile always wins. A held task it did not touch gets a "still held" line only if it
@@ -224,8 +234,8 @@ cairn map ACME                        # this checkout is that project (once per 
 ```
 
 A hook usually runs `context` at session start; run it when you have lost your place.
-Read **"Started and dropped here"**: work somebody began and walked away from — finish it
-or close it with why. `--scope project` restricts held work and the last session to the
+Read **"Started and dropped here"**: work begun and abandoned — finish it or close it with
+why. `--scope project` restricts held work and the last session to the
 resolved project and fails rather than guess. `next` ranks work you hold above work dropped
 with a checkpoint above anything not begun; blocked or actively held work is absent, not
 ranked last. A renamed key (`AC-113 is now HOL-113`) keeps resolving — write the new ref.

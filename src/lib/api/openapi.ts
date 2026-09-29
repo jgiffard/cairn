@@ -50,6 +50,14 @@ const errorResponse = {
               'Present on resolution_required. Drawn from the last checkpoint or most ' +
               'recent finding note, so the caller can confirm rather than invent.',
           },
+          problems: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Present when an agent\'s task description is refused as unreadable (CAIRN-312): ' +
+              'one instruction per problem — a heading to write, a paragraph to break up, a path ' +
+              'to put in backticks. `error` repeats them.',
+          },
         },
         required: ['success', 'error', 'code'],
       },
