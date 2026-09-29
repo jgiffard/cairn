@@ -47,7 +47,7 @@ const firstHop = (value: string | null): string | null => value?.split(',')[0]?.
  * to protect. login/route.ts already keys its brute-force limiter on
  * X-Forwarded-For on the same reasoning, undocumented until now.
  */
-const servedOrigin = (req: Request): string => {
+export const servedOrigin = (req: Request): string => {
   const url = new URL(req.url)
   const proto = firstHop(req.headers.get('x-forwarded-proto')) ?? url.protocol.replace(':', '')
   const host = firstHop(req.headers.get('x-forwarded-host')) ?? url.host

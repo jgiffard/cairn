@@ -276,32 +276,46 @@ export const listUserKeys = async (userId: string) => {
   return result.rows
 }
 
-export const createUserKey = async (userId: string, input: { agentName: string; name: string }) => {
+const createKeyOn = async (client: PoolClient, userId: string, input: { agentName: string; name: string }) => {
   const generated = generateApiKey()
-  return transaction(async (client) => {
-    await lockUser(client, userId)
-    const user = await userById(client, userId)
-    if (!user.active) throw new UserAdminError('conflict', 'Keys cannot be created for an inactive user.')
-    const result = await client.query(
-      `insert into api_keys (user_id, agent_name, platform_source, name, key_prefix, key_hash, auth_epoch)
-       select id, $2, $2, $3, $4, $5, auth_epoch
-         from app_users
-        where id = $1 and deleted_at is null
-          and coalesce(banned_until, '-infinity'::timestamptz) <= now()
-       returning id, agent_name, name, key_prefix, created_at`,
-      [userId, input.agentName, input.name, generated.keyPrefix, generated.keyHash],
-    )
-    const created = result.rows[0]
-    if (!created) {
-      throw new UserAdminError('conflict', 'The user became inactive before the key was created.')
-    }
-    return {
-      ...created,
-      key: generated.key,
-      warning: 'This is the only time the key is shown. Store it now.',
-    }
-  })
+  await lockUser(client, userId)
+  const user = await userById(client, userId)
+  if (!user.active) throw new UserAdminError('conflict', 'Keys cannot be created for an inactive user.')
+  const result = await client.query(
+    `insert into api_keys (user_id, agent_name, platform_source, name, key_prefix, key_hash, auth_epoch)
+     select id, $2, $2, $3, $4, $5, auth_epoch
+       from app_users
+      where id = $1 and deleted_at is null
+        and coalesce(banned_until, '-infinity'::timestamptz) <= now()
+     returning id, agent_name, name, key_prefix, created_at`,
+    [userId, input.agentName, input.name, generated.keyPrefix, generated.keyHash],
+  )
+  const created = result.rows[0]
+  if (!created) {
+    throw new UserAdminError('conflict', 'The user became inactive before the key was created.')
+  }
+  return {
+    ...created,
+    key: generated.key,
+    warning: 'This is the only time the key is shown. Store it now.',
+  }
 }
+
+/**
+ * Mints one key for an active user.
+ *
+ * Takes an optional `client` so a caller already inside a transaction (the
+ * device-pairing poll, CAIRN-314, mints several keys in the same transaction
+ * that consumes the approved request) can share it rather than nesting a
+ * second `transaction()` inside the first, which would deadlock on the
+ * connection pool. Without one, this opens its own — the behaviour every
+ * other caller (the admin key route) already relies on.
+ */
+export const createUserKey = async (
+  userId: string,
+  input: { agentName: string; name: string },
+  client?: PoolClient,
+) => (client ? createKeyOn(client, userId, input) : transaction((tx) => createKeyOn(tx, userId, input)))
 
 export const revokeUserKey = async (userId: string, keyId: string) => {
   const result = await pool().query(

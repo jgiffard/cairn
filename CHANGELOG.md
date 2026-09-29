@@ -9,6 +9,54 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **`cairn setup` connects a machine in one command** (CAIRN-314). It replaces four scripts
+  and hand copying:
+  1. Registers the instance, single or one of several.
+  2. Checks the server.
+  3. Detects Claude Code, Codex and OpenClaw.
+  4. Pairs for any missing keys.
+  5. Fetches the release files pinned to its own version, from
+     `codeload.github.com/…/v<version>` rather than the raw CDN that serves stale copies for
+     minutes after a push.
+  6. Installs the CLI into `~/.local/bin`, the skill into each runtime, and the hooks.
+  7. Installs the `agent-files` sync job. `reconcile` and `vitals` are workspace chores, so
+     they come only with `--maintenance`.
+  8. Checks its version against the server's.
+
+  Re-running it is the upgrade path: working keys are kept and unchanged files left alone.
+  Flags: `--dry-run`, `--name`, `--runtimes`, `--no-skill`, `--no-hooks`, `--no-jobs`,
+  `--yes`. `install.sh` at the repository root puts the CLI on PATH and runs it:
+  `curl -fsSL https://raw.githubusercontent.com/montytorr/cairn/main/install.sh | sh -s -- --url <instance>`.
+- **Browser pairing: a machine gets keys without an admin** (CAIRN-314).
+  - `cairn setup` asks `POST /api/v1/connect` for a code and prints `<instance>/connect/<CODE>`.
+  - The person approves in the browser where they are signed in, and can untick runtimes.
+  - The CLI's `POST /api/v1/connect/poll` then receives keys minted at that moment, once, for
+    that person's own agents, each named `<runtime> on <host>`.
+  - Device codes are stored hashed and expire in ten minutes. Approval takes a signed-in human
+    (an agent key gets 403) and every state change is one conditional `UPDATE`.
+  - Admins still manage everyone else's keys. A `maintenance` key releases anyone's claims, so
+    only an administrator can approve one, and the role is checked again at minting.
+    `cairn setup --maintenance` pairs it on its own, so a member's own keys never wait on it.
+  - Against device-code phishing, the approval card says to approve only a `cairn setup` you
+    just ran yourself, and flags a request from a different network address than yours. The
+    host is shown "as reported" and restricted to hostname characters.
+  - Both unauthenticated endpoints are rate-limited per address. A poll reads without a
+    transaction, and only a redemption opens one. Consumed requests are kept 90 days as the
+    record of who approved which host.
+  - Migration 068 adds `connect_requests`.
+
+### Fixed
+
+- **An expired session lost where it was going.** The middleware lets any request with a
+  session cookie through; when the layout then found the session invalid it sent a bare
+  `/login`, so signing in landed on `/` instead of, say, a `/connect/<code>` approval. The
+  middleware now passes the requested path along and the redirect keeps it.
+- **`/login?redirect=` could leave the site.** `/\host`, and a tab or newline after the first
+  slash (the URL parser drops them), all read as another host. The destination is now parsed
+  the way the browser will parse it and kept only when it stays on this site.
+
 ## [0.10.1] — 2026-09-29
 
 ### Fixed

@@ -1306,6 +1306,137 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('People.', { type: 'array', items: person }) },
       },
     },
+    '/connect': {
+      post: {
+        summary: 'Start a device pairing (unauthenticated)',
+        description:
+          'OAuth 2.0 device-authorization-grant shaped: a machine with no credentials yet gets a ' +
+          '`deviceCode` to poll with and a `userCode` to show a human, who approves it in a browser ' +
+          'at `verificationUrl`. Anyone can call this — it hands out nothing by itself.',
+        security: [],
+        requestBody: body({
+          type: 'object',
+          properties: {
+            host: {
+              type: 'string',
+              pattern: '^[A-Za-z0-9._-]{1,100}$',
+              description: 'The machine\'s hostname. Shown on the approval card as reported, and in each key\'s name.',
+            },
+            runtimes: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 6,
+              items: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,40}$' },
+            },
+            cliVersion: { type: 'string', minLength: 1, maxLength: 100 },
+          },
+          required: ['host', 'runtimes'],
+        }),
+        responses: {
+          '201': okResponse('Pairing started.', {
+            type: 'object',
+            properties: {
+              deviceCode: { type: 'string', description: 'Secret. Only this call and the CLI ever see it.' },
+              userCode: { type: 'string', example: 'BCDF-2345' },
+              verificationUrl: { type: 'string', format: 'uri' },
+              expiresIn: { type: 'integer', example: 600 },
+              interval: { type: 'integer', example: 3, description: 'Minimum seconds between polls.' },
+            },
+            required: ['deviceCode', 'userCode', 'verificationUrl', 'expiresIn', 'interval'],
+          }),
+          '400': errorResponse,
+          '429': errorResponse,
+        },
+      },
+    },
+    '/connect/poll': {
+      post: {
+        summary: 'Poll a device pairing (unauthenticated)',
+        description:
+          '`approved` is returned exactly once: the request is consumed in the same instant its keys ' +
+          'are minted, so a repeated or replayed poll gets `expired` instead of a second copy. An ' +
+          'unknown `deviceCode` also reads as `expired` — this never says whether a code ever existed.',
+        security: [],
+        requestBody: body({
+          type: 'object',
+          properties: { deviceCode: { type: 'string', pattern: '^[A-Za-z0-9_-]{43}$' } },
+          required: ['deviceCode'],
+        }),
+        responses: {
+          '200': okResponse('Current state of the pairing.', {
+            type: 'object',
+            properties: {
+              status: { type: 'string', enum: ['pending', 'denied', 'expired', 'approved'] },
+              slowDown: { type: 'boolean', description: 'Polled faster than `interval`. Only ever true alongside `pending`.' },
+              user: {
+                type: 'object',
+                description: 'Present only when `status` is `approved`: the keys\' new owner.',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  email: { type: 'string', format: 'email' },
+                  name: { type: 'string' },
+                },
+                required: ['id', 'email', 'name'],
+              },
+              keys: {
+                type: 'array',
+                description: 'Present only when `status` is `approved`. Shown once; never recoverable after this response.',
+                items: {
+                  type: 'object',
+                  properties: { agentName: { type: 'string' }, key: { type: 'string' } },
+                  required: ['agentName', 'key'],
+                },
+              },
+            },
+            required: ['status'],
+          }),
+          '400': errorResponse,
+        },
+      },
+    },
+    '/connect/{code}/approve': {
+      parameters: [{ name: 'code', in: 'path', required: true, schema: { type: 'string', example: 'BCDF-2345' } }],
+      post: {
+        summary: 'Approve a pairing request (signed-in human browser session only)',
+        description:
+          'Mints nothing by itself — keys are minted the moment the CLI\'s next poll redeems the ' +
+          'approval, for the approving user only. `runtimes` must be a non-empty subset of what was ' +
+          'requested. An agent API key gets 403: this has to be a person, at a keyboard, in a browser. ' +
+          'So does a member approving `maintenance`: that key releases anyone\'s claims, so only an ' +
+          'administrator can approve it, and the role is checked again when the key is minted.',
+        requestBody: body({
+          type: 'object',
+          properties: {
+            runtimes: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 6,
+              items: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,40}$' },
+            },
+          },
+          required: ['runtimes'],
+        }),
+        responses: {
+          '200': okResponse('Approved.'),
+          '400': errorResponse,
+          '403': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+        },
+      },
+    },
+    '/connect/{code}/deny': {
+      parameters: [{ name: 'code', in: 'path', required: true, schema: { type: 'string', example: 'BCDF-2345' } }],
+      post: {
+        summary: 'Deny a pairing request (signed-in human browser session only)',
+        responses: {
+          '200': okResponse('Denied.'),
+          '403': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+        },
+      },
+    },
     '/users': {
       get: {
         summary: 'List users (administrator browser session only)',

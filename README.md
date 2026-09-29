@@ -383,6 +383,8 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 
 | | |
 |---|---|
+| **Connect a machine** | |
+| `cairn setup --url <instance>` | Pairs a key, installs the CLI, skill, hooks and maintenance jobs — [more](#connect-a-machine). `--dry-run` to preview, safe to re-run |
 | **Find and read** | |
 | `cairn check "<subject>" [--assignee me\|<who>]` | **Start here.** Prior work across all four stores, with a `~tokens` cost per row. `--kinds task,note,knowledge,session` narrows the stores; `--assignee` narrows to that person's tasks |
 | `cairn context [--scope project\|all] [--project K]` | The briefing: what you hold, what is in flight (naming the owner when it is not your human), your human's open work here that nobody is on (five, most urgent first, then a count), where the last session here stopped. `--scope project` limits held work, stale claims, and the last session to the resolved project; the default `all` keeps cross-project awareness. An unresolved project is an error in project scope; an unknown explicit key returns 404. |
@@ -611,6 +613,63 @@ and a few caches are per replica.
 repository. Keep `DATABASE_URL` and `CAIRN_ATTACHMENT_SIGNING_KEY` server-side only.
 
 ## Agent setup
+
+### Connect a machine
+
+One command does what the rest of this section used to require by hand:
+pairs a key with your identity, installs the CLI on PATH, copies the skill,
+wires the hooks, and installs the maintenance jobs it needs.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/montytorr/cairn/main/install.sh | sh -s -- --url https://your-cairn
+```
+
+`install.sh` only gets Node 22+ and a recent `cli/cairn.mjs` onto PATH; the
+work happens in `cairn setup` itself, so re-running either one is the upgrade
+path — keys are kept, files are replaced only where they differ.
+
+```
+$ cairn setup --url https://cairn.app.dispofi.fr --name dispofi
+✓ instance  dispofi -> https://cairn.app.dispofi.fr
+✓ server    https://cairn.app.dispofi.fr (0.11.0)
+Open this link to connect this machine:
+  https://cairn.app.dispofi.fr/connect/K7QX-M2RD (code K7QX-M2RD)
+waiting for approval… ✓ approved by Julien
+✓ keys      claude-code, codex -> ~/.cairn/instances/dispofi/env
+✓ release   v0.11.0 -> ~/.cairn/releases/0.11.0
+✓ cli       ~/.local/bin/cairn (0.11.0)
+✓ skill     ~/.claude/skills/cairn, ~/.codex/skills/cairn
+✓ hooks     installed:
+     claude: SessionStart, SessionEnd, PreCompact
+     codex: SessionStart, Stop
+     …
+✓ jobs      agent-files:
+     …
+✓ cairn 0.11.0 ↔ server 0.11.0 — restart your agent sessions to load the hooks
+```
+
+The approval page shows the host as the device reported it, where the request came from and
+who the keys will belong to. Approve a link only if you just ran `cairn setup` yourself: the
+keys are yours, so a link someone sends you would hand them your agents.
+
+
+| Flag | |
+|---|---|
+| `--url <instance>` | required the first time; otherwise the configured default |
+| `--name <instance-name>` | this machine will have more than one instance (default: derived from the url) |
+| `--runtimes a,b` | which agent runtimes to pair and install for (default: detected — `~/.claude`, `~/.codex`, and OpenClaw where this account runs its gateway) |
+| `--no-skill` / `--no-hooks` / `--no-jobs` | skip that step |
+| `--maintenance` | also install `reconcile` and `vitals`, and pair a `maintenance` key for them — separately, because only an administrator can approve one: it releases anyone's claims |
+| `--dry-run` | print the plan, change nothing |
+
+Where a server predates pairing (`/api/v1/connect` answers 404), `cairn setup`
+says so and prints where to get a key by hand instead of stopping dead — see
+[the manual path](#the-manual-path) below.
+
+### The manual path
+
+The individual pieces `cairn setup` automates, for a machine that needs only
+one of them, or a server old enough that pairing is not available yet:
 
 ```bash
 # credentials — or export CAIRN_BASE_URL / CAIRN_API_KEY

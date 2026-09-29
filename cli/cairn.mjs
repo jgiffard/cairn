@@ -17,6 +17,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import {
   appendFileSync,
   closeSync,
+  chmodSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -494,7 +495,7 @@ const ROUTE_DIR = earlyFlag('cwd') || process.cwd()
 const ROUTE_SESSION = routeSession()
 // Commands that only look at local configuration never need an instance, and
 // must not stop to ask for one.
-const LOCAL_ONLY = new Set(['route', 'instance', 'help'])
+const LOCAL_ONLY = new Set(['route', 'instance', 'help', 'setup'])
 const EARLY_COMMAND = earlyPositional[0]
 const JUST_HELP = (!EARLY_COMMAND && !process.argv.includes('--version')) || EARLY_COMMAND === 'help' || process.argv.includes('--help')
 const INTERACTIVE = Boolean(process.stdin.isTTY && process.stderr.isTTY) && !LOCAL_ONLY.has(EARLY_COMMAND) &&
@@ -903,13 +904,14 @@ const KNOWN_FLAGS = new Set([
   'confirm', 'cwd', 'dangling', 'default', 'days', 'description', 'dir', 'dry-run',
   'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'file', 'files', 'folder',
   'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'history', 'hours', 'id', 'instance',
-  'json', 'key', 'kind', 'kinds', 'label', 'learned', 'limit', 'max-parents',
-  'message', 'mine', 'next', 'no-checkpoint', 'no-parent', 'no-start', 'notify', 'older',
+  'json', 'key', 'kind', 'kinds', 'label', 'learned', 'limit', 'maintenance', 'max-parents',
+  'message', 'mine', 'name', 'next', 'no-checkpoint', 'no-hooks', 'no-jobs', 'no-parent',
+  'no-skill', 'no-start', 'notify', 'older',
   'orphans', 'output', 'parent', 'platform', 'pretty', 'priority', 'project',
-  'reason', 'remote', 'repo', 'request', 'resolution', 'scheduled', 'scope',
+  'reason', 'remote', 'repo', 'request', 'resolution', 'runtimes', 'scheduled', 'scope',
   'session', 'show-toplevel', 'slug', 'start', 'started', 'status', 'summary',
   'superseded', 'superseded-by', 'sweep', 'task', 'tasks', 'title', 'tool-calls',
-  'type', 'unused', 'url', 'verified', 'version',
+  'type', 'unused', 'url', 'verified', 'version', 'yes',
 ])
 
 for (let i = 0; i < argv.length; i += 1) {
@@ -2437,6 +2439,18 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn release <ref> [--force]   --force only to drop another session's claim
     cairn block <ref> --reason "<why>"   |   cairn unblock <ref>
 
+  connect a machine
+    cairn setup --url <instance>   one command: pair a key, install the CLI,
+                                   skill, hooks and maintenance jobs. Safe to
+                                   re-run — it is the upgrade path
+    cairn setup --name <instance>  this machine has (or will have) more than
+                                   one instance; names the new one
+    cairn setup --runtimes claude-code,codex,openclaw   default: detected
+    cairn setup --no-skill | --no-hooks | --no-jobs     skip one step
+    cairn setup --maintenance      also install reconcile + vitals; their key
+                                   is paired on its own and needs an admin
+    cairn setup --dry-run          print the plan, change nothing
+
   output
     --json | --pretty              default is TSV: count line, header, rows
     --body -  /  --resolution -    read the value from stdin
@@ -2506,6 +2520,260 @@ const summariseEvent = (data) => {
   return Object.entries(data)
     .map(([k, v]) => `${k}=${v}`)
     .join(' ')
+}
+
+/**
+ * The write half of `cairn instance add`, factored out so `cairn setup` can
+ * register an instance without shelling out to itself. Throws a plain Error
+ * with a message meant for a person; callers decide how to report it (`die`
+ * for the command, setup's own summary lines for the other).
+ *
+ * `unclassified` is the caller's already-decided policy (from `--default`, or
+ * asked at a terminal) — this function never prompts.
+ */
+const addInstance = async ({ name, url, makeDefault = false, adopt = false, unclassified }) => {
+  if (INSTANCES?.error) throw new Error(`cairn: ${INSTANCES.error} — fix it before adding to it`)
+  const config = INSTANCES
+    ? { ...INSTANCES.raw, version: 1, instances: { ...INSTANCES.instances } }
+    : { version: 1, instances: {} }
+  const existing = config.instances[name]
+  if (existing && trimUrl(existing.url) !== url) {
+    throw new Error(`instance "${name}" already points at ${existing.url}; edit ~/.cairn/instances.json to change it on purpose`)
+  }
+  config.instances[name] = { url }
+  if (makeDefault) config.unclassified = { mode: 'default', instance: name }
+  else if (unclassified) config.unclassified = unclassified
+
+  const dir = instanceDir(name)
+  const legacy = ['env', 'projects.json', 'ownership'].filter((f) => existsSync(join(CAIRN_DIR, f)))
+  const queued = existsSync(CAIRN_DIR) && readdirSync(CAIRN_DIR).some((f) =>
+    (f === 'outbox.jsonl' || f.startsWith(OUTBOX_PREFIX)) &&
+    f !== basename(OUTBOX_LOCK_PATH) && f !== basename(OUTBOX_REPLAY_LOCK_PATH))
+  const moved = []
+  if (adopt && (legacy.length || queued)) {
+    // The files at the top of ~/.cairn belong to the server they were used
+    // with, found the way it always was: the environment, then ~/.cairn/env,
+    // then localhost. Moving them under a different one would hand one
+    // instance's keys, map and queued writes to another.
+    const legacyUrl = trimUrl(
+      process.env.CAIRN_BASE_URL || fileEnv(join(CAIRN_DIR, 'env')).CAIRN_BASE_URL || 'http://localhost:3000',
+    )
+    if (legacyUrl !== url) {
+      throw new Error(`this machine's existing setup points at ${legacyUrl}, not ${url}: ` +
+        '--adopt would move its keys to the wrong instance')
+    }
+    for (const file of legacy) {
+      if (existsSync(join(dir, file))) throw new Error(`~/.cairn/instances/${name}/${file} already exists; not overwriting it`)
+    }
+  }
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  if (adopt) {
+    for (const file of legacy) {
+      renameSync(join(CAIRN_DIR, file), join(dir, file))
+      moved.push(file)
+    }
+    // Under the queue's own lock, so a write being queued right now lands
+    // either before the move or in the next process's instance directory.
+    // Appended rather than renamed onto a file already there: an adoption
+    // interrupted halfway is finished by running it again, and a rename
+    // would replace the queued writes it had already moved.
+    await withOutboxLock(() => {
+      for (const file of readdirSync(CAIRN_DIR)) {
+        if (file !== 'outbox.jsonl' && !file.startsWith(OUTBOX_PREFIX)) continue
+        if (file === basename(OUTBOX_LOCK_PATH) || file === basename(OUTBOX_REPLAY_LOCK_PATH)) continue
+        const from = join(CAIRN_DIR, file)
+        const to = join(dir, file)
+        if (existsSync(to)) {
+          appendFileSync(to, readFileSync(from), { mode: 0o600 })
+          unlinkSync(from)
+        } else renameSync(from, to)
+        moved.push(file)
+      }
+    })
+  }
+  writeInstancesConfig(config)
+
+  const notes = []
+  if (moved.length) notes.push(`moved ${moved.join(', ')} into ~/.cairn/instances/${name}/`)
+  else if (legacy.includes('env') && !INSTANCES && !adopt) {
+    notes.push('~/.cairn/env is no longer read now that instances are configured; ' +
+      'its keys belong in the instance they were issued by (or re-run with --adopt)')
+  }
+  if (!existsSync(join(dir, 'env'))) {
+    notes.push(`put this instance's keys in ~/.cairn/instances/${name}/env (CAIRN_API_KEY_<RUNTIME>=..., mode 600)`)
+  }
+  if ((config.unclassified?.mode ?? 'ask') === 'ask') {
+    notes.push('in a directory with no route, commands stop and ask (exit 10); ' +
+      '`cairn instance policy default <name>` uses one instead')
+  }
+  return { config, dir, notes, moved }
+}
+
+// ---------------------------------------------------------------------------
+// `cairn setup` — connect this machine to an instance and install everything.
+// ---------------------------------------------------------------------------
+
+/**
+ * The name a new instance gets when nobody said `--name`.
+ *
+ * The hostname's first label is usually generic — `cairn`, `app`, the product
+ * itself — so those are skipped in favour of the next one, which is usually
+ * the thing that actually distinguishes this Cairn from another:
+ * `cairn.app.dispofi.fr` names the instance `dispofi`, not `cairn`.
+ */
+const GENERIC_HOST_LABELS = new Set(['cairn', 'app', 'www'])
+const deriveInstanceName = (url) => {
+  let host = ''
+  try { host = new URL(url).hostname.toLowerCase() } catch { /* validated by the caller */ }
+  const labels = host.split('.').filter(Boolean)
+  const picked = labels.find((l) => !GENERIC_HOST_LABELS.has(l)) ?? labels[0] ?? 'instance'
+  const cleaned = picked.replace(/[^a-z0-9-]/g, '-').replace(/^-+/, '') || 'instance'
+  const safe = cleaned.slice(0, 32)
+  return INSTANCE_NAME.test(safe) ? safe : `i-${safe}`.slice(0, 32)
+}
+
+/** Filesystem signals for a runtime being on this machine, independent of what process is running this. */
+const SETUP_RUNTIME_DIRS = { 'claude-code': join(HOME, '.claude'), codex: join(HOME, '.codex') }
+const onSetupPath = (bin) => (process.env.PATH ?? '').split(':').some((dir) => dir && existsSync(join(dir, bin)))
+const detectSetupRuntimes = () => {
+  const found = []
+  if (existsSync(SETUP_RUNTIME_DIRS['claude-code'])) found.push('claude-code')
+  if (existsSync(SETUP_RUNTIME_DIRS.codex)) found.push('codex')
+  // A gateway, not the binary and not any config: `openclaw` on PATH says it
+  // is installed, and a client config (only `gateway.auth`, to reach someone
+  // else's gateway) says this account does not run one. Either way the hook is
+  // never installed here, and a key minted for it is a live credential with no
+  // reader. The same test as `openclawRunsGateway` in scripts/install-hooks.mjs.
+  if (openclawRunsGateway()) found.push('openclaw')
+  return found
+}
+
+const openclawRunsGateway = () => {
+  const path = process.env.OPENCLAW_CONFIG_PATH?.trim() || join(HOME, '.openclaw', 'openclaw.json')
+  if (!existsSync(path)) return false
+  let config
+  try {
+    config = JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return true // JSON5 this cannot parse: the benefit of the doubt, as the hook installer gives it
+  }
+  const gateway = config?.gateway ?? {}
+  return Boolean(gateway.mode || gateway.port || config?.agents || config?.channels)
+}
+
+/** Rewrite or append `KEY=value` lines in an env file, leaving everything else untouched. */
+const setEnvKeys = (path, updates) => {
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  const lines = existsSync(path) ? readFileSync(path, 'utf8').split('\n') : []
+  const written = new Set()
+  const rewritten = lines.map((line) => {
+    const trimmed = line.trim()
+    const eq = trimmed.indexOf('=')
+    if (!trimmed || trimmed.startsWith('#') || eq === -1) return line
+    const key = trimmed.slice(0, eq).trim()
+    if (!(key in updates)) return line
+    written.add(key)
+    return `${key}=${updates[key]}`
+  })
+  while (rewritten.length && rewritten[rewritten.length - 1].trim() === '') rewritten.pop()
+  for (const [key, value] of Object.entries(updates)) {
+    if (!written.has(key)) rewritten.push(`${key}=${value}`)
+  }
+  writeFileSync(path, `${rewritten.join('\n')}\n`, { mode: 0o600 })
+  // `mode` only applies when a file is created: an env file that already
+  // existed with looser permissions would keep them, keys and all.
+  chmodSync(path, 0o600)
+  chmodSync(dirname(path), 0o700)
+}
+
+const sameWebOrigin = (candidate, baseUrl) => {
+  try {
+    const url = new URL(candidate)
+    return ['http:', 'https:'].includes(url.protocol) && url.origin === new URL(baseUrl).origin
+  } catch {
+    return false
+  }
+}
+
+/** `open` on macOS, `xdg-open` on Linux. Best effort: a failure never blocks pairing. */
+const openBrowser = (url) => {
+  try {
+    spawnSync(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { stdio: 'ignore', timeout: 3000 })
+  } catch { /* the link is printed either way */ }
+}
+
+/**
+ * The pairing flow against SERVER CONTRACT in CAIRN-314: connect, print the
+ * link, poll until a person approves it (or denies, or lets it expire), and
+ * hand back the keys it issued. A server predating pairing answers 404 on
+ * `/connect`, which is not a failure — it is a machine setup still has to
+ * finish by other means, so the caller decides what to do with `fallback`.
+ */
+const pairDevice = async ({ baseUrl, runtimes, write }) => {
+  let connectRes
+  try {
+    connectRes = await fetch(`${baseUrl}/api/v1/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // The server takes a hostname's characters and no others: it goes on the
+      // approval card and into every key's name.
+      body: JSON.stringify({
+        host: hostname().replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 100) || 'unknown-host',
+        runtimes,
+        cliVersion: VERSION,
+      }),
+    })
+  } catch (error) {
+    throw new Error(`cannot reach ${baseUrl}: ${error.message}`)
+  }
+  if (connectRes.status === 404) return { fallback: true }
+  const body = await connectRes.json().catch(() => null)
+  if (!connectRes.ok || !body?.success) {
+    throw new Error(`${baseUrl}/api/v1/connect failed (${connectRes.status})`)
+  }
+  const { deviceCode, userCode, verificationUrl, expiresIn = 600, interval = 5 } = body.data ?? {}
+  write(`Open this link to connect this machine:\n  ${verificationUrl}${userCode ? ` (code ${userCode})` : ''}\n`)
+  // Best effort, and only where there is plausibly someone at a screen to
+  // hand a tab to — a scheduled or piped run gets the printed link instead.
+  // Only a web page on the instance itself: `open` runs whatever it is given,
+  // and a server (or anyone between it and an http:// --url) chooses this.
+  if (process.stderr.isTTY && sameWebOrigin(verificationUrl, baseUrl)) openBrowser(verificationUrl)
+  write('waiting for approval… ')
+  const deadline = Date.now() + expiresIn * 1000
+  let wait = interval
+  for (;;) {
+    if (Date.now() > deadline) { write('expired\n'); return { expired: true } }
+    await sleep(wait * 1000)
+    let pollRes
+    try {
+      pollRes = await fetch(`${baseUrl}/api/v1/connect/poll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceCode }),
+      })
+    } catch {
+      continue // a blip mid-poll is not the answer; keep waiting out the window
+    }
+    const poll = (await pollRes.json().catch(() => null))?.data
+    if (!poll) continue
+    if (poll.status === 'approved') {
+      write(`✓ approved by ${poll.user?.name || poll.user?.email || 'someone'}\n`)
+      return { keys: poll.keys ?? [], user: poll.user }
+    }
+    if (poll.status === 'denied') { write('denied\n'); return { denied: true } }
+    if (poll.status === 'expired') { write('expired\n'); return { expired: true } }
+    if (poll.slowDown) wait += 2
+  }
+}
+
+/** A cheap authenticated call, to tell a stale or revoked key from a good one before re-pairing over it. */
+const keyIsValid = async (baseUrl, key) => {
+  try {
+    const res = await fetch(`${baseUrl}/api/v1/people`, { headers: { Authorization: `Bearer ${key}` } })
+    return res.ok
+  } catch {
+    return false
+  }
 }
 
 const commands = {
@@ -3963,93 +4231,316 @@ const commands = {
       die(`--url ${url} is not an http(s) URL`)
     }
     if (INSTANCES?.error) die(`cairn: ${INSTANCES.error} — fix it before adding to it`, 2)
-    // Everything already in the file is kept — its routes above all, which a
-    // rebuilt object silently dropped.
-    const config = INSTANCES
-      ? { ...INSTANCES.raw, version: 1, instances: { ...INSTANCES.instances } }
-      : { version: 1, instances: {} }
-    const existing = config.instances[name]
-    if (existing && trimUrl(existing.url) !== url) {
-      die(`instance "${name}" already points at ${existing.url}; edit ~/.cairn/instances.json to change it on purpose`)
-    }
-    config.instances[name] = { url }
-    if (flags.default) config.unclassified = { mode: 'default', instance: name }
 
     // The one question setup has to put to a person: with a second instance,
     // what happens in a directory nobody has classified. Asked once, at a
     // terminal, only when --default did not already answer it, and before
     // anything is moved, so an abandoned prompt leaves nothing half done.
     const decided = flags.default || INSTANCES?.raw?.unclassified != null
-    if (!decided && Object.keys(config.instances).length > 1 && process.stdin.isTTY && process.stderr.isTTY) {
-      const policy = await askPolicy(config.instances)
-      if (policy) config.unclassified = policy
+    const willHaveSeveral = INSTANCES ? new Set([...Object.keys(INSTANCES.instances), name]).size > 1 : false
+    let unclassified
+    if (!decided && willHaveSeveral && process.stdin.isTTY && process.stderr.isTTY) {
+      const policy = await askPolicy({ ...(INSTANCES?.instances ?? {}), [name]: { url } })
+      if (policy) unclassified = policy
     }
 
-    const dir = join(CAIRN_DIR, 'instances', name)
-    const legacy = ['env', 'projects.json', 'ownership'].filter((f) => existsSync(join(CAIRN_DIR, f)))
-    const queued = existsSync(CAIRN_DIR) && readdirSync(CAIRN_DIR).some((f) =>
-      (f === 'outbox.jsonl' || f.startsWith(OUTBOX_PREFIX)) &&
-      f !== basename(OUTBOX_LOCK_PATH) && f !== basename(OUTBOX_REPLAY_LOCK_PATH))
-    const moved = []
-    if (flags.adopt && (legacy.length || queued)) {
-      // The files at the top of ~/.cairn belong to the server they were used
-      // with, found the way it always was: the environment, then ~/.cairn/env,
-      // then localhost. Moving them under a different one would hand one
-      // instance's keys, map and queued writes to another.
-      const legacyUrl = trimUrl(
-        process.env.CAIRN_BASE_URL || fileEnv(join(CAIRN_DIR, 'env')).CAIRN_BASE_URL || 'http://localhost:3000',
-      )
-      if (legacyUrl !== url) {
-        die(`this machine's existing setup points at ${legacyUrl}, not ${url}: ` +
-          '--adopt would move its keys to the wrong instance')
-      }
-      for (const file of legacy) {
-        if (existsSync(join(dir, file))) die(`~/.cairn/instances/${name}/${file} already exists; not overwriting it`)
-      }
+    let result
+    try {
+      result = await addInstance({ name, url, makeDefault: Boolean(flags.default), adopt: Boolean(flags.adopt), unclassified })
+    } catch (error) {
+      die(error.message)
     }
-    mkdirSync(dir, { recursive: true, mode: 0o700 })
-    if (flags.adopt) {
-      for (const file of legacy) {
-        renameSync(join(CAIRN_DIR, file), join(dir, file))
-        moved.push(file)
-      }
-      // Under the queue's own lock, so a write being queued right now lands
-      // either before the move or in the next process's instance directory.
-      // Appended rather than renamed onto a file already there: an adoption
-      // interrupted halfway is finished by running it again, and a rename
-      // would replace the queued writes it had already moved.
-      await withOutboxLock(() => {
-        for (const file of readdirSync(CAIRN_DIR)) {
-          if (file !== 'outbox.jsonl' && !file.startsWith(OUTBOX_PREFIX)) continue
-          if (file === basename(OUTBOX_LOCK_PATH) || file === basename(OUTBOX_REPLAY_LOCK_PATH)) continue
-          const from = join(CAIRN_DIR, file)
-          const to = join(dir, file)
-          if (existsSync(to)) {
-            appendFileSync(to, readFileSync(from), { mode: 0o600 })
-            unlinkSync(from)
-          } else renameSync(from, to)
-          moved.push(file)
-        }
-      })
-    }
-    writeInstancesConfig(config)
-
-    const notes = []
-    if (moved.length) notes.push(`moved ${moved.join(', ')} into ~/.cairn/instances/${name}/`)
-    else if (legacy.includes('env') && !INSTANCES && !flags.adopt) {
-      notes.push('~/.cairn/env is no longer read now that instances are configured; ' +
-        'its keys belong in the instance they were issued by (or re-run with --adopt)')
-    }
-    if (!existsSync(join(dir, 'env'))) {
-      notes.push(`put this instance's keys in ~/.cairn/instances/${name}/env (CAIRN_API_KEY_<RUNTIME>=..., mode 600)`)
-    }
-    if ((config.unclassified?.mode ?? 'ask') === 'ask') {
-      notes.push('in a directory with no route, commands stop and ask (exit 10); ' +
-        '`cairn instance policy default <name>` uses one instead')
-    }
-    return emit({ instance: name, url, default: flags.default ? 'yes' : undefined, notes }, {
+    return emit({ instance: name, url, default: flags.default ? 'yes' : undefined, notes: result.notes }, {
       lines: (d) => [`instance ${d.instance} -> ${d.url}${d.default ? ' (default)' : ''}`, ...d.notes.map((n) => `  ${n}`)],
     })
+  },
+
+  /**
+   * One command that connects this machine to a Cairn instance and installs
+   * everything the four scripts and the README's hand-copying used to do
+   * separately: keys, the CLI itself, the skill, the hooks, and the
+   * maintenance jobs. Idempotent — re-running it is the upgrade path, keeping
+   * keys and replacing files only where they differ. `--dry-run` prints the
+   * plan and writes nothing; every step below checks it before touching disk
+   * or the network (bar a handful of read-only GETs that a plan is honest to
+   * make: the health check, and confirming an existing key still works).
+   */
+  async setup() {
+    const dry = Boolean(flags['dry-run'])
+    // Read regardless of branch, so a caller who passes it in a context where
+    // it does not end up mattering (single-instance; nothing missing to pair)
+    // is not told it was ignored.
+    const yes = Boolean(flags.yes) || !process.stdin.isTTY
+    void yes // reserved: no prompt in this flow needs silencing yet
+    const explicitName = typeof flags.name === 'string' ? flags.name.trim() : undefined
+    const say = (s) => process.stdout.write(s)
+    const line = (s) => say(`${s}\n`)
+
+    const assertHttpUrl = (u) => {
+      try {
+        if (!['http:', 'https:'].includes(new URL(u).protocol)) throw new Error()
+      } catch {
+        die(`--url ${u} is not an http(s) URL`)
+      }
+    }
+
+    // --- 1. which instance, and where its keys live -------------------------
+    const topEnvPath = join(CAIRN_DIR, 'env')
+    const hasInstances = existsSync(INSTANCES_PATH)
+    const topEnv = fileEnv(topEnvPath)
+    const requestedUrl = flags.url ? trimUrl(String(flags.url)) : null
+    if (requestedUrl) assertHttpUrl(requestedUrl)
+    const existingTopUrl = topEnv.CAIRN_BASE_URL ? trimUrl(topEnv.CAIRN_BASE_URL) : null
+    const multiInstance = hasInstances || (existingTopUrl != null && requestedUrl != null && existingTopUrl !== requestedUrl)
+
+    let instanceName = null
+    let url
+    let envPath
+
+    if (!multiInstance) {
+      url = requestedUrl || existingTopUrl
+      if (!url) die('cairn setup needs --url <the Cairn instance to connect this machine to>, the first time it runs')
+      envPath = topEnvPath
+      if (existingTopUrl === url) {
+        line(`– instance  ${url} (already configured)`)
+      } else if (dry) {
+        line(`! instance  would write CAIRN_BASE_URL=${url} to ~/.cairn/env`)
+      } else {
+        setEnvKeys(topEnvPath, { CAIRN_BASE_URL: url })
+        line(`✓ instance  ${url} -> ~/.cairn/env`)
+      }
+    } else {
+      if (hasInstances && INSTANCES?.error) die(`cairn: ${INSTANCES.error}`, 2)
+      const already = requestedUrl && INSTANCES
+        ? Object.entries(INSTANCES.instances).find(([, i]) => trimUrl(i.url) === requestedUrl)
+        : null
+      if (already) {
+        ;[instanceName] = already
+        url = trimUrl(already[1].url)
+        line(`– instance  ${instanceName} -> ${url} (already registered)`)
+      } else {
+        url = requestedUrl
+        if (!url) die('cairn setup needs --url <the Cairn instance to connect this machine to> (this machine already has others)')
+        if (explicitName && !INSTANCE_NAME.test(explicitName)) {
+          die(`"${explicitName}" is not an instance name: lowercase letters, digits and dashes, up to 32`)
+        }
+        instanceName = explicitName || deriveInstanceName(url)
+        if (dry) {
+          line(`! instance  would register ${instanceName} -> ${url}`)
+        } else {
+          let result
+          try {
+            result = await addInstance({ name: instanceName, url })
+          } catch (error) {
+            die(error.message)
+          }
+          line(`✓ instance  ${instanceName} -> ${url}`)
+          for (const note of result.notes) line(`   ${note}`)
+        }
+      }
+      envPath = join(instanceDir(instanceName), 'env')
+    }
+
+    // --- 2. server check ------------------------------------------------------
+    let serverInfo = null
+    try {
+      const res = await fetch(`${url}/api/v1/health`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      serverInfo = (await res.json())?.data ?? {}
+      line(`✓ server    ${url} (${serverInfo.version ?? '?'}${serverInfo.build && serverInfo.build !== 'unknown' ? ` ${serverInfo.build}` : ''})`)
+    } catch (error) {
+      die(`cairn setup: cannot reach ${url}/api/v1/health (${error.message})`)
+    }
+
+    // --- 3. runtimes, and which of them already have a working key ----------
+    const runtimes = flags.runtimes
+      ? String(flags.runtimes).split(',').map((r) => r.trim()).filter(Boolean)
+      : detectSetupRuntimes()
+    if (flags.maintenance && !runtimes.includes('maintenance')) runtimes.push('maintenance')
+    if (!runtimes.length) {
+      die('cairn setup found no runtime on this machine (looked for ~/.claude, ~/.codex, openclaw) — pass --runtimes a,b')
+    }
+
+    const existingEnv = fileEnv(envPath)
+    const kept = []
+    const missingRuntimes = []
+    for (const runtime of runtimes) {
+      const key = existingEnv[keyNameFor(runtime)]
+      if (key && (await keyIsValid(url, key))) kept.push(runtime)
+      else missingRuntimes.push(runtime)
+    }
+    if (kept.length) line(`– keys      ${kept.join(', ')} already set, and still work`)
+
+    // --- 4. pair for whatever is missing --------------------------------------
+    let issuedKeys = []
+    if (missingRuntimes.length && dry) {
+      line(`! keys      ${missingRuntimes.join(', ')} would be paired (--dry-run: skipped)`)
+    } else if (missingRuntimes.length) {
+      // A maintenance key needs an administrator's approval (it releases anyone's
+      // claims), so it is asked for on its own: a member approving their own
+      // agents must not have that request fail for the sake of one they cannot
+      // grant.
+      const privileged = missingRuntimes.filter((runtime) => runtime === 'maintenance')
+      const ordinary = missingRuntimes.filter((runtime) => runtime !== 'maintenance')
+      for (const group of [ordinary, privileged]) {
+        if (!group.length) continue
+        if (group === privileged) line('  the maintenance key needs an administrator to approve it')
+        let result
+        try {
+          result = await pairDevice({ baseUrl: url, runtimes: group, write: say })
+        } catch (error) {
+          die(`cairn setup: ${error.message}`)
+        }
+        if (result.fallback) {
+          line('! keys      this server predates pairing (404 on /api/v1/connect);')
+          line(`            ask an admin for keys on ${url}/users and put them in ${tilde(envPath)} as:`)
+          for (const runtime of missingRuntimes) line(`              ${keyNameFor(runtime)}=…`)
+          break
+        }
+        if (group === privileged && (result.denied || result.expired)) {
+          line('! keys      maintenance not issued — it takes an administrator\'s approval')
+          continue
+        }
+        if (result.denied) die('cairn setup: pairing was denied')
+        if (result.expired) die('cairn setup: pairing expired before it was approved; run `cairn setup` again')
+        issuedKeys = [...issuedKeys, ...(result.keys ?? [])]
+      }
+    }
+    if (issuedKeys.length) {
+      const updates = {}
+      for (const { agentName, key } of issuedKeys) updates[keyNameFor(agentName)] = key
+      setEnvKeys(envPath, updates)
+      line(`✓ keys      ${issuedKeys.map((k) => k.agentName).join(', ')} -> ${tilde(envPath)}`)
+    }
+
+    // --- 5. release files ------------------------------------------------------
+    const localSource = process.env.CAIRN_SETUP_SOURCE
+    const releaseDir = localSource || join(CAIRN_DIR, 'releases', VERSION)
+    const releaseParts = ['scripts', 'hooks', 'skills', 'cli']
+    const haveRelease = releaseParts.every((p) => existsSync(join(releaseDir, p)))
+    if (localSource) {
+      if (!haveRelease) die(`CAIRN_SETUP_SOURCE=${localSource} is missing one of ${releaseParts.join(', ')}`)
+      line(`– source    ${localSource} (CAIRN_SETUP_SOURCE)`)
+    } else if (haveRelease) {
+      line(`– release   v${VERSION} already downloaded (~/.cairn/releases/${VERSION})`)
+    } else if (dry) {
+      line(`! release   would download v${VERSION} from GitHub`)
+    } else {
+      const tarUrl = `https://codeload.github.com/montytorr/cairn/tar.gz/refs/tags/v${VERSION}`
+      let res
+      try {
+        res = await fetch(tarUrl)
+      } catch (error) {
+        die(`cairn setup: could not download ${tarUrl} (${error.message})`)
+      }
+      if (!res.ok) die(`cairn setup: could not download ${tarUrl} (${res.status}) — is v${VERSION} released yet?`)
+      mkdirSync(releaseDir, { recursive: true })
+      const buf = Buffer.from(await res.arrayBuffer())
+      const members = releaseParts.flatMap((p) => [`*/${p}`])
+      let extract = spawnSync('tar', ['-xzf', '-', '--strip-components=1', '-C', releaseDir, ...members], { input: buf, stdio: ['pipe', 'pipe', 'pipe'] })
+      if (extract.status !== 0) {
+        // An older tar, or one that does not glob member names by default:
+        // take the whole tree rather than fail setup over five directories
+        // nobody minds having on disk.
+        extract = spawnSync('tar', ['-xzf', '-', '--strip-components=1', '-C', releaseDir], { input: buf, stdio: ['pipe', 'pipe', 'pipe'] })
+      }
+      if (extract.status !== 0) {
+        die(`cairn setup: tar could not extract the release (${extract.stderr?.toString().trim() || extract.status})`)
+      }
+      if (!releaseParts.every((p) => existsSync(join(releaseDir, p)))) {
+        die(`cairn setup: v${VERSION}'s release archive is missing one of ${releaseParts.join(', ')}`)
+      }
+      line(`✓ release   v${VERSION} -> ~/.cairn/releases/${VERSION}`)
+    }
+
+    // A dry run that has never downloaded a release yet has nothing on disk to
+    // read the rest of the plan from — say so once, plainly, rather than a
+    // false "unchanged" for files that were never compared.
+    const releaseReady = existsSync(join(releaseDir, 'cli', 'cairn.mjs'))
+    if (!releaseReady) {
+      line('! plan      cli, skill, hooks, jobs skipped — no release on disk yet to plan from;')
+      line('   run once without --dry-run, or set CAIRN_SETUP_SOURCE to a checkout')
+    } else {
+      // --- 6. the CLI itself -----------------------------------------------------
+      const cliTarget = join(HOME, '.local', 'bin', 'cairn')
+      const releaseCli = readFileSync(join(releaseDir, 'cli', 'cairn.mjs'))
+      const cliChanged = !existsSync(cliTarget) || !readFileSync(cliTarget).equals(releaseCli)
+      if (!cliChanged) {
+        line(`– cli       ${tilde(cliTarget)} (${VERSION}) — unchanged`)
+      } else if (dry) {
+        line(`! cli       would write ${tilde(cliTarget)} (${VERSION})`)
+      } else {
+        mkdirSync(dirname(cliTarget), { recursive: true })
+        writeFileSync(cliTarget, releaseCli, { mode: 0o755 })
+        line(`✓ cli       ${tilde(cliTarget)} (${VERSION})`)
+      }
+      if (!onSetupPath('cairn')) {
+        line('! path      ~/.local/bin is not on PATH — add: export PATH="$HOME/.local/bin:$PATH"')
+      }
+
+      // --- 7. skill ----------------------------------------------------------------
+      if (flags['no-skill']) {
+        line('– skill     skipped (--no-skill)')
+      } else {
+        const skillSource = join(releaseDir, 'skills', 'cairn', 'SKILL.md')
+        const skillSourceBuf = existsSync(skillSource) ? readFileSync(skillSource) : null
+        const skillTargets = []
+        if (runtimes.includes('claude-code')) skillTargets.push(join(HOME, '.claude', 'skills', 'cairn', 'SKILL.md'))
+        if (runtimes.includes('codex')) skillTargets.push(join(HOME, '.codex', 'skills', 'cairn', 'SKILL.md'))
+        if (runtimes.includes('openclaw')) {
+          const clawdHome = process.env.CLAWD_HOME?.trim()
+          if (clawdHome) skillTargets.push(join(clawdHome, 'skills', 'cairn', 'SKILL.md'))
+          else line('! skill     openclaw: $CLAWD_HOME is not set — copy skills/cairn to its skills directory by hand')
+        }
+        if (!skillSourceBuf && skillTargets.length) {
+          line(`! skill     ${skillSource} not found in the release — skipped`)
+        } else if (dry) {
+          const changed = skillTargets.filter((t) => !(existsSync(t) && readFileSync(t).equals(skillSourceBuf)))
+          if (changed.length) line(`! skill     would write ${changed.map((t) => tilde(dirname(t))).join(', ')}`)
+          else if (skillTargets.length) line(`– skill     ${skillTargets.map((t) => tilde(dirname(t))).join(', ')} — unchanged`)
+        } else {
+          const written = []
+          for (const target of skillTargets) {
+            if (existsSync(target) && readFileSync(target).equals(skillSourceBuf)) continue
+            mkdirSync(dirname(target), { recursive: true })
+            writeFileSync(target, skillSourceBuf)
+            written.push(tilde(dirname(target)))
+          }
+          if (written.length) line(`✓ skill     ${written.join(', ')}`)
+          else if (skillTargets.length) line(`– skill     ${skillTargets.map((t) => tilde(dirname(t))).join(', ')} — unchanged`)
+        }
+      }
+
+      // --- 8. hooks ------------------------------------------------------------------
+      if (flags['no-hooks']) {
+        line('– hooks     skipped (--no-hooks)')
+      } else {
+        const result = spawnSync(process.execPath, [join(releaseDir, 'scripts', 'install-hooks.mjs'), ...(dry ? ['--dry-run'] : [])], { encoding: 'utf8' })
+        line(`${dry ? '!' : '✓'} hooks     ${dry ? 'would install:' : 'installed:'}`)
+        for (const l of `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n')) if (l.trim()) line(`   ${l}`)
+      }
+
+      // --- 9. maintenance jobs ---------------------------------------------------------
+      if (flags['no-jobs']) {
+        line('– jobs      skipped (--no-jobs)')
+      } else {
+        const jobs = ['agent-files', ...(flags.maintenance ? ['reconcile', 'vitals'] : [])]
+        const result = spawnSync(
+          process.execPath,
+          [join(releaseDir, 'scripts', 'install-cron.mjs'), ...(dry ? [] : ['--install']), '--only', jobs.join(',')],
+          { encoding: 'utf8' },
+        )
+        line(`${dry ? '!' : '✓'} jobs      ${jobs.join(', ')}${dry ? ' (plan):' : ':'}`)
+        for (const l of `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n')) if (l.trim()) line(`   ${l}`)
+      }
+    }
+
+    // --- 10. verify ------------------------------------------------------------------
+    const match = !serverInfo?.version || serverInfo.version === VERSION
+    line(
+      `${match ? '✓' : '!'} cairn ${VERSION} ${match ? '↔' : '≠'} server ${serverInfo?.version ?? '?'}` +
+        ' — restart your agent sessions to load the hooks',
+    )
   },
 
   async map() {
