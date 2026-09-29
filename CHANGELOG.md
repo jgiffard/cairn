@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-09-29
+
 ### Added
 
 - **`cairn setup` connects a machine in one command** (CAIRN-314). It replaces four scripts
@@ -1422,7 +1424,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/montytorr/cairn/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/montytorr/cairn/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/montytorr/cairn/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/montytorr/cairn/compare/v0.8.1...v0.9.0
