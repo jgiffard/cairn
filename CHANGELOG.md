@@ -16,6 +16,22 @@ out under **Breaking** with what to do about it.
   older commit then deployed last: v0.12.0's release commit was replaced by the merge before
   it. A gate job now deploys a commit only if it is still the tip of `main`. A superseded one
   stands down, since the newer commit's own run deploys it.
+- **Codex closed its session on the first turn** (CAIRN-319). Its `Stop` hook ran the
+  recorder as a session end, so every turn ended the session, which cannot be reopened, and
+  checkpointed every held task. `Stop` now writes a live checkpoint and Codex's `SessionEnd`
+  closes the session. Re-run `node scripts/install-hooks.mjs` (or `cairn setup`) and trust
+  the new `SessionEnd` entry in `~/.codex/config.toml`.
+- **`cairn context` hid the session in progress** (CAIRN-320). It picked the last session by
+  end time, so an open one only showed when nothing here had ever finished. It now picks the
+  latest by activity, and the briefing says when that session is still open.
+- **Session prose skipped the secret check** (CAIRN-322). `request`, `learned`,
+  `completed` and `next steps` are written by a model from raw transcripts. Secret-shaped
+  strings in them are now redacted to `[redacted <rule>]` rather than refused, since a
+  refusal would lose the background recorder's whole record. The response lists each one.
+- **A manual `cairn session end` from Codex or OpenClaw wrote a second row** (CAIRN-321).
+  Without `--platform` it was filed as `claude`; the platform now comes from the runtime.
+  The summariser check also reads through OpenClaw's conversation wrapper, and the vitals
+  leave out any tool's summariser runs, not only Cairn's.
 
 ## [0.12.0] — 2026-09-29
 

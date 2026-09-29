@@ -49,10 +49,10 @@ describe('cairn session checkpoint CLI', () => {
  * the server can match it when the map has no entry.
  */
 /** Without the markers of whatever runtime is running these tests. */
-const runtimeFree = (env: NodeJS.ProcessEnv) =>
+const runtimeFree = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
   Object.fromEntries(
     Object.entries(env).filter(([name]) => !/^(CLAUDECODE|CLAUDE_CODE_|CODEX_|OPENCLAW_|CAIRN_AGENT|CAIRN_PLATFORM)/.test(name)),
-  )
+  ) as NodeJS.ProcessEnv
 
 describe('cairn session end project attribution', () => {
   const capture = async (setup: (home: string, repo: string) => string[], env: Record<string, string> = {}) => {

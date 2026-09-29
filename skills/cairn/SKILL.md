@@ -206,9 +206,7 @@ cairn release ACME-42    # handing it back: a held doing task returns to todo
   of life) only if it has no checkpoint. Your own checkpoint is the handoff.
 
 Sessions are created by the runtime; there is no `session create`. For a manual handoff
-with a real session id, `cairn session end --id <id>` — never fabricate one. The platform
-is taken from the runtime you are in; pass `--platform claude|codex|openclaw` only when
-that detection is wrong.
+with a real session id, `cairn session end --id <id>` — never fabricate one.
 
 ## Dependencies, parents, duplicates
 
