@@ -665,7 +665,7 @@ waiting for approval… ✓ approved by Julien
 ✓ skill     ~/.claude/skills/cairn, ~/.codex/skills/cairn
 ✓ hooks     installed:
      claude: SessionStart, SessionEnd, PreCompact
-     codex: SessionStart, Stop
+     codex: SessionStart, Stop (live checkpoint), SessionEnd
      …
 ✓ jobs      agent-files:
      …
@@ -790,13 +790,14 @@ its own and touches nobody else's. Coverage differs by runtime:
 | Runtime | Session start | Session recorded |
 |---|---|---|
 | Claude Code | `SessionStart` | `SessionEnd` **and** `PreCompact` |
-| Codex | `SessionStart` | `Stop` — there is no `SessionEnd` |
+| Codex | `SessionStart` | `SessionEnd`, with a live checkpoint on every `Stop` that never ends the session or touches held tasks |
 | Hermes Agent by Nous Research | `pre_llm_call` on the first turn only | — session recording is deliberately not installed |
 | OpenClaw | `agent:bootstrap`, via the `cairn-briefing` hook package the installer links with `openclaw hooks install --link` (restart the gateway after) | swept from disk on a schedule — it has no session event of any kind |
 
 On Codex the installer also lists every hook in `hooks.json` that is not Cairn's, and marks
-the ones on `Stop`: Codex has no `SessionEnd`, so a session-end script written for Claude
-Code runs after **every turn** there, and one that makes a model call bills once per turn.
+the ones on `Stop`: `Stop` fires after **every turn**, so a session-end script written for
+Claude Code and wired there by another tool runs once per turn, and one that makes a model
+call bills once per turn.
 It only says so. Removing another tool's hook is that tool's decision.
 
 On OpenClaw the installer copies `hooks/openclaw/cairn-briefing` to
@@ -847,8 +848,8 @@ CAIRN_SUMMARY_MIN_INTERVAL_MS=600000                # see below
 
 **How often that call happens.** Not once per session, because not every runtime has a
 session-end event to hang it on. Claude Code records at `SessionEnd` *and* `PreCompact`,
-and Codex has no `SessionEnd` at all so it records on `Stop` — the end of every assistant
-turn. Left alone that is one model call per turn.
+and Codex writes a live checkpoint on `Stop` — the end of every assistant turn — so a
+session left open still shows what it did. Left alone that is one model call per turn.
 
 So the hook reuses the last summary it wrote for a session when the digest is byte-for-byte
 what it already summarised, or when the previous call was under

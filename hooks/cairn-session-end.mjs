@@ -55,6 +55,15 @@ if (SUMMARISER_FLAGS.some((name) => process.env[name] === '1')) process.exit(0)
 
 const DRY_RUN = process.argv.includes('--dry-run')
 
+/**
+ * `--ongoing`: the session is still open, so write it as a live checkpoint —
+ * no end time, and held tasks left alone. Codex's Stop fires after every turn,
+ * and running the recorder there as a session END closed the session on its
+ * first turn (a closed session cannot be reopened) and stamped a checkpoint on
+ * every held task each time the agent handed back (CAIRN-319).
+ */
+const ONGOING = process.argv.includes('--ongoing')
+
 const arg = (name) => {
   const index = process.argv.indexOf(name)
   return index === -1 ? null : process.argv[index + 1]
@@ -639,8 +648,10 @@ in the transcript below.`
  * The summariser is the only part of this that costs money, and Codex calls it
  * on every turn.
  *
- * Codex has no SessionEnd, so `install-hooks.mjs` wires the recorder to Stop,
- * which fires at the end of each assistant turn. `record()` then summarised
+ * Codex had no SessionEnd, so `install-hooks.mjs` wired the recorder to Stop,
+ * which fires at the end of each assistant turn — and still does, as a live
+ * checkpoint (`--ongoing`), beside the SessionEnd that now closes the session
+ * (CAIRN-319). `record()` then summarised
  * unconditionally: a forty-turn session made forty model calls, each with up
  * to 24 KB of transcript, to write and rewrite one row. The row was always
  * right -- `cairn session end` upserts on (platform, id) -- but the calls
@@ -1039,6 +1050,8 @@ const record = async (payload, opts = {}) => {
       cwd: cwd ?? null,
       platform,
       agent: agent ?? null,
+      // A retry must not end a session that is still open.
+      ongoing: Boolean(opts.ongoing),
       firstAt: e?.firstAt ?? Date.now(),
       lastAt: Date.now(),
       // Only retries count against the limit: Codex fails once per turn
@@ -1056,7 +1069,7 @@ const record = async (payload, opts = {}) => {
 
   const args = [
     'session',
-    'end',
+    opts.ongoing ? 'checkpoint' : 'end',
     '--id',
     sessionId,
     '--platform',
@@ -1114,7 +1127,7 @@ const retryUnsummarised = async (currentId) => {
   for (const [id, e] of dueRetries(queue, now, currentId)) {
     const result = await record(
       { transcript_path: e.path, session_id: id, cwd: e.cwd ?? undefined },
-      { platform: e.platform, agent: e.agent ?? undefined, retry: true },
+      { platform: e.platform, agent: e.agent ?? undefined, retry: true, ongoing: Boolean(e.ongoing) },
     ).catch(() => null)
     // Still down: stop paying for timeouts, the next run will try again.
     if (result?.failed) break
@@ -1201,7 +1214,7 @@ const main = async () => {
   const dryIndex = process.argv.indexOf('--dry-run')
   if (DRY_RUN) return record({ transcript_path: process.argv[dryIndex + 1] })
 
-  const result = await record(await readStdin())
+  const result = await record(await readStdin(), { ongoing: ONGOING })
   if (!result?.failed) await retryUnsummarised(result?.sessionId ?? null)
 }
 

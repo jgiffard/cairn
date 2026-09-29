@@ -43,10 +43,10 @@ export const GET = route({
 })
 
 /**
- * Idempotent on (platform, externalId). Codex has no session-end event so its
- * writer runs on Stop, which fires every turn; OpenClaw's runs from a
- * reconciler that may sweep a session a hook already recorded. Both must be
- * able to post repeatedly without producing a second row.
+ * Idempotent on (platform, externalId). Codex writes a live checkpoint on Stop,
+ * which fires every turn; OpenClaw's runs from a reconciler that may sweep a
+ * session a hook already recorded. Both must be able to post repeatedly
+ * without producing a second row.
  */
 export const POST = route({
   schema: sessionUpsert,

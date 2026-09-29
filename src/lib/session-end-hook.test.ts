@@ -44,14 +44,14 @@ const transcript = (name: string, rows: unknown[]) => {
   return path
 }
 
-const run = (payload: unknown, env: Record<string, string> = {}) =>
+const run = (payload: unknown, env: Record<string, string> = {}, args: string[] = []) =>
   new Promise<number | null>((done) => {
     const childEnv: NodeJS.ProcessEnv = {
       PATH: process.env.PATH ?? '', HOME: dir, OUT: dir,
       CAIRN_CLI: join(dir, 'cairn'), CAIRN_SUMMARY_CLI: join(dir, 'claude'),
       CAIRN_SUMMARY_MIN_INTERVAL_MS: '0', ...env,
     } as unknown as NodeJS.ProcessEnv
-    const child = spawn('node', [HOOK], { env: childEnv, stdio: ['pipe', 'ignore', 'ignore'] })
+    const child = spawn('node', [HOOK, ...args], { env: childEnv, stdio: ['pipe', 'ignore', 'ignore'] })
     child.on('close', done)
     child.stdin.end(JSON.stringify(payload))
   })
@@ -171,6 +171,26 @@ describe('the session-end hook', () => {
     expect(retry).toContain('--no-checkpoint')
     expect(argValue(retry, '--learned')).toBe('The cookie was lax')
     expect(JSON.parse(readFileSync(join(dir, '.cairn', 'unsummarised.json'), 'utf8'))).toEqual({})
+  })
+
+  /**
+   * CAIRN-319: Codex's Stop fires every turn. Recorded as a session end, it
+   * closed the session on its first turn and checkpointed every held task each
+   * time the agent handed back.
+   */
+  it('writes a live checkpoint with --ongoing, and its retry stays live', async () => {
+    const path = transcript('live', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    await run({ transcript_path: path, session_id: 'live', cwd: '/work/demo' }, { FAKE_MODE: 'fail' }, ['--ongoing'])
+    expect(lines('cli.jsonl')[0]?.slice(0, 3)).toEqual(['session', 'checkpoint', '--id'])
+
+    const next = transcript('ended', [user('Tidy the README'), edit('/work/demo/README.md')])
+    await run({ transcript_path: next, session_id: 'ended', cwd: '/work/demo' }, { CAIRN_SUMMARY_RETRY_SPACING_MS: '0' })
+    const calls = lines('cli.jsonl')
+    expect(calls.map((a) => [a[1], argValue(a, '--id')])).toEqual([
+      ['checkpoint', 'live'],
+      ['end', 'ended'],
+      ['checkpoint', 'live'],
+    ])
   })
 
   it('does not retry while the summariser is still failing', async () => {

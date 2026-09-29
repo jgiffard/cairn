@@ -18,9 +18,9 @@ import { redactSecrets, type SecretHit } from '@/lib/secrets'
  * fields, and a session with none of them is still worth the row.
  *
  * Idempotent on (platform_source, external_id) because that is a correctness
- * requirement, not a nicety: Codex has no session-end event so its writer runs
- * on Stop, which fires once per turn, and OpenClaw's runs from a reconciler
- * that may sweep a session the hook already recorded.
+ * requirement, not a nicety: Codex checkpoints the live session on Stop, which
+ * fires once per turn, and OpenClaw's runs from a reconciler that may sweep a
+ * session the hook already recorded.
  */
 
 const COLUMNS =

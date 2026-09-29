@@ -1164,8 +1164,8 @@ export const openapiSpec = () => ({
           'held tasks are not checkpointed, and a closed session cannot be reopened (409). ' +
           'Omit `ongoing` for the existing session-end behavior. Idempotent on ' +
           '(platformSource, externalId), which is a correctness requirement rather than a ' +
-          'nicety: Codex has no session-end event so its writer runs on Stop, which fires ' +
-          'every turn. `checkpointHeld` also checkpoints what this session holds: tasks it ' +
+          'nicety: Codex checkpoints the live session on Stop, which fires every turn. ' +
+          '`checkpointHeld` also checkpoints what this session holds: tasks it ' +
           'worked get the summary, tasks it only held get a "still held" line where they ' +
           'have no checkpoint at all. It never replaces a written checkpoint on a claim it ' +
           'cannot prove is its own, never touches another session\'s claim, and does not ' +
