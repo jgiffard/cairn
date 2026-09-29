@@ -5,6 +5,7 @@ import { InlineInput } from '@/components/ui/control'
 import { useEffect, useRef, useState } from 'react'
 import { LabelPill } from '@/components/icons'
 import { EmptyState } from '@/components/empty-state'
+import { cn } from '@/lib/utils'
 
 /**
  * Labels are a set, so a `<select>` cannot express them — this is the one
@@ -18,11 +19,19 @@ export const LabelEditor = ({
   labels,
   known,
   onChange,
+  alwaysVisible = false,
 }: {
   taskRef: string
   labels: string[]
   known: string[]
   onChange: (next: string[]) => void
+  /**
+   * A list row reveals the add control on hover, since a page of rows
+   * showing "+" on every empty one is louder than the list itself. A
+   * sidebar has exactly one Labels row and no hover cue to teach, so it
+   * keeps a standing "Add label" affordance instead of a blank gap.
+   */
+  alwaysVisible?: boolean
 }) => {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -77,13 +86,18 @@ export const LabelEditor = ({
         }}
         aria-label={`Labels on ${taskRef}`}
         aria-expanded={open}
-        className={`text-fg-subtle hover:text-fg grid size-[1.125rem] place-items-center rounded hover:bg-[color-mix(in_oklab,var(--fg)_7%,transparent)] transition-[opacity,color,background-color] duration-[var(--dur-2)] ease-[var(--ease-out)] ${
-          labels.length === 0 && !open
+        className={cn(
+          'text-fg-subtle hover:text-fg rounded transition-[opacity,color,background-color] duration-[var(--dur-2)] ease-[var(--ease-out)]',
+          'hover:bg-[color-mix(in_oklab,var(--fg)_7%,transparent)]',
+          labels.length === 0 && alwaysVisible
+            ? 'inline-flex h-[1.125rem] items-center gap-1 px-1 text-[0.75rem]'
+            : 'grid size-[1.125rem] place-items-center',
+          !alwaysVisible && labels.length === 0 && !open
             ? 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
-            : 'opacity-100'
-        }`}
+            : 'opacity-100',
+        )}
       >
-        <svg width="10" height="10" viewBox="0 0 11 11" aria-hidden>
+        <svg width="10" height="10" viewBox="0 0 11 11" aria-hidden className="shrink-0">
           <path
             d="M5.5 1.5v8M1.5 5.5h8"
             stroke="currentColor"
@@ -91,12 +105,18 @@ export const LabelEditor = ({
             strokeLinecap="round"
           />
         </svg>
+        {labels.length === 0 && alwaysVisible ? 'Add label' : null}
       </button>
 
       {open && (
         <div
-          className="border-border bg-surface pop absolute top-[1.5rem] right-0 z-50 w-[11.875rem] overflow-hidden rounded-lg border py-1 raised"
-          style={{ '--origin': 'top right' } as React.CSSProperties}
+          // In the sidebar the trigger sits at the start of a narrow column that
+          // clips sideways, so the menu opens rightwards into it, not out of it.
+          className={cn(
+            'border-border bg-surface pop absolute top-[1.5rem] z-50 overflow-hidden rounded-lg border py-1 raised',
+            alwaysVisible ? 'left-0 w-[10.5rem]' : 'right-0 w-[11.875rem]',
+          )}
+          style={{ '--origin': alwaysVisible ? 'top left' : 'top right' } as React.CSSProperties}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="max-h-[11.875rem] overflow-y-auto">

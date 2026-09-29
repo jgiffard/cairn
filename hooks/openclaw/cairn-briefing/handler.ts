@@ -36,6 +36,7 @@ export const FILE_NAME = 'CAIRN.md'
 export const RULE = `## Cairn — live briefing
 Durable work (a fix, config change, deploy, migration, investigation, delegation): \`cairn check "<subject>"\` first, and \`show\` the hits that matter.
 - Own it: \`cairn add "<title>" --project <KEY> --type <type> --body -\` (claims by default for agents; assigned to your human unless \`--assignee <who>\`) or \`cairn claim <ref>\`. Exit 9 = another agent holds it: pick other work.
+- Bodies are markdown: \`##\` headings, lists, paths and calls in backticks; a wall of text is refused.
 - Record: \`cairn note <ref> "…" --kind attempt|finding|decision|handoff\`. Dead ends are \`attempt\`.
 - \`cairn checkpoint <ref> --summary "state + next step"\` before yielding. Written but not landed: \`cairn update <ref> --status in-review\`.
 - Close: \`cairn done <ref> --resolution "…" --kind fixed|verified|answered|wont-fix|duplicate|superseded\` (\`verified\` when the fix was already there).

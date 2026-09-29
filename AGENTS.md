@@ -26,7 +26,7 @@ the same query and warns before you file a near-duplicate. Write the body as mar
 
 ```bash
 cairn check "flaky auth redirect"     # 1. index of ids + one-liners. Cheap.
-cairn show ACME-42                     # 2. full body of the ones that matter.
+cairn show ACME-42                     # 2. digest of the ones that matter (--full: all).
 cairn note ACME-42 "..."               # 3. act, and record what you did.
 ```
 
@@ -66,7 +66,7 @@ fix was already there and you checked.
 ## 5. Claiming work, so three agents don't collide
 
 ```bash
-cairn claim ACME-42        # exits non-zero if another agent holds it
+cairn claim ACME-42        # exit 9 if another agent holds it
 cairn beat ACME-42         # keep the claim alive during long work
 cairn checkpoint ACME-42 --summary "migration written, tests not yet run"
 cairn release ACME-42      # or: cairn done ACME-42 --resolution "..."
@@ -126,11 +126,11 @@ rather than adding a second, contradictory claim. Secrets are refused on every w
 the session worked on, but never over a checkpoint you wrote on a claim it cannot prove is
 its own — your own checkpoint is the handoff that counts.
 
-**The briefing** is `cairn context` — what you hold, what is in flight around you, where
-the last session in this directory stopped, what is known here. A hook runs it at session
+**The briefing** is `cairn context` — what you hold, what is in flight, your human's work
+nobody is on, where the last session here stopped, what is known here. A hook runs it at session
 start. `cairn next` says what to pick up and why — your human's work first; another
-person's says whose. `cairn map <KEY>` tells Cairn which
-project a checkout is — once per repository; clones and worktrees follow.
+person's says whose. `cairn map <KEY>` tells Cairn which project a checkout is — once per
+repository; clones and worktrees follow.
 
 ## 8. Before you stop
 

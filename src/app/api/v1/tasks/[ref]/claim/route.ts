@@ -3,6 +3,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 import { takeTask } from '@/lib/api/claim'
+import { withAssignee } from '@/lib/api/people'
 import { CLAIM_LEASE_SECONDS } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -58,6 +59,6 @@ export const POST = route<{ ref: string }, z.infer<typeof claimBody>>({
       )
     }
 
-    return ok(row)
+    return ok(await withAssignee(row))
   },
 })

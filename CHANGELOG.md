@@ -9,6 +9,47 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The home list drew every assignee as "?"** (CAIRN-313). `listAllTasks` returned the
+  assignee's id but never the person, so the cross-project list at `/` had nobody to name;
+  the project lists and the task page did. It now names them in one query, as they do.
+- **The task sidebar scrolled sideways** (CAIRN-313). Its pane set `overflow-y-auto` and
+  nothing on x, which the spec turns into `auto`, and several values refused to shrink: labels
+  were clipped on the left, long agent labels and dates ran off the right.
+- **An empty due date looked like today's date.** WebKit draws a grey placeholder date in an
+  empty native date input; the row now reads "No due date".
+- **A claim's response names its assignee** instead of carrying the bare user id.
+
+- **A closed or fully shown task names its assignee in one line.** `cairn done`, `cancel`
+  and `show --full` printed the nested assignee as four TSV rows (`assignee.id`, `.email`,
+  `.name`, `.active`); they now print `assignee<TAB>name`, as `add` and `update` already did.
+  `claim`, `beat`, `release`, `checkpoint` and `block` go through the same step. `--json` is
+  unchanged.
+- **The skill's `cairn block` example was a command the CLI refuses** — the reason was
+  positional; it is `--reason "…"`.
+
+### Changed
+
+- **The task sidebar is a property list** (CAIRN-313): label beside value, every value
+  truncated with its full text on hover, grouped into properties, relations and a quiet
+  footer (created, updated, by whom), 18rem wide. Held by shows the agent alone when its human
+  is the assignee, with staleness as a dot rather than a wrapped suffix; Labels always offers
+  "Add label"; the due date is a row that opens the picker, turns red when overdue on open
+  work, and clears with ×; Blocked by and Blocks say "None" in line.
+- **The agent guidance catches up with 0.10.0.** The skill names `cairn people`,
+  `check`/`next --assignee` and the briefing's "Assigned to you, nobody on it"; the session
+  briefing's rules and the OpenClaw hook's rule say bodies are markdown; `--help` lists
+  `show --full` and `update --body`; `AGENTS.md` says `show` is a digest and `claim` exits 9.
+- **The OpenAPI document** says what `POST /projects/{id}/tasks` and `PATCH /tasks/{ref}`
+  refuse (an agent's wall-of-text description, with `problems`; the create lists its 400),
+  that `assignee` reassigns and `dueDate: null` clears, that the digest carries
+  `assignee` and `createdBy`, and that `/users` rows carry `openTaskCount`.
+- **README**: the API list gains `/branding`, `?assignee=` on `/search` and `/next`, and
+  `reassignTo` on disabling a user; the CLI table covers `check --kinds`, `list` filters,
+  `projects --archived`, `vitals --notify` and `--version`; the board groups by assignee;
+  the MCP section names `cairn_check`'s `assignee`; the examples show the assignee.
+
 ## [0.10.0] — 2026-09-29
 
 ### Added
@@ -94,6 +135,14 @@ out under **Breaking** with what to do about it.
 - **"Unassigned" is now "Unclaimed"** wherever it meant *no agent holds this* — the board's
   agent lanes and filter, and a task's claim field. With a real assignee on every task, the
   old word said the opposite of the truth.
+
+
+### Fixed
+
+- **A due date read back as the day before, or not at all.** `date` columns came back as a
+  local-midnight ISO timestamp: a day early on any host east of UTC, and a value no date input
+  can show, so the task page saved a due date and then drew it blank. They are `YYYY-MM-DD`
+  again, as PostgREST returned them.
 
 ## [0.9.0] — 2026-09-28
 

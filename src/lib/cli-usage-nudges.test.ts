@@ -328,6 +328,32 @@ describe('the assignee (CAIRN-310)', () => {
     expect(row).toContain('Alice\tcodex · Bob')
   })
 
+  it('is one line wherever a single task is printed, and untouched in --json', async () => {
+    const row = { ...created, status: 'done', resolution: 'x', assignee_user_id: alice.id, assignee: alice }
+    const base = await serve(() => row, [])
+    for (const args of [
+      ['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'],
+      ['cancel', 'ACME-7', '--resolution', 'dropped'],
+      ['show', 'ACME-7', '--full'],
+      ['claim', 'ACME-7'],
+      ['release', 'ACME-7'],
+    ]) {
+      const { code, stdout } = await run(args, base)
+      expect(code, args.join(' ')).toBe(0)
+      expect(stdout, args.join(' ')).toContain('assignee\tAlice\n')
+      expect(stdout, args.join(' ')).not.toMatch(/assignee\.|assignee_user_id/)
+    }
+    const { stdout } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed', '--json'], base)
+    expect(JSON.parse(stdout)).toMatchObject({ assignee_user_id: alice.id, assignee: alice })
+  })
+
+  it('leaves the digest, which already names the assignee, as it is', async () => {
+    const base = await serve(() => ({ ref: 'ACME-7', title: 'Wire the relay', assignee: 'Alice', createdBy: 'codex · Bob' }), [])
+    const { stdout } = await run(['show', 'ACME-7'], base)
+    expect(stdout).toContain('assignee\tAlice\n')
+    expect(stdout).toContain('createdBy\tcodex · Bob\n')
+  })
+
   it('people lists who can be assigned, name and email only', async () => {
     const base = await serve(() => [alice], [])
     const { code, stdout } = await run(['people'], base)

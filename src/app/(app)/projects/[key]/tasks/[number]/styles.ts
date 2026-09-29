@@ -22,3 +22,14 @@ export const COMPOSER =
  * the containing block of the resolution dialog that opens from inside it.
  */
 export const PANE = 'bg-bg-elevated border-border border-l'
+
+/**
+ * The sidebar's property list: a label beside its value rather than a
+ * heading above it, the way Linear's panel reads. The label column is a
+ * fixed width so every value starts at the same edge, and it never grows —
+ * a long value truncates in its own column instead of pushing the row wide.
+ */
+export const ROW_LABEL = 'text-fg-subtle w-[4.75rem] shrink-0 text-[0.75rem]'
+
+/** A property row's shell: flat hover fill, ~28px tall, never wider than the pane. */
+export const ROW = 'row-hover -mx-1.5 flex min-w-0 min-h-[1.75rem] items-center gap-2 rounded-md px-1.5'
