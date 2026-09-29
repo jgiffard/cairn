@@ -9,6 +9,46 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **Your agent keys** (CAIRN-315). Anyone could pair keys for their own agents since 0.11.0,
+  but only an administrator could see or revoke them. `/settings/keys`, in the user menu,
+  lists your keys grouped by the host they were paired on, and revokes one or a whole host. A
+  revoked key is refused on its next request. `GET /api/v1/me/keys` and
+  `DELETE /api/v1/me/keys/{keyId}` are for a signed-in person only: an agent key gets 403,
+  and another person's key reads as 404.
+- **`cairn setup` installs OpenClaw's session sweep** (CAIRN-316). OpenClaw has no session-end
+  event, so its sessions are recorded only by the `openclaw-sessions` job. Setup found the
+  gateway and paired its key but never installed the job. It now does, deriving the sessions
+  directory from the gateway's home, or says which variable to set when it cannot.
+
+### Changed
+
+- **`cairn setup --yes` is gone.** It was accepted and did nothing, since setup asks nothing.
+
+### Fixed
+
+- **An unreachable instance blocked every ref on the others.** With one instance out of reach
+  (Dispofi behind an office-only firewall, say), its cached project keys went stale. Every
+  command naming a ref another instance owns was then refused: "project ownership data is
+  stale". Routing now first tries a short refresh (1.5s, in parallel) of any stale instance.
+  - One that answers is used as if it had been fresh.
+  - One that cannot be reached blocks only the refs its own last-known keys claim.
+  - A single fresh owner then routes, with a note on stderr.
+  - An instance never reached at all still blocks the fallback to a default.
+- **A write to an archived project is refused** (409, naming the project and how to reach
+  where it went). A project moved to another instance leaves an archived copy, and a client
+  still routing to the old instance could close or annotate tasks there. Every task write
+  checks its home project now (notes, claims, checkpoints, evidence, dependencies,
+  attachments, creation); reads are untouched. The CLI's outbox treats the 409 as final.
+- **Scheduled jobs on cron are shell-quoted.** `install-cron` joined commands unquoted into
+  the crontab, so a path with a space broke a job, and a crafted directory name could run a
+  command. Every value is single-quoted and `%` escaped, and names derived for the OpenClaw
+  sweep must be plain. `--only` now replaces just those jobs, instead of dropping the others,
+  so re-running `cairn setup` on Linux no longer uninstalls `reconcile` and `vitals`.
+- **Your agent keys** shows a key disabled by an account-wide reset as revoked, not active.
+- **Revoking a key by a malformed id** answered 500 (a Postgres cast error). It is a 404 now.
+
 ## [0.11.0] — 2026-09-29
 
 ### Added

@@ -4,7 +4,7 @@ import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
 import { recordActivity } from '@/lib/api/activity'
-import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { findTask, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +69,8 @@ export const POST = route<{ ref: string }, z.infer<typeof body>>({
     if (!task) return fail('not_found', `No task ${params.ref}.`)
     if (!other) return fail('not_found', `No task ${input.ref}.`)
     if (task.id === other.id) return fail('validation_failed', 'A task cannot block itself.')
+    const archived = refuseArchived(task) ?? refuseArchived(other)
+    if (archived) return archived
 
     const blocked = input.direction === 'blocked-by' ? task.id : other.id
     const blocking = input.direction === 'blocked-by' ? other.id : task.id
@@ -135,6 +137,8 @@ export const DELETE = route<{ ref: string }>({
     ])
     if (!task) return fail('not_found', `No task ${params.ref}.`)
     if (!other) return fail('not_found', `No task ${input.ref}.`)
+    const archived = refuseArchived(task) ?? refuseArchived(other)
+    if (archived) return archived
 
     const blocked = input.direction === 'blocked-by' ? task.id : other.id
     const blocking = input.direction === 'blocked-by' ? other.id : task.id

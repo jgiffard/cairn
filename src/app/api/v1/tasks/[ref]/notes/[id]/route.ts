@@ -1,7 +1,7 @@
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
-import { findTask } from '@/lib/api/tasks'
+import { findTask, refuseArchived } from '@/lib/api/tasks'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +23,8 @@ export const DELETE = route<{ ref: string; id: string }>({
   handler: async ({ actor, params }) => {
     const task = await findTask(actor, params.ref, 'id, number')
     if (!task) return fail('not_found', `No task ${params.ref}.`)
+    const archived = refuseArchived(task)
+    if (archived) return archived
 
     const { data: note } = await admin()
       .from('task_notes')

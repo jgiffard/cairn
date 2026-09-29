@@ -79,8 +79,28 @@ const SYNC = env(
 const RAW = env('CAIRN_RAW_BASE', 'https://raw.githubusercontent.com/montytorr/cairn/main')
 const HOOKS = env('CAIRN_HOOKS_DIR', join(homedir(), '.cairn/hooks'))
 
+/**
+ * An env override that ends up, unquoted for cron's own purposes, in a
+ * crontab line: `%` is cron's own escape for a newline in the command field
+ * (crontab(5)), so a value carrying one — or a literal newline or carriage
+ * return, which would forge an extra crontab line outright — is refused here
+ * rather than rendered. `cronLine` below shell-quotes every value it places,
+ * which stops a shell from splitting or re-interpreting it, but cron reads
+ * `%` before the shell ever sees the line, so quoting cannot protect against
+ * it; refusing the value up front is simpler than trying to escape it well.
+ */
+const UNSAFE_ENV_VALUE = /[\n\r%]/
+const rejectUnsafeEnvValue = (name, value) => {
+  if (value && UNSAFE_ENV_VALUE.test(value)) {
+    console.error(`${name} contains a newline, carriage return or % — refusing to schedule it as given.`)
+    console.error('Fix the value (it should be a plain path or command), then run this again.')
+    process.exit(2)
+  }
+}
+
 /** Where a runtime keeps transcripts nothing else will hand us. */
 const OPENCLAW_SESSIONS = env('CAIRN_OPENCLAW_SESSIONS', '')
+rejectUnsafeEnvValue('CAIRN_OPENCLAW_SESSIONS', OPENCLAW_SESSIONS)
 
 /**
  * How the sweep reaches a summariser, when the identity it must run as cannot.
@@ -92,6 +112,7 @@ const OPENCLAW_SESSIONS = env('CAIRN_OPENCLAW_SESSIONS', '')
  * of the feature. Point this at a wrapper that can summarise.
  */
 const SUMMARY_CLI = env('CAIRN_SUMMARY_CLI', '')
+rejectUnsafeEnvValue('CAIRN_SUMMARY_CLI', SUMMARY_CLI)
 
 /** Tasks the jobs report into. Empty disables reporting for that job. */
 const NOTIFY_FILES = env('CAIRN_NOTIFY_FILES', '')
@@ -195,10 +216,35 @@ const cronFields = (job) =>
     ? `*/${job.every} * * * *`
     : `${job.at.minute ?? 0} ${job.at.hour ?? '*'} * * *`
 
-const cronLine = (job) =>
-  `${cronFields(job)} ` +
-  Object.entries(job.env).map(([k, v]) => `${k}=${v}`).join(' ') +
-  ` ${job.command.join(' ')} >> ${log(job.name)} 2>&1`
+/**
+ * Single-quote a value for the `/bin/sh` that cron hands the command
+ * portion of a line to: end the quote, add a backslash-escaped literal quote,
+ * reopen it (`'...'` -> `'...'\''...'`), which is the standard POSIX way to
+ * embed a `'` inside single quotes. Every argument and every env value is
+ * quoted this way so that a path with a space, or a name an attacker chose
+ * (an OpenClaw agent directory, CAIRN-... F2), cannot add words, options or
+ * shell operators to the command sh actually runs.
+ */
+const shQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`
+
+/**
+ * cron reads the whole command portion of a line BEFORE handing it to
+ * /bin/sh, and treats any `%` in it as a newline (turning the rest of the
+ * line into the command's stdin) unless the `%` is backslash-escaped
+ * (crontab(5)) — this happens regardless of shell quoting, because it is
+ * cron's own preprocessing, not the shell's. So every literal `%` any value
+ * might contain is escaped here, as a pass over the fully-assembled command
+ * portion, after quoting rather than before: quoting only has to worry about
+ * the shell, and this only has to worry about cron.
+ */
+const cronEscapePercent = (text) => text.replace(/%/g, '\\%')
+
+const cronLine = (job) => {
+  const rest =
+    `${Object.entries(job.env).map(([k, v]) => `${k}=${shQuote(v)}`).join(' ')} ` +
+    `${job.command.map(shQuote).join(' ')} >> ${shQuote(log(job.name))} 2>&1`
+  return `${cronFields(job)} ${cronEscapePercent(rest)}`
+}
 
 // ---------------------------------------------------------------------------
 // launchd, for macOS. Same jobs, rendered as one agent per job.
@@ -314,6 +360,38 @@ const withoutOurs = (text) => {
   return [...lines.slice(0, start), ...lines.slice(end + 1)]
 }
 
+/**
+ * Every job's own `# name: why` line and rendered command, out of the
+ * managed block already in the crontab, keyed by name.
+ *
+ * `--only` is what `cairn setup` passes on every re-run, naming just the jobs
+ * it is touching this time (agent-files, plus reconcile/vitals under
+ * --maintenance, plus openclaw-sessions where it applies) — never the full
+ * JOBS list. Rewriting the whole block to hold only those names used to throw
+ * away every other already-installed job's line on each such re-run, which is
+ * exactly backwards: a job nobody asked to change this time should not be
+ * touched at all. This is what lets the install below keep an untouched job's
+ * line byte-for-byte while only re-rendering the ones `--only` names — the
+ * launchd backend already worked this way; this brings cron in line with it.
+ *
+ * Content in the block this cannot attribute to a name (a hand edit, or a job
+ * a newer or older version of this file does not define) is not preserved:
+ * the block is entirely this script's own, in the exact shape JOBS renders.
+ */
+const existingManagedLines = (text) => {
+  const lines = text.split('\n')
+  const start = lines.indexOf(BEGIN)
+  const end = lines.indexOf(END)
+  if (start === -1 || end === -1 || end < start) return {}
+  const ours = lines.slice(start + 1, end)
+  const byName = {}
+  for (let i = 0; i < ours.length - 1; i += 1) {
+    const header = /^# (\S+): /.exec(ours[i])
+    if (header) byName[header[1]] = [ours[i], ours[i + 1]]
+  }
+  return byName
+}
+
 // ---------------------------------------------------------------------------
 // --run <job>: run an installed job NOW, exactly as the schedule runs it.
 //
@@ -340,15 +418,53 @@ const withoutOurs = (text) => {
 // out a second time in a workflow file is the next thing to drift. The
 // installed schedule is the source of truth, and this runs it early.
 //
-// Splitting the crontab line on whitespace is the exact inverse of how it was
-// written (`job.command.join(' ')`, unquoted): a path containing a space would
-// already have broken the line itself, so this parse is no weaker than that
-// render. The LaunchAgent is read the same way, out of the plist this file
-// wrote, so the two backends still cannot disagree about what a job is.
+// Tokenizing the crontab line is the exact inverse of how it was written:
+// `cronEscapePercent` then `shQuote` above, undone here as `cronUnescapePercent`
+// then `shTokens` below. A path containing a space, or one this file itself
+// refused to embed unsafely (F2), still round-trips, which plain
+// whitespace-splitting could not do once values started being quoted. The
+// LaunchAgent is read the same way, out of the plist this file wrote, so the
+// two backends still cannot disagree about what a job is.
 // ---------------------------------------------------------------------------
 
 const unxml = (text) =>
   String(text).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+
+/** The inverse of `cronEscapePercent`: cron itself already undid this before
+ * running the command, so this file must too before it re-parses the line. */
+const cronUnescapePercent = (text) => text.replace(/\\%/g, '%')
+
+/**
+ * The inverse of `shQuote`, and a no-op on a token that was never quoted:
+ * splits on whitespace outside single quotes, and turns `'\''` back into a
+ * literal `'` inside a token — the one escape `shQuote` ever produces. Good
+ * enough for lines only this file ever writes; it is not a general shell
+ * parser and does not need to be.
+ */
+const shTokens = (line) => {
+  const tokens = []
+  let i = 0
+  while (i < line.length) {
+    while (i < line.length && /\s/.test(line[i])) i += 1
+    if (i >= line.length) break
+    let token = ''
+    while (i < line.length && !/\s/.test(line[i])) {
+      if (line[i] === "'") {
+        i += 1
+        while (i < line.length && line[i] !== "'") { token += line[i]; i += 1 }
+        i += 1 // the closing quote
+      } else if (line[i] === '\\' && line[i + 1] === "'") {
+        token += "'"
+        i += 2
+      } else {
+        token += line[i]
+        i += 1
+      }
+    }
+    tokens.push(token)
+  }
+  return tokens
+}
 
 /** The job's line out of our own managed block in the running user's crontab. */
 const scheduledInCron = (name) => {
@@ -363,7 +479,7 @@ const scheduledInCron = (name) => {
   const line = ours.slice(at + 1).find((l) => l.trim() !== '' && !l.trim().startsWith('#'))
   if (!line) return null
 
-  const tokens = line.trim().split(/\s+/).slice(5) // five schedule fields
+  const tokens = shTokens(cronUnescapePercent(line.trim())).slice(5) // five schedule fields
   const environment = {}
   while (tokens.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) {
     const [key, ...rest] = tokens.shift().split('=')
@@ -547,7 +663,22 @@ const trimEnd = (lines) => {
 }
 
 const kept = trimEnd(withoutOurs(existing))
-const next = trimEnd(REMOVE ? kept : [...kept, ...block])
+
+// With `--only`, every already-installed job NOT named this time keeps its
+// exact existing line; only the named jobs are (re)rendered or, on --remove,
+// dropped. Without `--only`, this is empty and the block below is built from
+// `applicable` alone, exactly as before — a full run still fully re-syncs.
+const untouchedLines = only
+  ? Object.entries(existingManagedLines(existing))
+      .filter(([jobName]) => !only.includes(jobName))
+      .flatMap(([, jobLines]) => jobLines)
+  : []
+
+const ownLines = REMOVE
+  ? untouchedLines
+  : [...untouchedLines, ...applicable.flatMap((job) => [`# ${job.name}: ${job.why}`, cronLine(job)])]
+
+const next = trimEnd(ownLines.length === 0 ? kept : [...kept, BEGIN, ...ownLines, END])
 
 execFileSync('crontab', ['-'], { input: `${next.join('\n')}\n` })
 console.log(REMOVE ? 'removed' : `installed ${applicable.length} job(s)`)

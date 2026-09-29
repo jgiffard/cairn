@@ -1,22 +1,29 @@
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { issuedUnderFormerKey, lookupFormerKey, renameDay, type KeyRename } from './project-keys'
+import { fail } from './response'
 
-/** Columns returned by `show`. Kept explicit so responses stay predictable. */
+/**
+ * Columns returned by `show`. Kept explicit so responses stay predictable.
+ *
+ * The embed carries `status` alongside `key`/`title` so every route that
+ * resolves a task through this projection already has what `refuseArchived`
+ * needs, with no second query.
+ */
 export const TASK_FIELDS =
   'id, project_id, number, title, description, type, status, priority, labels, due_date, position, ' +
   'actor_type, actor_id, assignee_user_id, claimed_by, claimed_session, claimed_at, heartbeat_at, attempt, ownership_version, ' +
   'checkpoint_summary, checkpoint_payload, checkpoint_at, checkpoint_version, blocked_reason, blocked_at, ' +
   'resolution, resolution_kind, resolved_at, resolved_by, duplicate_of, parent_id, ' +
   'memory_session_id, observation_ids, created_at, updated_at, ' +
-  'project:projects!project_id!inner(id, key, title)'
+  'project:projects!project_id!inner(id, key, title, status)'
 
 /** Terse columns for list/search output. See the CLI's output discipline. */
 export const TASK_LIST_FIELDS =
   'id, number, title, type, status, priority, labels, assignee_user_id, claimed_by, claimed_session, claimed_at, heartbeat_at, attempt, ownership_version, checkpoint_version, ' +
   // project_id as well as the embed: an activity row records the project by id,
   // and it is the only scope that survives the task being deleted.
-  'resolution, updated_at, project_id, project:projects!project_id!inner(key)'
+  'resolution, updated_at, project_id, project:projects!project_id!inner(key, status)'
 
 export type TaskRef = { key: string; number: number } | { id: string }
 
@@ -68,10 +75,11 @@ export const resolveTask = async (
   if (!ref) return { task: null, renamed: null, requestedRef }
 
   // Key-based refs need the embedded project relation even when callers request
-  // a narrow projection.
+  // a narrow projection. `status` rides along so `refuseArchived` works for
+  // callers that asked for a narrow field set too.
   const select = fields.includes('projects!project_id!inner')
     ? fields
-    : `${fields}, projects!project_id!inner(key)`
+    : `${fields}, projects!project_id!inner(key, status)`
 
   const query = admin().from('tasks').select(select)
 
@@ -131,6 +139,58 @@ export const resolveTask = async (
  */
 export const findTask = async (actor: Actor, raw: string, fields = TASK_FIELDS) =>
   (await resolveTask(actor, raw, fields)).task
+
+/** A task row's embedded project, whichever alias or shape fetched it. */
+const embeddedProject = (row: Record<string, unknown>) => {
+  const embedded = (row.project ?? row.projects) as
+    | { key?: string; status?: string }
+    | { key?: string; status?: string }[]
+    | undefined
+  return Array.isArray(embedded) ? embedded[0] : embedded
+}
+
+/**
+ * Refuses a write to a task whose HOME project is archived (security review
+ * F1).
+ *
+ * Archiving is what moving a project to another Cairn instance leaves behind
+ * here: a frozen copy. Nothing stopped a CLI still routed to this instance by
+ * a stale cache from closing, noting, or claiming a task in that copy — reads
+ * worked, and so, silently, did every write. This is the one place that
+ * refuses them, called right after a task is resolved and before anything
+ * mutates.
+ *
+ * Reads stay allowed — the record should still be legible from either side —
+ * only writes are refused.
+ *
+ * Only the task's HOME project (`project_id`) is checked. `task_projects`
+ * rows only widen where a task is listed, not where it lives, so a task filed
+ * at home in an active project but also linked into an archived one must
+ * still be writable.
+ *
+ * Call this with the row `findTask`/`resolveTask` already returned — it reads
+ * the embedded project rather than querying again, so it costs nothing extra
+ * as long as the caller's field selection carries `project`/`projects` with
+ * `status` (TASK_FIELDS and TASK_LIST_FIELDS both do; `resolveTask`'s
+ * fallback embed for narrower field lists does too).
+ */
+export const refuseArchived = (task: TaskRow) => {
+  const project = embeddedProject(task)
+  if (!project || project.status !== 'archived') return null
+
+  const key = project.key ?? 'its project'
+  const number = task.number as number | undefined
+  const ref = project.key && number !== undefined ? `${project.key}-${number}` : 'This task'
+
+  return fail(
+    'conflict',
+    `${ref} lives in ${key}, which is archived — most likely because it moved to another Cairn ` +
+      `instance and this is the copy left behind. If it moved, point the CLI at the other one ` +
+      `with --instance <the other instance>. To write here instead, restore ${key} first: ` +
+      `\`cairn project restore ${project.key ?? key}\`.`,
+    { project: project.key ?? null, projectStatus: 'archived' },
+  )
+}
 
 /**
  * What a response says about how a ref was reached. Empty for a current ref,

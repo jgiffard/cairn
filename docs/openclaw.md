@@ -135,9 +135,17 @@ is one project's.
 
 ## 3. Sessions and identity
 
-- **Sessions:** `node scripts/install-cron.mjs --only openclaw-sessions --install` installs
-  `openclaw-sessions`, which runs `hooks/cairn-session-end.mjs --scan
-  "$CAIRN_OPENCLAW_SESSIONS"` every 30 minutes. `cairn setup` does not install it.
+- **Sessions:** `cairn setup` installs `openclaw-sessions` for you whenever OpenClaw is among
+  the runtimes it sets up (it detects a gateway the same way it pairs the OpenClaw key): it
+  works out the sessions directory from the gateway's own home —
+  `<openclaw home>/agents/<agent>/agent/codex-home/sessions`, choosing `main` or the only
+  agent that has one — and prints `! jobs openclaw-sessions skipped — …` with the exact
+  `CAIRN_OPENCLAW_SESSIONS=<dir> cairn setup …` to run instead when that is ambiguous or the
+  directory does not exist yet. Set `CAIRN_OPENCLAW_SESSIONS` yourself beforehand and setup
+  uses that instead of guessing. Installed, the job runs `hooks/cairn-session-end.mjs --scan
+  "$CAIRN_OPENCLAW_SESSIONS"` every 30 minutes; run it by hand with
+  `node scripts/install-cron.mjs --only openclaw-sessions --install` if you would rather wire
+  it up yourself.
 - **Identity:** set `CAIRN_AGENT=openclaw` where the gateway starts (the hook sets it for its
   own call), and give OpenClaw its own `CAIRN_API_KEY_OPENCLAW`. `cairn setup` pairs it
   wherever it detects a gateway (or with `--runtimes openclaw`); otherwise put one in

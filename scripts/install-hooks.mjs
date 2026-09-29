@@ -466,9 +466,11 @@ const copyOpenclawHook = () => {
 }
 
 const openclawTail = () => {
-  log('  openclaw: record sessions with the `openclaw-sessions` job (scripts/install-cron.mjs),')
-  log('            set CAIRN_AGENT=openclaw where the gateway starts, and see docs/openclaw.md')
-  log('            for the AGENTS.md block — `learn` needs an explicit scope outside a mapped checkout')
+  log('  openclaw: `cairn setup` installs the `openclaw-sessions` job for you when it can find')
+  log('            the sessions directory; running this installer alone, wire it up yourself with')
+  log('            scripts/install-cron.mjs. set CAIRN_AGENT=openclaw where the gateway starts,')
+  log('            and see docs/openclaw.md for the AGENTS.md block — `learn` needs an explicit')
+  log('            scope outside a mapped checkout')
 }
 
 /**

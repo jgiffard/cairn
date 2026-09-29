@@ -4,7 +4,7 @@ import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
 import { diffTaskEvents, recordActivity } from '@/lib/api/activity'
-import { findTask, noSuchTaskMessage, renameFields, resolveParent, resolveTask } from '@/lib/api/tasks'
+import { findTask, noSuchTaskMessage, refuseArchived, renameFields, resolveParent, resolveTask } from '@/lib/api/tasks'
 import { formerKeysByProject, formerRefsOf, projectsForKeys, resolveProject } from '@/lib/api/project-keys'
 import { buildDigest } from '@/lib/api/digest'
 import { mentionsOf } from '@/lib/api/mentions'
@@ -74,6 +74,8 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
   handler: async ({ actor, params, body }) => {
     const task = await findTask(actor, params.ref)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
+    const archived = refuseArchived(task)
+    if (archived) return archived
 
     const unreadable = refuseUnreadableBody(actor, body.description, `cairn update ${params.ref} --body -`)
     if (unreadable) return unreadable
@@ -367,6 +369,8 @@ export const DELETE = route<{ ref: string }>({
   handler: async ({ actor, params, url }) => {
     const task = await findTask(actor, params.ref)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
+    const archived = refuseArchived(task)
+    if (archived) return archived
 
     const ref = `${(task.project as { key: string } | undefined)?.key ?? ''}-${task.number as number}`
 

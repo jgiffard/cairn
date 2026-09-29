@@ -18,7 +18,8 @@ and the session written down when it ends.
 
 > **One shared workspace.** Every active user and agent can work across the same projects,
 > tasks and memory. Administrators manage membership and roles; each person pairs their own
-> agents' keys, and administrators can issue or revoke anyone's. Owner columns remain
+> agents' keys and can revoke them on **Your agent keys**, and administrators can issue or
+> revoke anyone's. Owner columns remain
 > attribution metadata rather than visibility boundaries. Every task is **assigned
 > to a person** — by default the human behind the agent's key that filed it — who owns it,
 > while the agent's claim only says who is executing it right now.
@@ -394,7 +395,7 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | | |
 |---|---|
 | **Connect a machine** | |
-| `cairn setup --url <instance>` | Pairs this machine's keys in the browser, installs the CLI, skill, hooks and the `agent-files` job (`--maintenance` adds `reconcile` and `vitals`) — [more](#connect-a-machine). `--dry-run` to preview, safe to re-run |
+| `cairn setup --url <instance>` | Pairs this machine's keys in the browser, installs the CLI, skill, hooks and the `agent-files` job (`--maintenance` adds `reconcile` and `vitals`; setting up OpenClaw adds `openclaw-sessions` where its sessions directory can be found) — [more](#connect-a-machine). `--dry-run` to preview, safe to re-run |
 | **Find and read** | |
 | `cairn check "<subject>" [--assignee me\|<who>]` | **Start here.** Prior work across all four stores, with a `~tokens` cost per row. `--kinds task,note,knowledge,session` narrows the stores; `--assignee` narrows to that person's tasks |
 | `cairn context [--scope project\|all] [--project K]` | The briefing: what you hold, what is in flight (naming the owner when it is not your human), your human's open work here that nobody is on (five, most urgent first, then a count), where the last session here stopped. `--scope project` limits held work, stale claims, and the last session to the resolved project; the default `all` keeps cross-project awareness. An unresolved project is an error in project scope; an unknown explicit key returns 404. |
@@ -487,6 +488,7 @@ schemas the routes validate against, so it cannot drift. Browsable at `/api-docs
 /users  /users/{id}             administrator-only membership, roles, /password and /restore;
                                 disabling someone who owns open tasks needs ?reassignTo=
 /users/{id}/keys  /keys/{keyId} administrator-only agent keys: issue and revoke
+/me/keys  /me/keys/{keyId}      your own agent keys: list and revoke; a signed-in person only, agent keys get 403
 /connect  /connect/poll         unauthenticated, rate-limited: a machine asks to pair, then
                                 polls until it is handed its keys, once
 /connect/{code}/approve  /deny  a signed-in person answers it; agent keys get 403
@@ -593,7 +595,7 @@ npm run operator:create
 ```
 
 Then add members from **Users**. Each of them connects their own machines with
-[`cairn setup`](#connect-a-machine), which pairs keys for their own agents in the browser; an
+[`cairn setup`](#connect-a-machine), which pairs keys for their own agents in the browser; anyone can list and revoke their own keys under **Your agent keys** in the user menu; an
 administrator can also issue or revoke anyone's keys there. All active identities share the
 workspace; administrator privileges are required only for membership, roles, password
 resets, other people's keys, and approving a `maintenance` key. Disabling someone who is
@@ -674,15 +676,16 @@ The link opens a page on your instance; sign in if asked, and it comes back to t
 The approval page shows the host as the device reported it, where the request came from and
 who the keys will belong to, and lets you untick runtimes. Approve a link only if you just
 ran `cairn setup` yourself: the keys are yours, so a link someone sends you would hand them
-your agents. Each key is named `<runtime> on <host>`, is delivered once, and an administrator can
-revoke it on **Users** like any other. Unapproved, the request expires in ten minutes.
+your agents. Each key is named `<runtime> on <host>` and is delivered once. You can revoke it
+yourself on **Your agent keys** (user menu → `/settings/keys`), one key or a whole host at once;
+an administrator can also revoke it on **Users**. Unapproved, the request expires in ten minutes.
 
 | Flag | |
 |---|---|
 | `--url <instance>` | required the first time, and whenever the machine has several instances; otherwise the configured one |
 | `--name <instance-name>` | names the instance when this `--url` is a second (or later) one on the machine (default: derived from the url, `cairn.acme.io` → `acme`). A first instance needs no name |
 | `--runtimes a,b` | which agent runtimes to pair and install for (default: detected — `~/.claude`, `~/.codex`, and OpenClaw where this account runs its gateway) |
-| `--no-skill` / `--no-hooks` / `--no-jobs` | skip that step. Without `--maintenance` the only job is `agent-files`; OpenClaw's `openclaw-sessions` sweep is installed [by hand](#scheduled-maintenance--optional) |
+| `--no-skill` / `--no-hooks` / `--no-jobs` | skip that step. Without `--maintenance` the only jobs are `agent-files` and, when OpenClaw is among the runtimes and its sessions directory can be found, `openclaw-sessions` — otherwise it prints which `CAIRN_OPENCLAW_SESSIONS` to set and [the manual command](#scheduled-maintenance--optional) |
 | `--maintenance` | also install `reconcile` and `vitals`, and pair a `maintenance` key for them — separately, because only an administrator can approve one: it releases anyone's claims |
 | `--dry-run` | print the plan, change nothing |
 
@@ -721,6 +724,11 @@ CAIRN_API_KEY_CODEX=sk_live_...
 CAIRN_API_KEY_CLAUDE_CODE=sk_live_...
 CAIRN_API_KEY_HERMES=sk_live_...        # Hermes Agent by Nous Research
 ```
+
+**Retiring or losing a machine?** Open **Your agent keys** from the user menu. Keys are grouped
+by the host they were paired on; revoke one, or **Revoke all on this host**. A revoked key is
+refused on its next request, and nothing else is disturbed. New keys only arrive through
+`cairn setup`, which pairs them.
 
 It works out which runtime it is in from the environment, in this order, and
 `CAIRN_AGENT=<name>` says so explicitly when that is not enough:
@@ -1002,7 +1010,22 @@ nothing is ever guessed from a project name, a remote or a directory name:
    overlap, and none may cover `~` or `/`;
 3. the command's ref (`note WORK-12 …`, never a flag's value), when exactly one instance is
    known to have its project — each instance's keys are cached from its own responses, at
-   most six hours old. A route still wins over it, with a hint to add `--instance`;
+   most six hours old. A route still wins over it, with a hint to add `--instance`. Past six
+   hours a cache is stale, which is the ordinary state of any secondary instance nobody has
+   used in a while, so before deciding anything this gives every stale instance one short
+   (1.5s), best-effort chance to say what it currently owns, from its own URL and key. An
+   instance that answers is treated exactly like a fresh one; one that does not (still down,
+   or never reached at all) leaves the routing rule unchanged from before the attempt: only
+   the instance(s) whose *own* cache actually claims this ref are ever a problem — if that
+   cache is still stale after the attempt, or two fresh caches both claim it, the command
+   stops with **exit 10** instead of guessing; an unrelated instance that could not be reached
+   never blocks a ref a reachable instance plainly owns. The one case this refuses outright
+   rather than falling through to step 5 is an instance that has *never once* answered (no
+   cached keys at all, not merely an old cache) and still could not be reached to ask — every
+   project on such an instance would otherwise be permanently invisible to this rule. A
+   project that moved between instances within the old owner's six-hour window is the
+   server's problem, not this rule's: a write to the archived copy gets a `409`, naming the
+   project's new home;
 4. an answer saved for this session only;
 5. the default instance, if `unclassified` names one.
 
@@ -1114,9 +1137,10 @@ a task (`CAIRN_NOTIFY_FILES`) needs a maintenance key (below), and warns about a
 on every run.
 
 Install only what that machine is for. A laptop beside a server usually wants
-`--only agent-files`, which is what `cairn setup` installs: `reconcile` and `vitals` are
-about the instance rather than the
-machine, and running `vitals` in two places reports the same findings twice.
+`--only agent-files`, which is what `cairn setup` installs for every machine — plus
+`openclaw-sessions` where it sets up OpenClaw and can find its sessions directory: `reconcile`
+and `vitals` are about the instance rather than the machine, and running `vitals` in two
+places reports the same findings twice.
 
 | Job | What it is for |
 |---|---|

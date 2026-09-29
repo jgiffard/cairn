@@ -3,7 +3,7 @@
 import { Command } from 'cmdk'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Settings, FileJson, Search as SearchIcon, Moon, Plus } from 'lucide-react'
+import { Settings, FileJson, KeyRound, Search as SearchIcon, Moon, Plus } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { ProjectIcon, StatusIcon } from '@/components/icons'
 import type { TaskStatus, TaskType } from '@/schemas/task'
@@ -230,6 +230,10 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
                   <Settings size={14} className={iconClass} />
                   Settings
                   <Keys keys={['G', 'then', 'S']} />
+                </Command.Item>
+                <Command.Item value="your agent keys revoke" onSelect={() => go('/settings/keys')} className={itemClass}>
+                  <KeyRound size={14} className={iconClass} />
+                  Your agent keys
                 </Command.Item>
                 <Command.Item value="api reference" onSelect={() => go('/api-docs')} className={itemClass}>
                   <FileJson size={14} className={iconClass} />

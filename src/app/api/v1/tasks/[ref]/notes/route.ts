@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
-import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { findTask, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 import { shouldClaimByWorking } from '@/lib/api/claim'
 import { createNoteSchema, NOTE_KINDS } from '@/schemas/task'
 
@@ -41,6 +41,8 @@ export const POST = route<{ ref: string }, z.infer<typeof createNoteSchema>>({
   handler: async ({ actor, params, body }) => {
     const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
+    const archived = refuseArchived(task)
+    if (archived) return archived
 
     const contentHash = createHash('sha256')
       .update(`${body.kind}\n${body.note}`, 'utf8')

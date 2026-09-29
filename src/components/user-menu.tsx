@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronsUpDown, Keyboard, LogOut, Settings as SettingsIcon, Users } from 'lucide-react'
+import { ChevronsUpDown, Keyboard, KeyRound, LogOut, Settings as SettingsIcon, Users } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 import { Avatar } from '@/components/icons'
@@ -108,6 +108,20 @@ export const UserMenu = ({
           >
             <SettingsIcon size={13} aria-hidden />
             Settings
+          </Link>
+
+          {/* Everyone, not just administrators: these are your own keys (CAIRN-315). */}
+          <Link
+            href="/settings/keys"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              onNavigate?.()
+            }}
+            className={cn(item, 'row-hover hover:text-fg')}
+          >
+            <KeyRound size={13} aria-hidden />
+            Your agent keys
           </Link>
 
           {role === 'admin' && (
