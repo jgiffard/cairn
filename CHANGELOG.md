@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-09-29
+
 ### Changed
 
 - **Breaking: the admin key endpoints answer in the same shape as Your agent keys**
@@ -1480,7 +1482,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/montytorr/cairn/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/montytorr/cairn/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/montytorr/cairn/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/montytorr/cairn/compare/v0.10.0...v0.10.1
