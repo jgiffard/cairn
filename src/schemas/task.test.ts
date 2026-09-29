@@ -78,6 +78,17 @@ describe('updateTaskSchema', () => {
     expect(updateTaskSchema.safeParse({ status: 'in-progress' }).success).toBe(false)
     expect(updateTaskSchema.safeParse({ type: 'nonsense' }).success).toBe(false)
   })
+
+  /**
+   * `dueDate` is the one field on `taskFields` that a caller needs to be able
+   * to unset outright — the create schema has no such need, so this is only
+   * widened on the update schema rather than on the shared base.
+   */
+  it('accepts null on dueDate to clear it, but not other date-shaped junk', () => {
+    expect(updateTaskSchema.parse({ dueDate: null })).toEqual({ dueDate: null })
+    expect(updateTaskSchema.parse({ dueDate: '2026-01-15' })).toEqual({ dueDate: '2026-01-15' })
+    expect(updateTaskSchema.safeParse({ dueDate: 'not-a-date' }).success).toBe(false)
+  })
 })
 
 describe('isTerminal', () => {

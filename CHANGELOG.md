@@ -55,6 +55,38 @@ out under **Breaking** with what to do about it.
     not your human, so a dropped task is not picked up as your own by mistake.
     `GET /context` returns `unattended: {tasks, more}` and `inFlight[].assignee`.
 
+- **The task sidebar edits what the API already accepted** (CAIRN-311). Status, priority, type
+  and assignee were the only editable fields on a task's page; project, labels, due date and
+  parent were readable only, even though `PATCH /api/v1/tasks/{ref}` has taken all four since
+  before this change.
+  - *Project.* A select like the list view's, moving the task and — since per-project
+    numbering means the ref changes — replacing the URL with the task's new one rather than
+    leaving the page pointed at a ref that no longer resolves here.
+  - *Labels.* The same add/remove popover the list view uses, offering labels already in use
+    before a new one.
+  - *Due date.* A native date field, clearable.
+  - *Parent.* Click-to-edit, taking a ref; empty clears it.
+  - `updateTaskSchema`'s `dueDate` now accepts `null` to clear it — it previously had no way
+    to represent "no due date" on a PATCH, only "don't mention it."
+- **An agent's task body has to read as markdown** (CAIRN-312). Agents filed walls of text —
+  `WHY EMPTY TODAY:` in capitals where a heading belonged, one 600-character paragraph, paths
+  and calls loose in the prose — and every fact was there but none was findable. The API now
+  refuses such a description from an agent on `POST /projects/{id}/tasks` and on
+  `PATCH /tasks/{ref}` when the description changes; people typing on the board are not
+  checked. The refusal is `validation_failed` with `problems`, one instruction each, which
+  `error` repeats for clients that print nothing else:
+  - a capitalised label → the heading it should be (`"## Why empty today"`);
+  - literal `\n` escapes → real line breaks;
+  - a prose paragraph over 600 characters → a list or shorter paragraphs;
+  - over 600 characters with no heading, list, table or code block → headings and lists;
+  - bare paths (`src/a.js:303`), calls (`search()`), and dotted or snake-case identifiers →
+    backticks, naming up to five.
+
+  Code blocks and inline code are never checked, and a body under 200 characters only meets
+  the first two rules and the last. The CLI prints the list; the skill, `AGENTS.md`, `--help`
+  and the MCP `cairn_add` schema say the rule. Notes, comments and resolutions are not
+  checked yet.
+
 ### Changed
 
 - **"Unassigned" is now "Unclaimed"** wherever it meant *no agent holds this* — the board's

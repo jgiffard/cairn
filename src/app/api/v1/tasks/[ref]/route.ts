@@ -10,6 +10,7 @@ import { buildDigest } from '@/lib/api/digest'
 import { mentionsOf } from '@/lib/api/mentions'
 import { peopleByIds, resolveAssignee, withAssignee } from '@/lib/api/people'
 import { removeAttachments } from '@/lib/attachments'
+import { refuseUnreadableBody } from '@/lib/api/task-body'
 import { isTerminal, updateTaskSchema, RESOLUTION_KINDS } from '@/schemas/task'
 
 export const dynamic = 'force-dynamic'
@@ -73,6 +74,9 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
   handler: async ({ actor, params, body }) => {
     const task = await findTask(actor, params.ref)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
+
+    const unreadable = refuseUnreadableBody(actor, body.description, `cairn update ${params.ref} --body -`)
+    if (unreadable) return unreadable
 
     const nextStatus = body.status ?? (task.status as string)
     const existingResolution = task.resolution as string | null

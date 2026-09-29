@@ -335,6 +335,7 @@ const TaskPage = async ({
             relations={relations}
             alsoProjects={alsoProjects}
             projects={allProjects.map((p) => ({ key: p.key, title: p.title }))}
+            parent={parent}
           />
         </div>
       </div>
