@@ -2,11 +2,13 @@ import { redirect } from 'next/navigation'
 import { currentUser, listProjects } from '@/lib/data'
 import { listFormerKeys } from '@/lib/api/project-keys'
 import { knownSlugs } from '@/lib/api/knowledge-graph'
+import { listPeople } from '@/lib/api/people'
 import { CommandPalette } from '@/components/command-palette'
 import { AppSidebar } from '@/components/app-sidebar'
 import { TaskCreationProvider } from '@/components/task-creation'
 import { Shortcuts } from '@/components/shortcuts'
 import { ProjectKeysProvider } from '@/components/project-keys'
+import { PeopleProvider } from '@/components/people-context'
 import { KnowledgeSlugsProvider } from '@/components/knowledge-slugs'
 import { MobileNavProvider } from '@/components/mobile-nav-context'
 import { ToastHost } from '@/components/toast'
@@ -19,13 +21,16 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
   // the guard ran.
   if (!user) redirect('/login')
 
-  const [projects, formerKeys, slugs] = await Promise.all([
+  const [projects, formerKeys, slugs, people] = await Promise.all([
     listProjects(user.id),
     listFormerKeys(user.id),
     // Every slug there is, so `[[a-reference]]` to an entry nobody wrote can
     // be drawn as the loose end it is. One column, and it has to be ALL of
     // them: a partial list would mark real entries as missing.
     knownSlugs().catch(() => null),
+    // Fetched once for every assignee picker in the app, rather than each one
+    // loading its own copy of the same short list.
+    listPeople(),
   ])
   const email = user.email ?? 'you'
   const projectList = projects.map((p) => ({ key: p.key, title: p.title }))
@@ -40,6 +45,7 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
     <ToastHost>
       <LiveStatusProvider>
       <ProjectKeysProvider keys={refKeys}>
+        <PeopleProvider people={people} currentUserId={user.id}>
         <KnowledgeSlugsProvider slugs={slugs}>
         <TaskCreationProvider projects={projectList}>
           <MobileNavProvider email={email} role={user.role} projects={projectList}>
@@ -63,6 +69,7 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
           </MobileNavProvider>
         </TaskCreationProvider>
         </KnowledgeSlugsProvider>
+        </PeopleProvider>
       </ProjectKeysProvider>
       </LiveStatusProvider>
     </ToastHost>

@@ -145,6 +145,17 @@ const okResponse = (description: string, data: Record<string, unknown> = { type:
   content: { 'application/json': { schema: envelope(data) } },
 })
 
+const person = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    email: { type: 'string', format: 'email' },
+    name: { type: 'string', description: 'Display name, or the email when there is none.' },
+    active: { type: 'boolean', description: 'False once the user is removed or suspended.' },
+  },
+  required: ['id', 'email', 'name', 'active'],
+}
+
 const taskSummary = {
   type: 'object',
   properties: {
@@ -156,7 +167,16 @@ const taskSummary = {
     status: { type: 'string', enum: [...TASK_STATUSES] },
     priority: { type: 'string', enum: [...TASK_PRIORITIES] },
     labels: { type: 'array', items: { type: 'string' } },
-    claimed_by: { type: ['string', 'null'] },
+    assignee_user_id: {
+      type: 'string',
+      format: 'uuid',
+      description: 'The human who owns the task. Always set; defaults to the caller\'s user.',
+    },
+    assignee: { ...person, type: ['object', 'null'] },
+    claimed_by: {
+      type: ['string', 'null'],
+      description: 'The agent executing it right now, if any. Not the owner: that is `assignee`.',
+    },
     resolution: { type: ['string', 'null'] },
   },
 }
@@ -594,6 +614,10 @@ export const openapiSpec = () => ({
           { name: 'type', in: 'query', schema: { type: 'string', enum: [...TASK_TYPES] } },
           { name: 'label', in: 'query', schema: { type: 'string' } },
           { name: 'claimed_by', in: 'query', schema: { type: 'string' } },
+          { name: 'mine', in: 'query', schema: { type: 'boolean' },
+            description: 'Held by the calling agent (and its session, when it sent one).' },
+          { name: 'assignee', in: 'query', schema: { type: 'string' },
+            description: 'Owned by: `me`, an email, a display name or a user id.' },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
           { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 } },
         ],
@@ -601,6 +625,9 @@ export const openapiSpec = () => ({
       },
       post: {
         summary: 'Create a task',
+        description:
+          'Assigned to the caller\'s user unless `assignee` names someone else. An agent\'s ' +
+          'caller is the human who owns its key.',
         requestBody: body(json(createTaskSchema)),
         responses: { '201': okResponse('Created.', taskSummary), '404': errorResponse },
       },
@@ -1210,6 +1237,13 @@ export const openapiSpec = () => ({
           required: ['name', 'accent'],
         }),
         responses: { '200': okResponse('Saved.'), '400': errorResponse, '403': errorResponse },
+      },
+    },
+    '/people': {
+      get: {
+        summary: 'List the people work can be assigned to',
+        description: 'Active users only. Open to every authenticated caller, agents included.',
+        responses: { '200': okResponse('People.', { type: 'array', items: person }) },
       },
     },
     '/users': {

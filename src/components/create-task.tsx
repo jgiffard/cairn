@@ -7,7 +7,8 @@ import { Button, InlineInput } from '@/components/ui/control'
 import { useRouter } from 'next/navigation'
 import { mutate } from '@/lib/api/mutate'
 import { useEffect, useRef, useState } from 'react'
-import { PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
+import { Avatar, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
+import { usePeople } from '@/components/people-context'
 import {
   TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES,
   type TaskPriority, type TaskStatus, type TaskType,
@@ -34,6 +35,7 @@ export const CreateTask = ({
 }) => {
   const router = useRouter()
   const titleRef = useRef<HTMLInputElement>(null)
+  const { people, currentUserId } = usePeople()
 
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -41,6 +43,7 @@ export const CreateTask = ({
   const [type, setType] = useState<TaskType>('feature')
   const [status, setStatus] = useState<TaskStatus>('backlog')
   const [priority, setPriority] = useState<TaskPriority>('medium')
+  const [assignee, setAssignee] = useState(currentUserId)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [similar, setSimilar] = useState<{ ref: string; title: string; status: string }[]>([])
@@ -105,6 +108,7 @@ export const CreateTask = ({
         type,
         status,
         priority,
+        assignee,
         labels: labels
           .split(',')
           .map((l) => l.trim())
@@ -247,6 +251,21 @@ export const CreateTask = ({
               aria-label="Priority"
             >
               {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </label>
+
+          <label className={chip}>
+            <Avatar name={people.find((p) => p.id === assignee)?.name ?? 'You'} size={14} />
+            {people.find((p) => p.id === assignee)?.name ?? 'You'}
+            <select
+              value={assignee}
+              onChange={(e) => setAssignee(e.target.value)}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              aria-label="Assignee"
+            >
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
             </select>
           </label>
 

@@ -19,6 +19,7 @@ import {
 } from '@/schemas/task'
 import type { TaskListItem } from '@/lib/data'
 import { NewTaskButton } from '@/components/task-creation'
+import { usePeople } from '@/components/people-context'
 import { BulkBar } from './bulk-bar'
 import { ResolutionDialog } from './resolution-dialog'
 import { applySelection } from '@/lib/selection'
@@ -38,7 +39,7 @@ const GROUP_LABEL: Record<GroupKey, string> = {
   cancelled: 'Cancelled',
 }
 
-type Tab = 'doing' | 'todo' | 'active' | 'backlog' | 'all' | 'recent' | 'held' | 'closed'
+type Tab = 'doing' | 'todo' | 'active' | 'backlog' | 'all' | 'recent' | 'mine' | 'held' | 'closed'
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   backlog: 'Backlog',
@@ -153,6 +154,7 @@ const Row = ({
   projects: { key: string; title: string }[]
 }) => {
   const stale = useRenderedClaimStale(task.heartbeat_at)
+  const { people } = usePeople()
   const ownKey = task.project_key ?? projectKey
   const ref = `${ownKey}-${task.number}`
   const { patch, overlay, error, clearError } = useQuickPatch(ref, task.updated_at)
@@ -163,6 +165,17 @@ const Row = ({
   const priority = (overlay?.priority as TaskPriority) ?? task.priority
   const type = (overlay?.type as TaskType) ?? task.type
   const labels = (overlay?.labels as string[]) ?? task.labels
+  const assigneeId = (overlay?.assignee as string) ?? task.assignee_user_id
+  const assignee =
+    assigneeId === task.assignee_user_id
+      ? task.assignee
+      : (people.find((p) => p.id === assigneeId) ?? task.assignee)
+
+  // `listPeople` only offers active users, so a task assigned to someone who
+  // has since gone inactive would otherwise fall off the picker's own list.
+  const assigneeChoices = people.some((p) => p.id === assigneeId)
+    ? people
+    : [{ id: assigneeId, name: assignee ? `${assignee.name} (inactive)` : assigneeId, email: '', active: false }, ...people]
 
   return (
     <div
@@ -375,6 +388,17 @@ const Row = ({
           </QuickSelect>
         </span>
 
+        <QuickSelect
+          value={assigneeId}
+          options={assigneeChoices.map((p) => p.id)}
+          labels={Object.fromEntries(assigneeChoices.map((p) => [p.id, p.name]))}
+          title={`Assignee: ${assignee?.name ?? 'unknown'}`}
+          onChange={(next) => void patch({ assignee: next })}
+          className="pointer-events-auto"
+        >
+          <Avatar name={assignee?.name ?? '?'} size={18} />
+        </QuickSelect>
+
         {task.claimed_by ? (
           <span
             className={cn('shrink-0', stale && 'opacity-40')}
@@ -443,6 +467,7 @@ export const ListView = ({
   /** The view toggle, so it does not need a band of its own above the list. */
   toolbarExtra?: React.ReactNode
 }) => {
+  const { currentUserId } = usePeople()
   const [tab, setTab] = useState<Tab>('doing')
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -509,6 +534,7 @@ export const ListView = ({
       if (tab === 'active')
         return t.status === 'doing' || t.status === 'in-review' || t.status === 'todo'
       if (tab === 'backlog') return t.status === 'backlog'
+      if (tab === 'mine') return t.assignee_user_id === currentUserId
       if (tab === 'held') return Boolean(t.claimed_by)
       return true
     })
@@ -519,7 +545,7 @@ export const ListView = ({
         .toLowerCase()
         .includes(q),
     )
-  }, [source, tab, query])
+  }, [source, tab, query, currentUserId])
 
   const groups = useMemo(() => {
     if (tab === 'recent') {
@@ -601,6 +627,7 @@ export const ListView = ({
             {tabButton('active', 'Active')}
             {tabButton('backlog', 'Backlog')}
             {tabButton('all', 'All')}
+            {tabButton('mine', 'Mine')}
             {tabButton('recent', 'Recent')}
             {recentlyClosed.length > 0 && tabButton('closed', 'Recently closed')}
             {tasks.some((t) => t.claimed_by) && tabButton('held', 'Held')}

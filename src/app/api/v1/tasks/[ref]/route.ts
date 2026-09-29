@@ -8,6 +8,7 @@ import { findTask, noSuchTaskMessage, renameFields, resolveParent, resolveTask }
 import { formerKeysByProject, formerRefsOf, projectsForKeys, resolveProject } from '@/lib/api/project-keys'
 import { buildDigest } from '@/lib/api/digest'
 import { mentionsOf } from '@/lib/api/mentions'
+import { peopleByIds, resolveAssignee, withAssignee } from '@/lib/api/people'
 import { removeAttachments } from '@/lib/attachments'
 import { isTerminal, updateTaskSchema, RESOLUTION_KINDS } from '@/schemas/task'
 
@@ -26,8 +27,8 @@ export const dynamic = 'force-dynamic'
 export const GET = route<{ ref: string }>({
   handler: async ({ actor, params, url }) => {
     const resolved = await resolveTask(actor, params.ref)
-    const { task } = resolved
-    if (!task) return fail('not_found', noSuchTaskMessage(params.ref, resolved), renameFields(resolved))
+    if (!resolved.task) return fail('not_found', noSuchTaskMessage(params.ref, resolved), renameFields(resolved))
+    const task = await withAssignee(resolved.task)
 
     const formerKeys = (await formerKeysByProject([String(task.project_id)])).get(String(task.project_id)) ?? []
     const former_refs = formerRefsOf(
@@ -120,6 +121,12 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
     if (body.labels !== undefined) patch.labels = body.labels
     if (body.dueDate !== undefined) patch.due_date = body.dueDate
     if (body.resolutionKind !== undefined) patch.resolution_kind = body.resolutionKind
+
+    if (body.assignee !== undefined) {
+      const owner = await resolveAssignee(body.assignee, actor.userId)
+      if (!owner.ok) return fail(owner.code, owner.error)
+      patch.assignee_user_id = owner.person.id
+    }
 
     if (body.resolution !== undefined) {
       patch.resolution = body.resolution
@@ -271,7 +278,7 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       .from('tasks')
       .update(patch)
       .eq('id', task.id)
-      .select('id, number, title, type, status, priority, labels, resolution, resolution_kind, updated_at')
+      .select('id, number, title, type, status, priority, labels, assignee_user_id, resolution, resolution_kind, updated_at')
       .single()
 
     if (error) {
@@ -284,7 +291,15 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       })
     }
 
-    await recordActivity(diffTaskEvents(actor, task.id, task, patch), actor.userId, actor.host)
+    const events = diffTaskEvents(actor, task.id, task, patch)
+    const reassigned = events.find((e) => e.event === 'assignee_changed')
+    if (reassigned) {
+      // Ids for filtering, names for reading: the feed shows who, not a uuid.
+      const people = await peopleByIds([String(reassigned.data.from ?? ''), String(reassigned.data.to ?? '')])
+      reassigned.data.from_name = people.get(String(reassigned.data.from))?.name ?? null
+      reassigned.data.to_name = people.get(String(reassigned.data.to))?.name ?? null
+    }
+    await recordActivity(events, actor.userId, actor.host)
 
     // The withdrawn answer, kept where history can still show it.
     if (reopening && task.resolution) {
@@ -302,7 +317,8 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       ], actor.userId, actor.host)
     }
 
-    return ok(alsoProjects ? { ...data, alsoProjects } : data)
+    const named = await withAssignee(data)
+    return ok(alsoProjects ? { ...named, alsoProjects } : named)
   },
 })
 

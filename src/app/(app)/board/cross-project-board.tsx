@@ -48,6 +48,7 @@ const ColumnHeading = ({ groupBy, col }: { groupBy: GroupBy; col: ColumnDef }) =
         ) : (
           <Avatar name={col.value} size={14} />
         ))}
+      {groupBy === 'assignee' && <Avatar name={col.label} size={14} />}
       <span className="truncate text-xs font-medium">{col.label}</span>
     </span>
   )
@@ -278,6 +279,13 @@ export const CrossProjectBoard = ({
     () => [...new Set(tasks.map((t) => t.claimed_by).filter((a): a is string => Boolean(a)))].sort(),
     [tasks],
   )
+  const assigneeOptions = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const t of tasks) seen.set(t.assignee_user_id, t.assignee?.name ?? t.assignee_user_id)
+    return [...seen.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [tasks])
 
   const persist = async (
     task: BoardTask,
@@ -352,7 +360,13 @@ export const CrossProjectBoard = ({
       {/* Outside the scroll box and above it: the filter popovers hang below
           this row, over the board, and must never be clipped by it. */}
       <div className="relative z-20 shrink-0">
-        <BoardToolbar filters={filters} onChange={setFilters} projects={projects} agentOptions={agentOptions} />
+        <BoardToolbar
+          filters={filters}
+          onChange={setFilters}
+          projects={projects}
+          agentOptions={agentOptions}
+          assigneeOptions={assigneeOptions}
+        />
       </div>
 
       {/* A fixed id: dnd-kit otherwise numbers its aria-describedby from a

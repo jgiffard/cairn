@@ -95,8 +95,10 @@ cairn update <REF> --status in-review                        # written but not l
 cairn done <REF> --resolution "what changed and why" --kind fixed|verified|answered|wont-fix|duplicate|superseded
 ```
 `claim` exiting 9 means another agent holds it: pick other work. Sweeping a backlog: claim
-one task for the sweep and note on the rest. A bug or spike needs a body: what happens vs
-expected, how to reproduce, what you ruled out, why now.
+one task for the sweep and note on the rest. What you file is assigned to your human;
+`--assignee <email|name>` gives it to someone else: the assignee owns the work, the claim is
+only who is running it. A bug or spike needs a body: what happens vs expected, how to
+reproduce, what you ruled out, why now.
 **Knowledge:** `cairn learn "<what is now true>" --body -` with an explicit scope —
 `--project <KEY>`, `--entity <name>` or `--global`. Use `relearn <slug>` to correct an
 entry, `verify <slug>` to confirm one.

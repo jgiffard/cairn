@@ -63,11 +63,18 @@ export const Card = ({
         </Link>
         <TypePill type={task.type} />
         <PriorityIcon priority={task.priority} />
-        {task.claimed_by && (
-          <span className="ml-auto" title={`Held by ${task.claimed_by}`}>
-            <Avatar name={task.claimed_by} size={16} />
-          </span>
-        )}
+        <span className="ml-auto flex items-center gap-1">
+          {task.assignee && (
+            <span title={`Assignee: ${task.assignee.name}`}>
+              <Avatar name={task.assignee.name} size={16} />
+            </span>
+          )}
+          {task.claimed_by && (
+            <span title={`Held by ${task.claimed_by}`}>
+              <Avatar name={task.claimed_by} size={16} />
+            </span>
+          )}
+        </span>
       </div>
 
       <Link

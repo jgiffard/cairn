@@ -9,6 +9,37 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **Every task has a human assignee** (CAIRN-310). A task recorded who filed it (`actor_id`,
+  a frozen label) and which agent is executing it (`claimed_by`), but never whose it is — and
+  those are three facts: an agent files work for its human, another agent may claim it, and
+  the human stays accountable after the claim ends. `tasks.assignee_user_id` is that human, a
+  real user and never null (migration 067, backfilled from each task's creator, falling back
+  to the project owner; reassignments are an `assignee_changed` activity event).
+  - *Default.* A task is assigned to the human behind the caller — for an agent, the user its
+    key was issued to. `assignee` names someone else: `me`, an email, a display name or a
+    user id; an unknown, ambiguous or inactive user is refused, never guessed.
+  - *API.* `assignee` on `POST /projects/{id}/tasks` and `PATCH /tasks/{ref}`,
+    `?assignee=` on the task list, and `assignee: {id, email, name, active}` on task rows.
+    `show`'s digest carries `assignee` and `createdBy`. `GET /api/v1/people` lists who can be
+    assigned, for any authenticated caller, agents included.
+  - *CLI.* `add --assignee`, `update <ref> --assignee`, `list --assignee me|<who>`, an
+    `assignee` column in `list`, an `assignee` line in what `add` and `update` print, and
+    `cairn people`. `--mine` keeps its meaning — what this agent holds now; `--assignee me`
+    is what your human owns.
+  - *MCP.* `cairn_add` and `cairn_list` take an optional `assignee`.
+  - *UI.* The assignee is shown and editable on a task.
+  - *Guidance.* The skill, `AGENTS.md`, the OpenClaw block and hook, and the session briefing
+    say the rule: assigned to your human unless `--assignee` says otherwise; the assignee owns
+    the work, the claim is only which agent is running it.
+
+### Changed
+
+- **"Unassigned" is now "Unclaimed"** wherever it meant *no agent holds this* — the board's
+  agent lanes and filter, and a task's claim field. With a real assignee on every task, the
+  old word said the opposite of the truth.
+
 ## [0.9.0] — 2026-09-28
 
 ### Added

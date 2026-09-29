@@ -24,6 +24,8 @@ const task = (overrides: Partial<BoardTask> = {}): BoardTask => ({
   labels: [],
   due_date: null,
   position: 0,
+  assignee_user_id: 'u1',
+  assignee: { id: 'u1', email: 'alice@example.com', name: 'Alice', active: true },
   claimed_by: null,
   heartbeat_at: null,
   blocked_reason: null,
@@ -46,6 +48,7 @@ const noFilters: BoardFilters = {
   priorities: [],
   labels: [],
   agents: [],
+  assignees: [],
 }
 
 const projects: BoardProject[] = [
@@ -63,6 +66,7 @@ describe('parseFilters / serializeFilters', () => {
       priorities: ['high', 'urgent'],
       labels: ['frontend'],
       agents: ['claude-code'],
+      assignees: ['u1'],
     }
     expect(parseFilters(serializeFilters(filters))).toEqual(filters)
   })
@@ -107,6 +111,12 @@ describe('matchesFilters', () => {
     expect(matchesFilters(task({ labels: ['b', 'c'] }), filters)).toBe(true)
     expect(matchesFilters(task({ labels: ['c'] }), filters)).toBe(false)
   })
+
+  it('filters by assignee id, unlike agent there is no unassigned sentinel', () => {
+    const filters = { ...noFilters, assignees: ['u1'] }
+    expect(matchesFilters(task({ assignee_user_id: 'u1' }), filters)).toBe(true)
+    expect(matchesFilters(task({ assignee_user_id: 'u2' }), filters)).toBe(false)
+  })
 })
 
 describe('groupValue / applyGroupValue', () => {
@@ -125,12 +135,34 @@ describe('groupValue / applyGroupValue', () => {
     const released = applyGroupValue(claimed, 'agent', UNASSIGNED)
     expect(released.claimed_by).toBeNull()
   })
+
+  it('groups by assignee id, every task has one', () => {
+    const t = task({ assignee_user_id: 'u1', assignee: { id: 'u1', email: 'a@x.com', name: 'Alice', active: true } })
+    expect(groupValue(t, 'assignee')).toBe('u1')
+    const moved = applyGroupValue(t, 'assignee', 'u2')
+    expect(groupValue(moved, 'assignee')).toBe('u2')
+  })
 })
 
 describe('columnsFor', () => {
-  it('always includes Unassigned first for agent grouping, even with no claims', () => {
+  it('always includes Unclaimed first for agent grouping, even with no claims', () => {
     const cols = columnsFor('agent', [task({ claimed_by: null })], projects)
-    expect(cols[0]).toEqual({ value: UNASSIGNED, label: 'Unassigned' })
+    expect(cols[0]).toEqual({ value: UNASSIGNED, label: 'Unclaimed' })
+  })
+
+  it('names assignee columns off the task rows, not a sentinel', () => {
+    const cols = columnsFor(
+      'assignee',
+      [
+        task({ assignee_user_id: 'u2', assignee: { id: 'u2', email: 'b@x.com', name: 'Bob', active: true } }),
+        task({ assignee_user_id: 'u1', assignee: { id: 'u1', email: 'a@x.com', name: 'Alice', active: true } }),
+      ],
+      projects,
+    )
+    expect(cols).toEqual([
+      { value: 'u1', label: 'Alice' },
+      { value: 'u2', label: 'Bob' },
+    ])
   })
 
   it('keeps a project column even when every one of its tasks is filtered out elsewhere', () => {
@@ -152,10 +184,19 @@ describe('lanesFor', () => {
     expect(lanes.map((l) => l.value)).toEqual(['CAI'])
   })
 
-  it('sorts Unassigned first among agent lanes', () => {
+  it('sorts Unclaimed first among agent lanes', () => {
     const visible = [task({ claimed_by: 'zeta' }), task({ claimed_by: null })]
     const lanes = lanesFor('agent', visible, projects)
     expect(lanes.map((l) => l.value)).toEqual([UNASSIGNED, 'zeta'])
+    expect(lanes[0]).toEqual({ value: UNASSIGNED, label: 'Unclaimed' })
+  })
+
+  it('names assignee lanes off the visible task rows', () => {
+    const visible = [
+      task({ assignee_user_id: 'u1', assignee: { id: 'u1', email: 'a@x.com', name: 'Alice', active: true } }),
+    ]
+    const lanes = lanesFor('assignee', visible, projects)
+    expect(lanes).toEqual([{ value: 'u1', label: 'Alice' }])
   })
 })
 

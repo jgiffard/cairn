@@ -285,3 +285,53 @@ describe('the briefing', () => {
     expect(stdout).not.toContain('Start with')
   })
 })
+
+/**
+ * The assignee is whose the task is; the claim is which agent is on it. The
+ * CLI only carries the word — `me`, an email, a name — and the server resolves
+ * it, so these assert what reached the wire and that the answer names a person
+ * in one line rather than five.
+ */
+describe('the assignee (CAIRN-310)', () => {
+  const alice = { id: 'u-1', email: 'alice@acme.io', name: 'Alice', active: true }
+
+  it('is left to the server when add does not name one, and printed by name', async () => {
+    const seen: Seen[] = []
+    const base = await serve((req) => {
+      if (req.path.startsWith('/api/v1/search')) return { results: [] }
+      return { ...created, assignee_user_id: alice.id, assignee: alice }
+    }, seen)
+    const { code, stdout } = await run(['add', 'Wire the relay', '--project', 'ACME'], base)
+    expect(code).toBe(0)
+    const post = seen.find((s) => s.method === 'POST' && s.path.endsWith('/projects/ACME/tasks'))
+    expect(post?.body).not.toHaveProperty('assignee')
+    expect(stdout).toContain('assignee\tAlice')
+    expect(stdout).not.toContain('assignee.email')
+    expect(stdout).not.toContain('assignee_user_id')
+  })
+
+  it('is sent as given by add, update and list', async () => {
+    const seen: Seen[] = []
+    const base = await serve((req) => {
+      if (req.path.startsWith('/api/v1/search')) return { results: [] }
+      if (req.path.includes('/tasks?')) return { count: 1, tasks: [{ number: 7, status: 'todo', type: 'bug', priority: 'high', title: 'T', claimed_by: 'codex · Bob', assignee: alice, project: { key: 'ACME' } }] }
+      return created
+    }, seen)
+    await run(['add', 'Wire the relay', '--project', 'ACME', '--assignee', 'bob@acme.io'], base)
+    await run(['update', 'ACME-7', '--assignee', 'me'], base)
+    const { stdout } = await run(['list', 'ACME', '--assignee', 'me'], base)
+    expect(seen.find((s) => s.method === 'POST')?.body?.assignee).toBe('bob@acme.io')
+    expect(seen.find((s) => s.method === 'PATCH')?.body?.assignee).toBe('me')
+    expect(seen.some((s) => s.method === 'GET' && s.path.includes('assignee=me'))).toBe(true)
+    const [, header, row] = stdout.trim().split('\n')
+    expect(header).toBe('ref\tstatus\ttype\tpriority\tassignee\theld\tanswered\ttitle')
+    expect(row).toContain('Alice\tcodex · Bob')
+  })
+
+  it('people lists who can be assigned, name and email only', async () => {
+    const base = await serve(() => [alice], [])
+    const { code, stdout } = await run(['people'], base)
+    expect(code).toBe(0)
+    expect(stdout.trim().split('\n')).toEqual(['#1', 'name\temail', 'Alice\talice@acme.io'])
+  })
+})
