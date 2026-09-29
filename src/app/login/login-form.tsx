@@ -7,6 +7,7 @@ import { Button, Input } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
 import { BrandMark, useBrand } from '@/components/brand'
 import { CairnIllustration } from './cairn-illustration'
+import { safeRedirect } from '@/lib/auth/login-redirect'
 
 /**
  * `?redirect=` comes from the URL bar, so it is attacker-controlled. Only a
@@ -14,8 +15,6 @@ import { CairnIllustration } from './cairn-illustration'
  * despite the leading slash, and would turn the login page into an open
  * redirect.
  */
-const safeRedirect = (value: string | null) =>
-  value && value.startsWith('/') && !value.startsWith('//') ? value : '/'
 
 /** The four things the memory holds, for someone signing in for the first time. */
 const PILLARS = [

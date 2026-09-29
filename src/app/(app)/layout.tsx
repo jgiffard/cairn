@@ -14,12 +14,13 @@ import { MobileNavProvider } from '@/components/mobile-nav-context'
 import { ToastHost } from '@/components/toast'
 import { HealthBanner } from '@/components/health-banner'
 import { LiveStatusIndicator, LiveStatusProvider } from '@/components/live-status'
+import { loginRedirectTarget } from '@/lib/auth/login-redirect-server'
 
 const AppLayout = async ({ children }: { children: React.ReactNode }) => {
   const user = await currentUser()
   // Middleware enforces this; a layout renders data and should not assume
   // the guard ran.
-  if (!user) redirect('/login')
+  if (!user) redirect(await loginRedirectTarget())
 
   const [projects, formerKeys, slugs, people] = await Promise.all([
     listProjects(user.id),

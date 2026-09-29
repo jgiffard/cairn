@@ -27,6 +27,10 @@ const DELIBERATELY_STATIC: Record<string, string> = {
   'vitals/page.tsx':
     'a five-minute cached rollup — refreshing it faster than the cache would repaint identical numbers',
   'api-docs/page.tsx': 'the spec changes on deploy, not while you read',
+  'connect/page.tsx': 'a bare code-entry form; there is nothing on it that can go stale',
+  'connect/[code]/page.tsx':
+    'one pairing, decided once, by whoever has the tab open; the client component already refreshes ' +
+    'itself into a terminal state after its own Approve/Deny, and there is no one else\'s change to catch up to',
 }
 
 const pages = (dir: string, prefix = ''): string[] =>

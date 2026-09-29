@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { SESSION_COOKIE } from '@/lib/auth/cookie'
+import { REQUESTED_PATH_HEADER } from '@/lib/auth/login-redirect'
 
 /**
  * Server-side route protection.
@@ -40,7 +41,11 @@ export const middleware = async (req: NextRequest) => {
   // to send it straight back to / — a redirect loop with no way out but
   // clearing cookies. The login page decides, against Postgres.
 
-  return NextResponse.next({ request: req })
+  // So a layout that finds the session invalid can still send the visitor
+  // back here after signing in. Always overwritten: never the client's own.
+  const forwarded = new Headers(req.headers)
+  forwarded.set(REQUESTED_PATH_HEADER, `${req.nextUrl.pathname}${req.nextUrl.search}`)
+  return NextResponse.next({ request: { headers: forwarded } })
 }
 
 export const config = {
