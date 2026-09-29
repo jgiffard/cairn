@@ -1742,8 +1742,13 @@ const request = async (method, path, body, { soft = false } = {}) => {
       ),
       ...(payload.taskReferences ?? []).map((r) => `  [[${r}]] is a task ref — write it bare as ${String(r).toUpperCase()}`),
     ]
+    // A refused body lists what to fix. The server puts the list in `error`
+    // too, for clients that print nothing else; this covers one that does not.
+    const problems = (payload.problems ?? []).filter((p) => !String(payload.error).includes(p))
     const extra = refs.length
       ? `\n${refs.join('\n')}`
+      : problems.length
+      ? `\n${problems.map((p) => `  - ${p}`).join('\n')}`
       : payload.suggestedResolution
       ? `\nsuggested: ${payload.suggestedResolution}`
       : payload.issues
@@ -2433,6 +2438,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
   output
     --json | --pretty              default is TSV: count line, header, rows
     --body -  /  --resolution -    read the value from stdin
+    bodies are markdown: ## headings, - lists, code in backticks (a wall of text is refused)
 
   env: CAIRN_BASE_URL, CAIRN_API_KEY
 `

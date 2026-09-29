@@ -353,7 +353,12 @@ const TOOLS = [
         project: { type: 'string' },
         type: { type: 'string', enum: ['feature', 'bug', 'improvement', 'chore', 'spike', 'docs'] },
         priority: { type: 'string', enum: ['urgent', 'high', 'medium', 'low'] },
-        body: { type: 'string', description: 'Markdown description.' },
+        body: {
+          type: 'string',
+          description:
+            'Markdown: "## " headings, "- " lists, paths and identifiers in backticks. ' +
+            'A wall of text is refused, with a list of what to fix.',
+        },
         assignee: {
           type: 'string',
           description:
