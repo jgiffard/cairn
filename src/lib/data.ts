@@ -501,10 +501,15 @@ export const listAllTasks = async (
     project_key: (Array.isArray(t.project) ? t.project[0]?.key : t.project?.key) ?? '',
   })
 
+  // Named in one query across both lists. Without it every row on the home
+  // page drew its assignee as "?": the id came back, the person never did.
+  const recent = (((closedRows as { data?: unknown }).data ?? []) as Row[]).map(withKey)
+  const named = await withAssignees([...tasks, ...recent])
+
   return {
-    tasks,
+    tasks: named.slice(0, tasks.length),
     closedHidden: includeClosed ? 0 : (totals.count ?? 0),
-    recentlyClosed: (((closedRows as { data?: unknown }).data ?? []) as Row[]).map(withKey),
+    recentlyClosed: named.slice(tasks.length),
   }
 }
 

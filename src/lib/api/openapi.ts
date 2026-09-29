@@ -639,9 +639,12 @@ export const openapiSpec = () => ({
         summary: 'Create a task',
         description:
           'Assigned to the caller\'s user unless `assignee` names someone else. An agent\'s ' +
-          'caller is the human who owns its key.',
+          'caller is the human who owns its key. A bug or spike needs a `description` of 40 ' +
+          'characters or more unless `forceEmpty`. From an agent, a `description` that reads as a ' +
+          'wall of text — capitals for headings, a long unbroken paragraph, paths and calls outside ' +
+          'backticks — is refused with `validation_failed` and `problems`, one fix each.',
         requestBody: body(json(createTaskSchema)),
-        responses: { '201': okResponse('Created.', taskSummary), '404': errorResponse },
+        responses: { '201': okResponse('Created.', taskSummary), '400': errorResponse, '404': errorResponse },
       },
     },
     '/tasks/{ref}': {
@@ -658,7 +661,8 @@ export const openapiSpec = () => ({
           '`former_refs` lists the refs the task was actually issued under — only keys retired ' +
           'after it was created, so a task filed after a rename claims none. A retired-key ref ' +
           'to a task created after the rename is a 404 that names the live ref, because that ' +
-          'old ref was never issued.',
+          'old ref was never issued. The digest names the `assignee` and `createdBy`, the actor ' +
+          'that filed it.',
         parameters: [
           { name: 'view', in: 'query', schema: { type: 'string', enum: ['full', 'digest'], default: 'full' } },
         ],
@@ -686,7 +690,10 @@ export const openapiSpec = () => ({
           'Omitted fields are left alone. Moving to `done` or `cancelled` requires ' +
           '`resolution`, otherwise the request is refused with `resolution_required`. ' +
           '`project` moves the task: per-project numbering means it is renumbered and ' +
-          'its ref changes, so anything referring to the old ref goes stale.',
+          'its ref changes, so anything referring to the old ref goes stale. `assignee` ' +
+          'reassigns it (`me`, an email, a display name or a user id) and is never cleared; ' +
+          '`dueDate: null` clears the due date. An agent\'s changed `description` meets the same ' +
+          'readable-markdown check as on create.',
         requestBody: body(json(updateTaskSchema)),
         responses: {
           '200': okResponse('Updated.', taskSummary),
@@ -1302,6 +1309,7 @@ export const openapiSpec = () => ({
     '/users': {
       get: {
         summary: 'List users (administrator browser session only)',
+        description: 'Each user carries `openTaskCount`: the open tasks they are the assignee of.',
         responses: { '200': okResponse('Users.'), '403': errorResponse },
       },
       post: {

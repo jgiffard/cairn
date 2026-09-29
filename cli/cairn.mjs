@@ -2274,17 +2274,18 @@ const renderContext = (d, { fileOnly = false } = {}) => {
 const BRIEFING_RULES = [
   'Start with: cairn check "<subject>". Claim what you work (agents\' add claims it); one task per sweep.',
   'Dead end: note --kind attempt. Before yielding: checkpoint. Not landed: update --status in-review.',
-  'Close: done --kind fixed|verified|answered. Filing for someone else: add --assignee.',
+  'Close: done --kind fixed|verified|answered. Bodies: markdown. For someone else: add --assignee.',
 ]
 
 const truncate = (s, n) => (!s ? '' : s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
 /**
- * A written task as TSV names its assignee in one line, not five: the name is
- * what a reader checks, and the id and email are in --json.
+ * A task row as TSV names its assignee in one line, not five: the name is
+ * what a reader checks, and the id and email are in --json. Anything without
+ * the nested object — the digest's plain name, a claim's raw row — passes.
  */
 const named = (task) => {
-  if (FORMAT !== 'tsv' || !task?.assignee) return task
+  if (FORMAT !== 'tsv' || typeof task?.assignee !== 'object' || !task.assignee) return task
   const { assignee_user_id: _id, assignee, ...rest } = task
   return { ...rest, assignee: assignee.name }
 }
@@ -2314,7 +2315,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    your human's work first, anyone else's says whose
     cairn list [--project K] [--status S] [--type T] [--label L] [--mine] [--assignee me|<who>]
                                    --mine: what this agent holds now; --assignee: whose it is
-    cairn show <ref>               e.g. CAI-42
+    cairn show <ref> [--full]      e.g. CAI-42; a digest unless --full
     cairn log <ref> [--kind K]     the work log
     cairn projects
     cairn people                   who work can be assigned to
@@ -2328,7 +2329,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    (the default for an agent runtime, unless it
                                    already holds work here or similar open work
                                    exists; --no-start to only file it)
-    cairn update <ref> [--title T] [--status S] [--type T] [--priority P] [--assignee <who>]
+    cairn update <ref> [--title T] [--status S] [--type T] [--priority P] [--assignee <who>] [--body -]
     cairn update <ref> --also-project HM,AT      work that spans several projects
     cairn update <ref> --project OTHER      moves it; the ref changes
     cairn note <ref> "<text>" [--kind note|finding|decision|attempt|handoff]
@@ -2389,8 +2390,9 @@ const HELP = `cairn — agent-first task tracker and shared memory
 
   memory
     cairn context [--scope project|all] [--project K]
-                                   what you hold, what is in flight,
-                                   where the last session here stopped, what is known;
+                                   what you hold, what is in flight, your human's work
+                                   nobody is on, where the last session here stopped,
+                                   what is known;
                                    project scope filters tasks and sessions (default: all)
     cairn learn "<title>" --body - record what we now know
                                    --allow-dangling  keep a [[ref]] the store cannot resolve
@@ -2461,7 +2463,7 @@ const closeTask = async (status, defaultKind) => {
     body.resolutionKind = 'duplicate'
   }
   const closed = await request('PATCH', `/api/v1/tasks/${ref}`, body)
-  emit(closed)
+  emit(named(closed))
   if (FORMAT !== 'tsv' || status !== 'done') return
 
   // `fixed` is a claim of authorship, and it was being recorded for audits
@@ -2596,7 +2598,7 @@ const commands = {
     // clipped body, and a note of what was withheld. `--full` for everything.
     const suffix = flags.full ? '' : '?view=digest'
     const data = await request('GET', `/api/v1/tasks/${ref}${suffix}`)
-    emit(data)
+    emit(named(data))
     if (FORMAT === 'tsv' && data.omitted) {
       const { descriptionBytes, attemptsAndNotes, tokensToFetchFull } = data.omitted
       if (descriptionBytes || attemptsAndNotes) {
@@ -3145,7 +3147,7 @@ const commands = {
 
   async claim() {
     const ref = need(positional[0], 'usage: cairn claim <ref>')
-    emit(await request('POST', `/api/v1/tasks/${ref}/claim`, {}))
+    emit(named(await request('POST', `/api/v1/tasks/${ref}/claim`, {})))
 
     // What already bears on it, at the moment it is picked up (CAIRN-268). A
     // recall nobody remembers to run is one that does not happen, and the case
@@ -3165,7 +3167,7 @@ const commands = {
     process.stderr.write(`${lines.join('\n')}\n`)
   },
   async beat() {
-    emit(await request('POST', `/api/v1/tasks/${need(positional[0], 'usage: cairn beat <ref>')}/beat`, {}))
+    emit(named(await request('POST', `/api/v1/tasks/${need(positional[0], 'usage: cairn beat <ref>')}/beat`, {})))
   },
   /**
    * `--force` releases a claim another session holds. The server refuses that
@@ -3174,21 +3176,21 @@ const commands = {
    */
   async release() {
     const ref = need(positional[0], 'usage: cairn release <ref> [--force]')
-    emit(await request('POST', `/api/v1/tasks/${ref}/release`, { force: Boolean(flags.force) }))
+    emit(named(await request('POST', `/api/v1/tasks/${ref}/release`, { force: Boolean(flags.force) })))
   },
   async checkpoint() {
     const ref = need(positional[0], 'usage: cairn checkpoint <ref> --summary "<state>"')
     const summary = await resolveValue(need(flags.summary, 'a --summary is required'))
-    emit(await request('POST', `/api/v1/tasks/${ref}/checkpoint`, { summary }))
+    emit(named(await request('POST', `/api/v1/tasks/${ref}/checkpoint`, { summary })))
   },
   async block() {
     const ref = need(positional[0], 'usage: cairn block <ref> --reason "<why>"')
     const reason = await resolveValue(need(flags.reason, 'a --reason is required'))
-    emit(await request('POST', `/api/v1/tasks/${ref}/block`, { reason }))
+    emit(named(await request('POST', `/api/v1/tasks/${ref}/block`, { reason })))
   },
   async unblock() {
     const ref = need(positional[0], 'usage: cairn unblock <ref>')
-    emit(await request('POST', `/api/v1/tasks/${ref}/block`, { reason: null }))
+    emit(named(await request('POST', `/api/v1/tasks/${ref}/block`, { reason: null })))
   },
 
   // --- knowledge ---------------------------------------------------------

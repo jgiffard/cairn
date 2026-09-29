@@ -12,9 +12,9 @@ OpenClaw gets Cairn through three things, and each one has a trap that fails sil
 
 `hooks/openclaw/cairn-briefing/` is a standard OpenClaw hook (`HOOK.md` + `handler.ts`).
 On `agent:bootstrap` it runs `cairn context --cwd <workspaceDir>` as `CAIRN_AGENT=openclaw`,
-with a 5 second deadline, and adds one bootstrap file, `CAIRN.md`: a seven-line lifecycle
-rule followed by the live briefing (what the agent holds, what is in flight, where the last
-session stopped). If the CLI is missing, slow or failing, the rule is injected alone; if
+with a 5 second deadline, and adds one bootstrap file, `CAIRN.md`: an eight-line lifecycle
+rule followed by the live briefing (what the agent holds, what is in flight, its human's
+work nobody is on, where the last session stopped). If the CLI is missing, slow or failing, the rule is injected alone; if
 anything else goes wrong, the session starts as if the hook were not there.
 
 Install it as the user the gateway runs as:
@@ -79,7 +79,7 @@ similar), disable it once this one is linked, or the agent reads two briefings.
 
 The hook carries the rule, but `AGENTS.md` is what the agent reads as policy, so it must say
 the same thing. Replace every Cairn section in the workspace's `AGENTS.md` with one block
-like this (about 1.5 KB), and point any other file that restates the rules (a `SOUL.md`
+like this (under 2 KB), and point any other file that restates the rules (a `SOUL.md`
 line, say) at it instead of repeating them:
 
 ````markdown
@@ -96,9 +96,10 @@ cairn done <REF> --resolution "what changed and why" --kind fixed|verified|answe
 ```
 `claim` exiting 9 means another agent holds it: pick other work. Sweeping a backlog: claim
 one task for the sweep and note on the rest. What you file is assigned to your human;
-`--assignee <email|name>` gives it to someone else: the assignee owns the work, the claim is
+`--assignee <email|name>` gives it to someone else (`cairn people` lists who): the assignee owns the work, the claim is
 only who is running it. A bug or spike needs a body: what happens vs expected, how to
-reproduce, what you ruled out, why now.
+reproduce, what you ruled out, why now. Bodies are markdown — `##` headings, lists, paths in
+backticks; the API refuses an agent's wall of text.
 **Knowledge:** `cairn learn "<what is now true>" --body -` with an explicit scope —
 `--project <KEY>`, `--entity <name>` or `--global`. Use `relearn <slug>` to correct an
 entry, `verify <slug>` to confirm one.

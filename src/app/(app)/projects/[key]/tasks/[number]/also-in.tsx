@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ProjectIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { useMutate } from '@/lib/api/use-mutate'
-import { LABEL } from './styles'
+import { ROW, ROW_LABEL } from './styles'
 
 /**
  * The projects a task belongs to beyond the one that owns its ref.
@@ -57,37 +57,35 @@ export const AlsoIn = ({
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between gap-2">
-        {/* Matches every other label down this sidebar, from the one
-            definition they all share. */}
-        <span className={LABEL}>Also in</span>
+    <div className="group/dep flex flex-col gap-1">
+      <div className={cn(ROW, 'justify-between')}>
+        <span className={ROW_LABEL}>Also in</span>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+          {current.length === 0 && !open ? (
+            <span className="text-fg-subtle text-[0.75rem]">Only here</span>
+          ) : (
+            current.map((key) => (
+              <span
+                key={key}
+                className="border-border text-fg-muted inline-flex h-[1.25rem] shrink-0 items-center gap-1 rounded-full border pr-2 pl-1.5 text-[0.75rem]"
+              >
+                <ProjectIcon size={11} projectKey={key} />
+                {key}
+              </span>
+            ))
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 rounded px-1.5 py-px text-[0.6875rem] transition-colors duration-[var(--dur-1)]"
+          className={cn(
+            'text-fg-subtle hover:text-fg hover:bg-surface-hover shrink-0 rounded px-1.5 py-px text-[0.6875rem] transition-[opacity,color,background-color] duration-[var(--dur-1)]',
+            open ? 'opacity-100' : 'opacity-0 group-hover/dep:opacity-100 focus-visible:opacity-100',
+          )}
         >
           {open ? 'Done' : 'Edit'}
         </button>
       </div>
-
-      {current.length === 0 && !open && (
-        <span className="text-fg-subtle text-[0.75rem]">Only {homeKey}</span>
-      )}
-
-      {current.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {current.map((key) => (
-            <span
-              key={key}
-              className="border-border text-fg-muted inline-flex h-[1.25rem] items-center gap-1 rounded-full border pr-2 pl-1.5 text-[0.75rem]"
-            >
-              <ProjectIcon size={11} projectKey={key} />
-              {key}
-            </span>
-          ))}
-        </div>
-      )}
 
       {open && (
         <div

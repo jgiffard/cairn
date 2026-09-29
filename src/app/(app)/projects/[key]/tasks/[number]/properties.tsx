@@ -2,11 +2,11 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronsUpDown } from 'lucide-react'
 import { Avatar, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
 import { usePeople } from '@/components/people-context'
-import { Input, InlineInput } from '@/components/ui/control'
+import { InlineInput } from '@/components/ui/control'
 import { ResolutionDialog } from '../../resolution-dialog'
 import { LabelEditor } from '../../label-editor'
 import { AlsoIn } from './also-in'
@@ -22,10 +22,19 @@ import {
 } from '@/schemas/task'
 import { cn } from '@/lib/utils'
 import { RelativeTime } from '@/components/relative-time'
-import { useRenderedClaimStale } from '@/lib/use-mounted'
+import { dueDateDisplay, fullDateTime, todayDate } from '@/lib/dates'
+import { useMounted, useRenderedClaimStale } from '@/lib/use-mounted'
 import type { Task, Project, Relation } from '@/lib/data'
 import { useMutate } from '@/lib/api/use-mutate'
-import { LABEL } from './styles'
+import { ROW, ROW_LABEL } from './styles'
+
+/**
+ * `claude-code · Cal` on Cal's own task says Cal twice in a narrow column.
+ * The agent alone is enough when its human is the assignee; anyone else's
+ * agent keeps the name, because then it is the point.
+ */
+const agentOf = (label: string, assignee: string | undefined) =>
+  assignee && label.endsWith(` · ${assignee}`) ? label.slice(0, -` · ${assignee}`.length) : label
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   backlog: 'Backlog',
@@ -36,29 +45,18 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   cancelled: 'Cancelled',
 }
 
-const Section = ({
-  title,
-  children,
-  className,
-}: {
-  title: string
-  children: React.ReactNode
-  className?: string
-}) => (
-  <div className={cn('flex flex-col gap-1.5', className)}>
-    <span className={LABEL}>{title}</span>
-    {children}
-  </div>
-)
-
 /**
  * An editable value: the row lights as a list row does — a fill and the trail
  * marker — and a chevron surfaces to say it opens. Keyboard focus on the
  * invisible select lights it the same way, since the select itself cannot show
  * a ring.
+ *
+ * `overflow-hidden` is the backstop: a value that refuses to shrink (a type
+ * pill at its widest word) clips inside its own row instead of pushing the
+ * pane into a horizontal scrollbar.
  */
 const EDITABLE =
-  'row-hover group/edit relative -mx-1.5 flex h-[1.75rem] items-center gap-2 rounded-md px-1.5 ' +
+  'row-hover group/edit relative -mx-1.5 flex h-[1.75rem] items-center gap-2 overflow-hidden rounded-md px-1.5 ' +
   'has-[:focus-visible]:bg-surface-hover has-[:focus-visible]:shadow-[inset_2px_0_0_var(--accent)]'
 
 const Affordance = () => (
@@ -70,11 +68,38 @@ const Affordance = () => (
 )
 
 /**
+ * The label-and-value shell every click-to-edit row shares. `select` renders
+ * last so its absolute overlay sits above the label too — a click anywhere on
+ * the row opens it, not just the value.
+ */
+const EditableRow = ({
+  label,
+  title,
+  select,
+  children,
+}: {
+  label: string
+  title?: string
+  select: React.ReactNode
+  children: React.ReactNode
+}) => (
+  <div className={EDITABLE}>
+    <span className={ROW_LABEL}>{label}</span>
+    <span className="flex min-w-0 flex-1 items-center gap-1.5" title={title}>
+      {children}
+    </span>
+    <Affordance />
+    {select}
+  </div>
+)
+
+/**
  * A property row that opens a native select on click but renders as plain
  * text with an icon — the control chrome would dominate a narrow sidebar,
  * and these are read far more often than they are changed.
  */
 const SelectRow = <T extends string>({
+  label,
   value,
   options,
   labels,
@@ -82,6 +107,7 @@ const SelectRow = <T extends string>({
   onChange,
   disabled,
 }: {
+  label: string
   value: T
   options: readonly T[]
   labels?: Record<string, string>
@@ -89,24 +115,28 @@ const SelectRow = <T extends string>({
   onChange: (v: T) => void
   disabled?: boolean
 }) => (
-  <div className={EDITABLE}>
+  <EditableRow
+    label={label}
+    title={labels?.[value] ?? value}
+    select={
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value as T)}
+        className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        aria-label={labels?.[value] ?? value}
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {labels?.[o] ?? o}
+          </option>
+        ))}
+      </select>
+    }
+  >
     {icon}
-    <span className="text-fg text-[0.8125rem]">{labels?.[value] ?? value}</span>
-    <Affordance />
-    <select
-      value={value}
-      disabled={disabled}
-      onChange={(e) => onChange(e.target.value as T)}
-      className="absolute inset-0 cursor-pointer opacity-0"
-      aria-label={labels?.[value] ?? value}
-    >
-      {options.map((o) => (
-        <option key={o} value={o}>
-          {labels?.[o] ?? o}
-        </option>
-      ))}
-    </select>
-  </div>
+    <span className="text-fg min-w-0 truncate text-[0.8125rem]">{labels?.[value] ?? value}</span>
+  </EditableRow>
 )
 
 /**
@@ -156,31 +186,109 @@ const ParentEditor = ({
           if (e.key === 'Enter') void save()
           if (e.key === 'Escape') setEditing(false)
         }}
-        className="h-[1.75rem] text-[0.75rem]"
+        className="h-[1.75rem] min-w-0 flex-1 text-[0.75rem]"
       />
     )
   }
 
   return (
-    <div className="flex h-[1.75rem] items-center justify-between gap-2">
+    <div className="group/row flex min-w-0 flex-1 items-center gap-2">
       {parent ? (
         <Link
           href={`/projects/${parent.ref.slice(0, parent.ref.lastIndexOf('-'))}/tasks/${parent.ref.slice(parent.ref.lastIndexOf('-') + 1)}`}
-          className="text-fg-muted hover:text-fg min-w-0 truncate text-[0.8125rem] transition-colors"
+          className="text-fg-muted hover:text-fg min-w-0 flex-1 truncate text-[0.8125rem] transition-colors"
           title={parent.title}
         >
           {parent.ref}
         </Link>
       ) : (
-        <span className="text-fg-subtle text-[0.8125rem]">None</span>
+        <span className="text-fg-subtle min-w-0 flex-1 truncate text-[0.8125rem]">None</span>
       )}
       <button
         type="button"
         onClick={startEdit}
-        className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 shrink-0 rounded px-1.5 py-px text-[0.6875rem] transition-colors duration-[var(--dur-1)]"
+        className="text-fg-subtle hover:text-fg hover:bg-surface-hover shrink-0 rounded px-1.5 py-px text-[0.6875rem] opacity-0 transition-[opacity,color,background-color] duration-[var(--dur-1)] group-hover/row:opacity-100 focus-visible:opacity-100"
       >
         Edit
       </button>
+    </div>
+  )
+}
+
+/**
+ * The due date, shown as a plain row rather than a native `<input type="date">`
+ * sitting in the open — WebKit fills an empty one with today's date in grey,
+ * which reads as a real value, and the control's own intrinsic width is wider
+ * than this column regardless. The input still exists, positioned exactly
+ * over the row so the OS picker anchors where the row is, but invisible and
+ * unclickable — the button in front of it is what the reader actually sees
+ * and clicks.
+ */
+const DueDateRow = ({
+  label,
+  value,
+  overdue,
+  onPick,
+  onClear,
+}: {
+  label: string
+  value: string | null
+  overdue: boolean
+  onPick: (next: string | null) => void
+  onClear: () => void
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const open = () => {
+    const el = inputRef.current
+    if (!el) return
+    const withPicker = el as HTMLInputElement & { showPicker?: () => void }
+    if (typeof withPicker.showPicker === 'function') {
+      try {
+        withPicker.showPicker()
+        return
+      } catch {
+        // Falls through to the focus/click fallback below.
+      }
+    }
+    el.focus()
+    el.click()
+  }
+
+  return (
+    <div className={cn(ROW, 'relative')}>
+      <span className={ROW_LABEL}>Due date</span>
+      <button
+        type="button"
+        onClick={open}
+        className={cn(
+          'flex h-[1.5rem] min-w-0 flex-1 items-center rounded px-1 text-left text-[0.8125rem] transition-colors',
+          overdue ? 'text-danger' : value ? 'text-fg' : 'text-fg-subtle',
+        )}
+      >
+        <span className="min-w-0 truncate" title={value ? fullDateTime(value) : undefined}>
+          {label}
+        </span>
+      </button>
+      {value && (
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label="Clear due date"
+          className="text-fg-subtle hover:text-fg shrink-0 px-0.5 text-[0.8125rem] leading-none"
+        >
+          ×
+        </button>
+      )}
+      <input
+        ref={inputRef}
+        type="date"
+        value={value ?? ''}
+        onChange={(e) => onPick(e.target.value || null)}
+        aria-label="Due date"
+        tabIndex={-1}
+        className="pointer-events-none absolute inset-0 opacity-0"
+      />
     </div>
   )
 }
@@ -207,6 +315,7 @@ export const Properties = ({
   const router = useRouter()
   const request = useMutate()
   const { people } = usePeople()
+  const mounted = useMounted()
   const stale = useRenderedClaimStale(task.heartbeat_at)
   const [pendingClose, setPendingClose] = useState<TaskStatus | null>(null)
   const [moving, setMoving] = useState(false)
@@ -300,12 +409,23 @@ export const Properties = ({
     void patch({ status: next })
   }
 
+  const due = dueDateDisplay(shown.due_date, isTerminal(shown.status), todayDate())
+  // Gated behind `mounted` for the same reason `useRenderedClaimStale` is:
+  // "today" is read off the reader's clock, which the server cannot know, so
+  // the first render — server and client alike — treats nothing as overdue.
+  const overdue = mounted && due.overdue
+
+  const assigneeTitle = shown.assignee
+    ? shown.assignee.email && shown.assignee.email !== shown.assignee.name
+      ? `${shown.assignee.name} · ${shown.assignee.email}`
+      : shown.assignee.name
+    : undefined
+
   return (
-    <aside
-      className="border-border flex shrink-0 flex-row flex-wrap gap-x-5 gap-y-3 border-b px-4 py-3 lg:w-[13.75rem] lg:flex-col lg:gap-5 lg:border-b-0 lg:px-4 lg:py-5"
-    >
-      <Section title="Properties">
+    <aside className="flex w-full shrink-0 flex-col overflow-x-hidden px-4 py-5">
+      <div className="flex flex-col gap-0.5">
         <SelectRow
+          label="Status"
           value={shown.status}
           options={TASK_STATUSES}
           labels={STATUS_LABEL}
@@ -313,133 +433,129 @@ export const Properties = ({
           onChange={onStatus}
         />
         <SelectRow
+          label="Priority"
           value={shown.priority}
           options={TASK_PRIORITIES}
           icon={<PriorityIcon priority={shown.priority} />}
           onChange={(v: TaskPriority) => void patch({ priority: v })}
         />
-      </Section>
+        <EditableRow
+          label="Type"
+          select={
+            <select
+              value={shown.type}
+              onChange={(e) => void patch({ type: e.target.value as TaskType })}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              aria-label="Type"
+            >
+              {TASK_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          }
+        >
+          <TypePill type={shown.type} />
+        </EditableRow>
 
-      {/* The human who owns the work, editable — distinct from who is
-          currently holding it below. Every task has one; there is no empty
-          state to draw. */}
-      <Section title="Assignee">
-        <div className={EDITABLE}>
+        {/* The human who owns the work, editable — distinct from who is
+            currently holding it below. Every task has one; there is no empty
+            state to draw. */}
+        <EditableRow
+          label="Assignee"
+          title={assigneeTitle}
+          select={
+            <select
+              value={shown.assignee_user_id}
+              onChange={(e) => onAssignee(e.target.value)}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              aria-label="Assignee"
+            >
+              {/* The current assignee may have gone inactive since —
+                  `listPeople` only offers active users, so their own option
+                  is added back in or the select would silently show someone
+                  else. */}
+              {shown.assignee && !people.some((p) => p.id === shown.assignee_user_id) && (
+                <option value={shown.assignee_user_id}>{shown.assignee.name} (inactive)</option>
+              )}
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          }
+        >
           <Avatar name={shown.assignee?.name ?? 'Unknown'} size={16} />
-          <span className="text-fg text-[0.8125rem]">
+          <span className="text-fg min-w-0 truncate text-[0.8125rem]">
             {shown.assignee?.name ?? 'Unknown'}
             {shown.assignee && !shown.assignee.active ? (
               <span className="text-fg-subtle"> (inactive)</span>
             ) : null}
           </span>
-          <Affordance />
-          <select
-            value={shown.assignee_user_id}
-            onChange={(e) => onAssignee(e.target.value)}
-            className="absolute inset-0 cursor-pointer opacity-0"
-            aria-label="Assignee"
-          >
-            {/* The current assignee may have gone inactive since — `listPeople`
-                only offers active users, so their own option is added back in
-                or the select would silently show someone else. */}
-            {shown.assignee && !people.some((p) => p.id === shown.assignee_user_id) && (
-              <option value={shown.assignee_user_id}>{shown.assignee.name} (inactive)</option>
-            )}
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-      </Section>
+        </EditableRow>
 
-      {/* The agent actually holding it right now, which may be nobody even
-          though the task is always assigned to someone. */}
-      <Section title="Held by">
-        <div className="flex h-[1.75rem] items-center gap-2">
-          {task.claimed_by ? (
-            <>
-              <Avatar name={task.claimed_by} size={16} />
-              <span
-                className={cn(
-                  'text-[0.8125rem]',
-                  stale ? 'text-fg-subtle' : 'text-fg',
+        {/* The agent actually holding it right now, which may be nobody even
+            though the task is always assigned to someone. */}
+        <div className={ROW}>
+          <span className={ROW_LABEL}>Held by</span>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            {task.claimed_by ? (
+              <>
+                <Avatar name={task.claimed_by} size={16} />
+                <span
+                  className={cn(
+                    'min-w-0 flex-1 truncate text-[0.8125rem]',
+                    stale ? 'text-fg-subtle' : 'text-fg',
+                  )}
+                  title={stale ? `${task.claimed_by} · stale, no recent heartbeat` : task.claimed_by}
+                >
+                  {agentOf(task.claimed_by, shown.assignee?.name)}
+                </span>
+                {stale && (
+                  <span
+                    aria-hidden
+                    className="size-[0.375rem] shrink-0 rounded-full"
+                    style={{ backgroundColor: 'var(--priority-high)' }}
+                  />
                 )}
-              >
-                {task.claimed_by}
-                {stale ? ' · stale' : ''}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="border-border-strong size-[1rem] rounded-full border border-dashed" />
-              <span className="text-fg-subtle text-[0.8125rem]">Unclaimed</span>
-            </>
-          )}
+              </>
+            ) : (
+              <>
+                <span className="border-border-strong size-[1rem] shrink-0 rounded-full border border-dashed" />
+                <span className="text-fg-subtle min-w-0 flex-1 truncate text-[0.8125rem]">Unclaimed</span>
+              </>
+            )}
+          </div>
         </div>
-      </Section>
 
-      <Section title="Type">
-        <div className={EDITABLE}>
-          <TypePill type={shown.type} />
-          <Affordance />
-          <select
-            value={shown.type}
-            onChange={(e) => void patch({ type: e.target.value as TaskType })}
-            className="absolute inset-0 cursor-pointer opacity-0"
-            aria-label="Type"
-          >
-            {TASK_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+        <div className={ROW}>
+          <span className={ROW_LABEL}>Labels</span>
+          <div className="min-w-0 flex-1">
+            <LabelEditor
+              taskRef={`${project.key}-${task.number}`}
+              labels={shown.labels}
+              known={knownLabels}
+              alwaysVisible
+              onChange={(next) => void patch({ labels: next }, { labels: next })}
+            />
+          </div>
         </div>
-      </Section>
 
-      <Section title="Labels">
-        <div className="group">
-          <LabelEditor
-            taskRef={`${project.key}-${task.number}`}
-            labels={shown.labels}
-            known={knownLabels}
-            onChange={(next) => void patch({ labels: next }, { labels: next })}
-          />
-        </div>
-      </Section>
+        <DueDateRow
+          label={due.label}
+          value={shown.due_date}
+          overdue={overdue}
+          onPick={(next) => void patch({ dueDate: next }, { due_date: next })}
+          onClear={() => void patch({ dueDate: null }, { due_date: null })}
+        />
+      </div>
 
-      <Section title="Due date">
-        <div className="flex h-[1.75rem] items-center gap-1.5">
-          <Input
-            type="date"
-            size="sm"
-            value={shown.due_date ?? ''}
-            onChange={(e) =>
-              void patch({ dueDate: e.target.value || null }, { due_date: e.target.value || null })
-            }
-            aria-label="Due date"
-            className="w-auto"
-          />
-          {shown.due_date && (
-            <button
-              type="button"
-              onClick={() => void patch({ dueDate: null }, { due_date: null })}
-              className="text-fg-subtle hover:text-fg shrink-0 text-[0.6875rem]"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      </Section>
-
-      <DependencyEditor taskRef={`${project.key}-${task.number}`} relations={relations} />
-
-      <Section title="Parent">
-        <ParentEditor parent={parent} onSave={onParent} />
-      </Section>
-
-      <div className="hidden lg:block">
-      <Section title="Project">
+      <div className="border-border mt-4 flex flex-col gap-0.5 border-t pt-4">
         {projects.length > 0 ? (
           <SelectRow
+            label="Project"
             value={project.key}
             options={projects.map((p) => p.key)}
             labels={Object.fromEntries(projects.map((p) => [p.key, p.title]))}
@@ -448,71 +564,62 @@ export const Properties = ({
             onChange={onProject}
           />
         ) : (
-          <span className="text-fg-muted flex h-[1.75rem] min-w-0 items-center gap-2 text-[0.8125rem]">
-            <ProjectIcon size={13} projectKey={project.key} />
-            <span className="truncate">{project.title}</span>
-          </span>
+          <div className={ROW}>
+            <span className={ROW_LABEL}>Project</span>
+            <span className="text-fg-muted flex min-w-0 flex-1 items-center gap-2 text-[0.8125rem]">
+              <ProjectIcon size={13} projectKey={project.key} />
+              <span className="min-w-0 truncate">{project.title}</span>
+            </span>
+          </div>
         )}
-      </Section>
-      </div>
 
-      {projects.length > 0 && (
-        <div className="hidden lg:block">
+        {projects.length > 0 && (
           <AlsoIn
             taskRef={`${project.key}-${task.number}`}
             homeKey={project.key}
             alsoProjects={alsoProjects}
             projects={projects}
           />
+        )}
+
+        <div className={ROW}>
+          <span className={ROW_LABEL}>Parent</span>
+          <ParentEditor parent={parent} onSave={onParent} />
         </div>
-      )}
 
-      {task.external_ref && (
-        <Section title="Imported from" className="hidden lg:flex">
-          <code className="border-border bg-surface-raised text-fg-muted self-start rounded-md border px-1.5 py-px font-mono text-[0.75rem]">
-            {task.external_ref}
-          </code>
-        </Section>
-      )}
+        <DependencyEditor taskRef={`${project.key}-${task.number}`} relations={relations} />
+      </div>
 
-      <Section title="Dates" className="hidden lg:flex">
-        <dl className="flex flex-col gap-1">
-          {(
-            [
-              ['Created', task.created_at],
-              ['Updated', task.updated_at],
-              ['Resolved', task.resolved_at],
-            ] as const
-          )
-            .filter(([, value]) => Boolean(value))
-            .map(([label, value]) => (
-              <div key={label} className="flex items-baseline justify-between gap-2">
-                <dt className="text-fg-subtle text-[0.75rem]">{label}</dt>
-                <dd className="text-fg-muted text-[0.75rem] tabular-nums">
-                  <RelativeTime iso={value as string} />
-                </dd>
-              </div>
-            ))}
-        </dl>
-      </Section>
-
-      {/* Frozen at creation — unlike the assignee above, this never changes
-          hands and never renames itself when a person does. */}
-      <Section title="Created by" className="hidden lg:flex">
-        <span className="text-fg-muted flex h-[1.75rem] items-center gap-2 text-[0.8125rem]">
-          <Avatar name={task.actor_id} size={16} />
-          <span className="min-w-0 truncate">{task.actor_id}</span>
-        </span>
-      </Section>
-
-      {task.attempt > 1 && (
-        <Section title="Attempts" className="hidden lg:flex">
-          <span className="text-fg-muted tabular text-[0.8125rem]">
-            {task.attempt} claims
-            <span className="text-fg-subtle"> — may be thrashing</span>
-          </span>
-        </Section>
-      )}
+      <div className="border-border mt-4 flex flex-col gap-1 border-t pt-3">
+        <p
+          className="text-fg-subtle truncate text-[0.75rem]"
+          title={`${task.actor_id} · ${fullDateTime(task.created_at)}`}
+        >
+          Created <RelativeTime iso={task.created_at} /> by {agentOf(task.actor_id, shown.assignee?.name)}
+        </p>
+        <p className="text-fg-subtle text-[0.75rem]">
+          Updated <RelativeTime iso={task.updated_at} />
+        </p>
+        {task.resolved_at && (
+          <p
+            className="text-fg-subtle truncate text-[0.75rem]"
+            title={[task.resolved_by, fullDateTime(task.resolved_at)].filter(Boolean).join(' · ')}
+          >
+            Resolved <RelativeTime iso={task.resolved_at} />
+            {task.resolved_by ? ` by ${task.resolved_by}` : ''}
+          </p>
+        )}
+        {task.external_ref && (
+          <p className="text-fg-subtle truncate text-[0.75rem]" title={task.external_ref}>
+            Imported from <span className="font-mono">{task.external_ref}</span>
+          </p>
+        )}
+        {task.attempt > 1 && (
+          <p className="text-fg-subtle text-[0.75rem]">
+            Attempts {task.attempt} <span>— may be thrashing</span>
+          </p>
+        )}
+      </div>
 
       {pendingClose && (
         <ResolutionDialog

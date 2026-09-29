@@ -64,22 +64,22 @@ session that changed or ruled something out and left no trace.
 ## Check, show, recall
 
 ```bash
-cairn check "flaky auth redirect"   # index: one line per hit, answered?, ~token cost
-cairn show ACME-42                  # digest: the answer, findings, a clipped body
-cairn show ACME-42 --full           # everything, when the digest is not enough
-cairn log ACME-42                   # what agents said · cairn history: what actually changed
-cairn recall ACME-42                # decisions and facts that bear on this task
-cairn know <slug>                   # read a knowledge hit
+cairn check "flaky auth redirect"  # index: one line per hit, answered?, ~token cost
+cairn show ACME-42          # digest: the answer, findings, a clipped body
+cairn show ACME-42 --full   # everything, when the digest is not enough
+cairn log ACME-42           # what agents said · cairn history: what actually changed
+cairn recall ACME-42        # decisions and facts that bear on this task
+cairn know <slug>           # read a knowledge hit
 ```
 
-`#0` means the subject is new. `--kinds task,note,knowledge,session` narrows `check`; the
-default searches everything, since you cannot know which store holds the answer. Never
-pull bodies in bulk — the index is for choosing what to read.
+`#0` means the subject is new. `--kinds task,note,knowledge,session` narrows `check` (the
+default searches all: you cannot know which store holds the answer); `--assignee me|<who>`
+keeps one person's tasks. Never pull bodies in bulk — the index is for choosing what to read.
 
-`recall` starts from the task: resolutions and decision/finding notes on related tasks
-(linked, parent, children, blockers, similar closed work) and knowledge on its files, each
-with why it was picked. `claim` prints the top of it — read it; "do not read that closure
-as permission for this" is the line you would not know to look for.
+`recall` starts from the task: resolutions and decision/finding notes on related tasks and
+knowledge on its files, each with why it was picked. `claim` prints the top of it — read
+it; "do not read that closure as permission for this" is the line you would not know to
+look for.
 
 ## Evidence, as opposed to narration
 
@@ -89,11 +89,11 @@ cairn push   ACME-42 a1b2c3d --branch main
 cairn run    ACME-42 "npm test" --status passed --exit-code 0
 ```
 
-They record; none executes anything. "I fixed it" and `run_result failed exit 1`
-are different claims and only one can be checked. Repeats are deduplicated, so a retry is
-safe. Name another task's ref in a `decision` or `finding` note when your work constrains
-it — it shows under that task's `mentionedIn`; the ref in prose is the link. `cairn comment`
-addresses the human, not the next agent.
+They record; none executes anything. "I fixed it" cannot be checked; `run_result failed
+exit 1` can. Repeats are deduplicated, so a retry is safe. Name another task's ref in a
+`decision` or `finding` note when your work constrains it — it shows under that task's
+`mentionedIn`; the ref in prose is the link. `cairn comment` addresses the human, not the
+next agent.
 
 ## Filing, and the body
 
@@ -106,7 +106,7 @@ cairn add "title" --project ACME --type bug --body - --assignee bob@acme.io   # 
 
 The title says which task; the body says what it is. **The server refuses a bug or spike
 whose body is under 40 characters**; `--force-empty` is for the rare title that is the
-whole story. What earns its place: what happens versus what you expected; how to see it
+whole story. What earns its place: what happens vs what you expected; how to see it
 (request, command, log line); what you ruled out; why it matters now. Write it when you
 file — context is never cheaper. A `chore`/`docs` title is often enough; never pad with "n/a".
 
@@ -128,21 +128,20 @@ resolution; the withdrawn text stays in `history`.
 ## Knowledge: what we know, not what we did
 
 ```bash
-cairn know                                  # what applies here
-cairn know "postgrest ambiguous embed"      # search
+cairn know                              # what applies here
+cairn know "postgrest ambiguous embed"  # search
 cairn learn "Supavisor pools are per-tenant, not per-connection-string" \
   --slug supavisor-pools-per-tenant --label supabase --body -
 ```
 
 Write it the moment you learn something that will be true next month. If you would want it
-surfaced on an unrelated project, it is knowledge; if it is bound to one task and moment,
-it is a note.
+surfaced on an unrelated project, it is knowledge; bound to one task and moment, a note.
 
 - **Scope is explicit or inferred, never assumed global.** `--project ACME`, `--entity acme`
   (a business, stack or subsystem — `cairn entities`), or `--global`. With none, `learn`
   takes this directory's project and **refuses where there is none** — outside a mapped
-  checkout, pass a scope. Scope narrowly only when the fact is narrow;
-  the narrower one is shown first ("true for this business, except here").
+  checkout, pass a scope. Scope narrowly only when the fact is narrow; the narrower one
+  is shown first ("true for this business, except here").
 - **A body is required** on `learn`, and a `relearn` body cannot be blank.
 - **Provenance is automatic:** the session is recorded with the fact, and so is the task
   when this session holds exactly one (`--task <ref>` to name another).
@@ -152,17 +151,17 @@ it is a note.
 - **The title is the claim; the slug is the handle** — give a long claim a short `--slug`.
 - **`[[slug]]` in a body is a link**, followable in browser and terminal. A reference that
   misses while a near-named entry exists is refused, naming the slug you probably meant —
-  take it: it is almost always a misspelling. With nothing close it is accepted
-  with a warning (two entries can cite each other). `[[ACME-42]]` is refused: write task
+  take it, it is almost always a misspelling. With nothing close it is accepted with a
+  warning (two entries can cite each other). `[[ACME-42]]` is refused: write task
   refs bare. `--allow-dangling` is for when the refusal is genuinely wrong.
 - **Correct rather than add.** Two contradictory claims, equally findable, is how every
   memory store fails. When `learn` lists same-subject entries, supersede the wrong one.
 
 ```bash
-cairn relearn <slug> --body - --reason "why"         # it changed (old version kept)
-cairn relearn <slug> --entity E --project none      # re-scope: none clears a side; --global both
-cairn unlearn <old> --superseded-by <new>            # it was wrong
-cairn verify <slug>                                  # still true; you checked
+cairn relearn <slug> --body - --reason "why"    # it changed (old version kept)
+cairn relearn <slug> --entity E --project none  # re-scope: none clears a side; --global both
+cairn unlearn <old> --superseded-by <new>       # it was wrong
+cairn verify <slug>                             # still true; you checked
 cairn know <slug> --history
 ```
 
@@ -172,8 +171,8 @@ A fact is linked to the backticked paths in its body, its source task's files, a
 evidence of change. Either way: check it, then `verify` or `relearn`. Confirming an old
 fact is as useful as a new one, and faster.
 
-`know --unused|--gaps|--orphans|--dangling` show what is *not* connected. **Scripted reads are not recalls:** pass `--sweep` (or
-`CAIRN_SWEEP=1`) when looping over entries.
+`know --unused|--gaps|--orphans|--dangling` show what is *not* connected. **Scripted reads
+are not recalls:** pass `--sweep` (or `CAIRN_SWEEP=1`) when looping over entries.
 
 **If this machine also has Trig** (the map of what exists): ask *could a re-scan
 rediscover this?* Yes → `trig learn`; no → `cairn learn`. Unsure → Cairn: Trig ingests
@@ -189,10 +188,10 @@ cairn release ACME-42    # handing it back: a held doing task returns to todo
 ```
 
 - A claim is execution state, independent of status: `doing` and unclaimed means a human
-  is on it. Only claim open work — reopen settled work first if it truly
-  needs revision.
+  is on it. Only claim open work — reopen settled work first if it truly needs revision.
 - **A claim is not ownership.** The assignee is the human accountable before and after
-  it. `list --mine` is what you hold; `--assignee me`, what your human owns.
+  it. `list --mine` is what you hold; `--assignee me`, what your human owns; `cairn
+  people`, who can be assigned.
 - **A checkpoint on an unheld open task claims it** (and says so); a note does not. Neither
   steals: a checkpoint on someone else's claim is refused.
 - **After 15 silent minutes** a lease is stale and another agent may take it over.
@@ -203,8 +202,8 @@ cairn release ACME-42    # handing it back: a held doing task returns to todo
   next agent starts.
 - **At session end the runtime checkpoints tasks the session worked on, never over a
   checkpoint you wrote** unless this very session holds the claim; a checkpoint written
-  meanwhile always wins. A held task it did not touch gets a "still held" line only if it
-  has no checkpoint, and that line is not a sign of life. Your own checkpoint is the handoff.
+  meanwhile always wins. A held task it did not touch gets a "still held" line (not a sign
+  of life) only if it has no checkpoint. Your own checkpoint is the handoff.
 
 Sessions are created by the runtime; there is no `session create`. For a manual handoff
 with a real session id, `cairn session end --id <id>` — never fabricate one.
@@ -214,31 +213,33 @@ with a real session id, `cairn session end --id <id>` — never fabricate one.
 ```bash
 cairn deps ACME-42                   # what blocks this, and what it blocks
 cairn blockedby ACME-42 ACME-40      # ACME-40 must finish first (unblockedby removes)
-cairn block ACME-42 "reason"         # stuck on something outside Cairn
+cairn block ACME-42 --reason "…"     # stuck on something outside Cairn
 cairn add "write the migration" --project ACME --parent ACME-42
 cairn children ACME-42               # the split, and how much is closed
 cairn done ACME-42 --duplicate-of ACME-31 --resolution "same cause; fixed there"
 ```
 
-A task with open blockers is not ready, whatever its status says; a dependency shows on
-both tasks, while "waiting on ACME-40" in a note is prose nobody queries. Parents are
-containment, blockers are ordering. Name a duplicate's original, or the reader must hunt.
+A task with open blockers is not ready, whatever its status says. A dependency shows on
+both tasks; "waiting on ACME-40" in a note is prose nobody queries. Parents are
+containment, blockers ordering. Name a duplicate's original.
 
 ## Briefing and what next
 
 ```bash
-cairn context                         # what you hold, in flight, where the last session stopped
+cairn context                 # what you hold, in flight, where the last session stopped
 cairn context --scope project [--project KEY]
-cairn next [--project KEY]            # the recommendation, and why it won
-cairn map ACME                        # this checkout is that project (once per repo)
+cairn next [--project KEY] [--assignee me]  # the recommendation, and why it won
+cairn map ACME                # this checkout is that project (once per repo)
 ```
 
 A hook usually runs `context` at session start; run it when you have lost your place.
 Read **"Started and dropped here"**: work begun and abandoned — finish it or close it with
-why. `--scope project` restricts held work and the last session to the
-resolved project and fails rather than guess. `next` ranks work you hold above work dropped
-with a checkpoint above anything not begun; blocked or actively held work is absent, not
-ranked last. A renamed key (`AC-113 is now HOL-113`) keeps resolving — write the new ref.
+why. **"Assigned to you, nobody on it"** is your human's open work no agent holds.
+`--scope project` restricts held work and the last session to the resolved project and
+fails rather than guess. `next` ranks work you hold above work dropped with a checkpoint
+above anything not begun, your human's first within each; another's says whose. Blocked
+or actively held work is absent, not ranked last. A renamed key (`AC-113 is now HOL-113`)
+keeps resolving — write the new ref.
 
 ## Before you stop
 

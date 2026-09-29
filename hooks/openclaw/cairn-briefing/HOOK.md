@@ -15,9 +15,9 @@ from their `SessionStart` hook.
 - Listens for `agent:bootstrap`.
 - Runs `cairn context --cwd <workspaceDir>` with `CAIRN_AGENT=openclaw` (unless already
   set) and a 5 second deadline.
-- Adds one bootstrap file, `CAIRN.md`: a short rule (check → own → note → checkpoint →
-  in-review → done with a kind; one claimed task per sweep; scoped `learn`) followed by
-  the live briefing.
+- Adds one bootstrap file, `CAIRN.md`: a short rule (check → own, assigned to your human
+  unless `--assignee` → markdown bodies → note → checkpoint → in-review → done with a kind;
+  one claimed task per sweep; scoped `learn`) followed by the live briefing.
 - Fails open. If the CLI is missing, slow or errors, the rule is injected alone; if
   anything else goes wrong, the session starts exactly as it would have without this hook.
 

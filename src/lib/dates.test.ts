@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fullDateTime, relativeTime, shortDate, timeOfDay } from './dates'
+import { dueDateDisplay, fullDateTime, relativeTime, shortDate, timeOfDay, todayDate } from './dates'
 
 /**
  * The bug these guard against: an unpinned `toLocaleDateString` formats in the
@@ -64,6 +64,44 @@ describe('date formatting', () => {
       const iso = new Date(base - 600_000).toISOString()
       expect(relativeTime(iso, base)).toBe('10m ago')
       expect(relativeTime(iso, base + 3_600_000)).toBe('1h ago')
+    })
+  })
+
+  describe('todayDate', () => {
+    it('renders as YYYY-MM-DD, comparable against a due_date column', () => {
+      expect(todayDate(Date.parse('2026-09-10T12:00:00.000Z'))).toBe('2026-09-10')
+    })
+
+    it('resolves in the display zone, not the runtime zone', () => {
+      expect(todayDate(Date.parse(nearMidnight))).toBe('2026-04-30')
+    })
+  })
+
+  describe('dueDateDisplay', () => {
+    const today = '2026-09-10'
+
+    it('shows a muted empty state with no due date', () => {
+      expect(dueDateDisplay(null, false, today)).toEqual({ label: 'No due date', overdue: false })
+    })
+
+    it('is not overdue due today', () => {
+      expect(dueDateDisplay(today, false, today)).toEqual({ label: expect.any(String), overdue: false })
+    })
+
+    it('is overdue once the date has passed and the task is still open', () => {
+      expect(dueDateDisplay('2026-09-01', false, today).overdue).toBe(true)
+    })
+
+    it('is never overdue once the task is closed', () => {
+      expect(dueDateDisplay('2026-09-01', true, today).overdue).toBe(false)
+    })
+
+    it('is not overdue for a future date', () => {
+      expect(dueDateDisplay('2026-12-25', false, today).overdue).toBe(false)
+    })
+
+    it('formats the label in the house date style', () => {
+      expect(dueDateDisplay('2026-12-25', false, today).label).toBe('25 Dec 2026')
     })
   })
 })

@@ -328,7 +328,18 @@ const TaskPage = async ({
           </div>
         </div>
 
-        <div className={cn(PANE, 'hidden overflow-y-auto lg:block')}>
+        {/* Fixed width AND `overflow-x-hidden` set here, not left to the
+            column inside: `overflow-y-auto` alone computes `overflow-x` as
+            `auto` too (CSS's rule for a lone non-`visible` axis), so any
+            child that refused to shrink turned this pane into a horizontal
+            scroller — pinning both here forecloses that regardless of what
+            the column renders. */}
+        <div
+          className={cn(
+            PANE,
+            'hidden w-[18rem] shrink-0 overflow-x-hidden overflow-y-auto lg:block',
+          )}
+        >
           <Properties
             task={task}
             project={task.project}

@@ -52,3 +52,34 @@ export const relativeTime = (iso: string, now: number) => {
   if (seconds < 86_400 * 7) return `${Math.round(seconds / 86_400)}d ago`
   return shortDate(iso)
 }
+
+// `en-CA` is the one locale whose everyday format is already `YYYY-MM-DD` —
+// the same shape `due_date` is stored in, so the two compare as strings with
+// no parsing on either side.
+const ISO_DATE = new Intl.DateTimeFormat('en-CA', {
+  timeZone: DISPLAY_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+/** Today's calendar date in the display zone, as `2026-09-29`. */
+export const todayDate = (now: number = Date.now()) => ISO_DATE.format(new Date(now))
+
+/**
+ * The due-date row's label and tone. Pure and given "today" explicitly, for
+ * the same reason `relativeTime` takes `now`: a component can gate the real
+ * value behind a mounted check without this helper reading the clock itself.
+ *
+ * A closed task is never overdue — the date is history once the work is
+ * done, not a warning — and the due date itself is never overdue, only the
+ * days after it.
+ */
+export const dueDateDisplay = (
+  dueDate: string | null,
+  closed: boolean,
+  todayIso: string,
+): { label: string; overdue: boolean } => {
+  if (!dueDate) return { label: 'No due date', overdue: false }
+  return { label: shortDateWithYear(dueDate), overdue: !closed && dueDate < todayIso }
+}

@@ -10,7 +10,7 @@ import { StatusIcon } from '@/components/icons'
 import type { TaskStatus } from '@/schemas/task'
 import type { Relation } from '@/lib/data'
 import { cn } from '@/lib/utils'
-import { LABEL } from './styles'
+import { ROW, ROW_LABEL } from './styles'
 
 type Direction = 'blocked-by' | 'blocks'
 
@@ -205,15 +205,18 @@ export const DependencyEditor = ({
   )
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col">
       {(['blocked-by', 'blocks'] as const).map((direction) => {
         const items = relations.filter((r) => r.direction === direction)
         const refOf = (r: Relation) => `${r.project_key}-${r.number}`
         const exclude = new Set([taskRef, ...relations.map(refOf)])
         return (
-          <div key={direction} className="group/dep flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <span className={LABEL}>{TITLE[direction]}</span>
+          <div key={direction} className="group/dep flex flex-col">
+            <div className={ROW}>
+              <span className={ROW_LABEL}>{TITLE[direction]}</span>
+              <span className="text-fg-subtle min-w-0 flex-1 truncate text-[0.8125rem]">
+                {items.length === 0 && open !== direction ? 'None' : null}
+              </span>
               <button
                 type="button"
                 disabled={busy}
@@ -232,7 +235,7 @@ export const DependencyEditor = ({
               </button>
             </div>
 
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-0.5 pl-[calc(4.75rem+0.5rem)]">
               {items.map((r) => (
                 <div
                   key={r.id}
@@ -264,9 +267,6 @@ export const DependencyEditor = ({
                   </button>
                 </div>
               ))}
-              {items.length === 0 && open !== direction && (
-                <span className="text-fg-subtle text-[0.75rem]">None</span>
-              )}
             </div>
 
             {open === direction && (

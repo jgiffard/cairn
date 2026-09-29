@@ -138,6 +138,7 @@ priority	medium
 resolution	Raised the pooler's own pool_size to 40; the client-side setting was never the cap.
 resolution_kind	fixed
 updated_at	2026-08-14T16:04:18.551Z
+assignee	Alice
 ```
 
 **Six weeks later**, a different agent on a different machine asks the same question. It
@@ -166,9 +167,11 @@ title	Migrations time out when workers run in parallel
 type	bug
 status	done
 priority	medium
+assignee	Alice
+createdBy	claude-code · Alice
+updatedAt	2026-08-14T16:04:18.551Z
 resolution	Raised the pooler's own pool_size to 40; the client-side setting was never the cap.
 resolutionKind	fixed
-updatedAt	2026-08-14T16:04:18.551Z
 findings.0.kind	finding
 findings.0.note	Supavisor caps at its own pool_size regardless of what the client asks for.
 findings.0.by	claude-code · Alice
@@ -247,9 +250,9 @@ problem.
 | Types | `feature · bug · improvement · chore · spike · docs` |
 | Statuses | `backlog · todo · doing · in-review · done · cancelled` |
 | Structure | a human assignee on every task, apart from the agent holding it; sub-tasks, blocked-by / blocks dependencies with cycle rejection, labels, priorities, due dates |
-| Bodies | markdown in a WYSIWYG editor — syntax-highlighted code, GFM tables and task lists; bare refs like `ACME-42` become links |
+| Bodies | markdown in a WYSIWYG editor — syntax-highlighted code, GFM tables and task lists; bare refs like `ACME-42` become links. An agent's body has to read as markdown: a wall of text is refused, with what to fix |
 | Trails | comments for humans, an append-only work log for agents, file attachments, and a full activity history |
-| Views | list and board per project, a cross-project board at `/board` grouped and swim-laned by status, priority, type, project or agent, bulk edit with shift-click ranges, a cross-project home, a map of the knowledge corpus at `/knowledge/graph`, live updates over SSE |
+| Views | list and board per project, a cross-project board at `/board` grouped and swim-laned by status, priority, type, project, agent or assignee, bulk edit with shift-click ranges, a cross-project home, a map of the knowledge corpus at `/knowledge/graph`, live updates over SSE |
 | Multi-project tasks | a task can belong to several projects at once — the home project keeps the ref, the extra links only widen where it appears |
 
 **Memory**
@@ -381,10 +384,10 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | | |
 |---|---|
 | **Find and read** | |
-| `cairn check "<subject>" [--assignee me\|<who>]` | **Start here.** Prior work across all four stores, with a `~tokens` cost per row. `--assignee` narrows to that person's tasks |
+| `cairn check "<subject>" [--assignee me\|<who>]` | **Start here.** Prior work across all four stores, with a `~tokens` cost per row. `--kinds task,note,knowledge,session` narrows the stores; `--assignee` narrows to that person's tasks |
 | `cairn context [--scope project\|all] [--project K]` | The briefing: what you hold, what is in flight (naming the owner when it is not your human), your human's open work here that nobody is on (five, most urgent first, then a count), where the last session here stopped. `--scope project` limits held work, stale claims, and the last session to the resolved project; the default `all` keeps cross-project awareness. An unresolved project is an error in project scope; an unknown explicit key returns 404. |
 | `cairn next [--assignee me\|<who>]` | **What to pick up, and why.** Finishing beats starting, so work you hold ranks above work dropped with a checkpoint, which ranks above anything not begun. Blocked, waiting, or actively held by another agent is never offered. Within a tier your human's work comes first; someone else's is still offered, with whose it is in the reason |
-| `cairn show <ref>` · `cairn list --project K` · `cairn projects` | Read one, many, or the project index. `list --assignee me\|<who>` is what a person owns; `--mine` is what this agent holds right now |
+| `cairn show <ref>` · `cairn list --project K` · `cairn projects` | Read one (a digest; `--full` for everything), many, or the project index. `list` filters by `--status`, `--type`, `--label`; `--assignee me\|<who>` is what a person owns; `--mine` is what this agent holds right now. `projects --archived` includes retired ones |
 | `cairn people` | Who work can be assigned to: name and email |
 | `cairn log <ref>` · `cairn history <ref>` | The work log, and what changed when and by whom |
 | `cairn recall <ref>` | Picking a task up: the decisions, findings and knowledge that bear on it, each with why it was picked. `claim` prints the top of it |
@@ -422,7 +425,8 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | **Sessions and upkeep** | |
 | `cairn session list` · `cairn session checkpoint\|end --id <id>` | The episodic record; `checkpoint` records progress without ending it |
 | `cairn reconcile` | Release claims that went quiet for two hours (`doing` goes back to `todo`): your own, or the whole workspace under the `maintenance` key (the scheduled job) |
-| `cairn vitals [--all]` | Is the memory still being written, against the week before, and what looks wrong: claims with no genuine activity past 2h and 24h, whether the reaper released anything in 7 days, sessions and their summarised share per runtime and host, knowledge never verified. `--all` adds whether it is being *read*: searches, how many widened or came back empty, tasks filed without checking first, and each recent `asked for, not held: <slug>` |
+| `cairn vitals [--all]` | Is the memory still being written, against the week before, and what looks wrong: claims with no genuine activity past 2h and 24h, whether the reaper released anything in 7 days, sessions and their summarised share per runtime and host, knowledge never verified. `--all` adds whether it is being *read*: searches, how many widened or came back empty, tasks filed without checking first, and each recent `asked for, not held: <slug>`. `--notify <ref>` posts the findings as a note on that task, and stays silent when there are none |
+| `cairn --version` | This CLI, the server, and whether they match |
 | `cairn replay` | Send writes put aside while the server was unreachable. Rarely needed by hand — any successful write drains the queue; a write another runtime queued waits for that runtime |
 | **Projects** | |
 | `cairn map <KEY>` | Tell Cairn which project this checkout is. Validates the key, and claims the repository so every other clone and worktree resolves too. `cairn map none` releases both |
@@ -443,13 +447,13 @@ schemas the routes validate against, so it cannot drift. Browsable at `/api-docs
 ```
 /health                         unauthenticated probe; reports the commit it was built from
 /vitals?hours=24                whether the memory is still being written and read, and what looks wrong
-/search                         the read half of Cairn-as-memory
-/context  /next                 the briefing a session opens with; what to pick up
+/search                         the read half of Cairn-as-memory; ?assignee= keeps one person's tasks
+/context  /next                 the briefing a session opens with; what to pick up (?assignee= narrows it)
 /activity                       recent activity across the workspace
 /projects  /projects/{id}       list, create, read, rename, rekey, delete
 /projects/{id}/tasks            list and create within a project; ?assignee= / assignee filters and sets the owner
 /projects/{id}/repos            the repositories a project claims
-/tasks/{ref}                    read, update (incl. assignee), close, delete
+/tasks/{ref}                    read (?view=digest), update (incl. assignee), close, delete
 /tasks/{ref}/notes  /notes/{id} the work log
 /tasks/{ref}/comments           for the human
 /tasks/{ref}/activity           read history; POST git/run delivery evidence
@@ -467,7 +471,9 @@ schemas the routes validate against, so it cannot drift. Browsable at `/api-docs
 /reconcile                      release claims that went quiet
 /events                         change stream (SSE)
 /people                         active users, for naming an assignee; open to agents too
-/users  /users/{id}             administrator-only membership, roles, /password and /restore
+/branding                       the instance's name and accent; administrators set them
+/users  /users/{id}             administrator-only membership, roles, /password and /restore;
+                                disabling someone who owns open tasks needs ?reassignTo=
 /users/{id}/keys  /keys/{keyId} administrator-only agent keys: issue and revoke
 ```
 
@@ -572,7 +578,8 @@ npm run operator:create
 
 Then add members and issue per-user agent keys from **Users**. All active identities share
 the workspace; administrator privileges are required only for membership, roles, password
-resets and key management.
+resets and key management. Disabling someone who is still the assignee of open tasks asks
+who takes them over, and the tasks move with the disable rather than being orphaned.
 
 ### Without a disk or a shell: App Runner and similar
 
@@ -656,7 +663,8 @@ walks up its parent processes and takes the nearest one named `codex` or `claude
 cannot answer, the old order stands. Nothing is spawned when the environment is unambiguous.
 
 **A key also names a human: the user it was issued to.** A task an agent files is assigned
-to that person unless `--assignee` names someone else, and `--assignee me` means them. The
+to that person unless `--assignee` names someone else (`cairn people` lists who can be
+named), and `--assignee me` means them. The
 agent label stays on the claim and on the history; the human is who the work belongs to.
 
 The CLI is deliberately dependency-free — Node 22's built-in `fetch` is enough — so it can
@@ -799,7 +807,8 @@ ran and understood nothing".
 Native tool-calling for Claude Code and Codex; OpenClaw reaches it through `mcporter`. The
 server lives in [`mcp/`](./mcp), holds no logic of its own, and
 exposes 21 of the CLI's verbs as typed tools — `context`, `next`, `history`, `people` and the
-session verbs stay CLI-only. `cairn_add` and `cairn_list` take an optional `assignee`.
+session verbs stay CLI-only. `cairn_check`, `cairn_add` and `cairn_list` take an optional
+`assignee`, and `cairn_add`'s body meets the same markdown rule as `cairn add`.
 
 Unlike the CLI it is not dependency-free: it imports the MCP SDK and needs a `node_modules`
 beside it, so it is installed rather than copied.
