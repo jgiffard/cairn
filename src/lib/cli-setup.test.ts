@@ -336,6 +336,31 @@ describe('cairn setup — multi-instance naming', () => {
     expect(untouched).toContain('old.example.com')
   })
 
+  it('adopts the existing single instance before adding a second, so the first keeps working', async () => {
+    const HOME = await home()
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    await mkdir(join(HOME, '.cairn'), { recursive: true, mode: 0o700 })
+    await writeFile(
+      join(HOME, '.cairn', 'env'),
+      'CAIRN_BASE_URL=https://tasks.example.com\nCAIRN_API_KEY_CLAUDE_CODE=sk_first\n',
+      { mode: 0o600 },
+    )
+    const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_second' }] })
+    const { code, stdout } = await run(
+      ['setup', '--url', base, '--name', 'work', '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'],
+      HOME,
+    )
+    expect(code).toBe(0)
+    expect(stdout).toContain('adopted from ~/.cairn/env, still the default')
+
+    const config = JSON.parse(await readFile(join(HOME, '.cairn', 'instances.json'), 'utf8'))
+    expect(Object.keys(config.instances).sort()).toEqual(['tasks', 'work'])
+    expect(config.instances.tasks.url).toBe('https://tasks.example.com')
+    expect(config.unclassified).toEqual({ mode: 'default', instance: 'tasks' })
+    expect(await readFile(join(HOME, '.cairn', 'instances', 'tasks', 'env'), 'utf8')).toContain('sk_first')
+    expect(await readFile(join(HOME, '.cairn', 'instances', 'work', 'env'), 'utf8')).toContain('sk_second')
+  })
+
   it('--name overrides the derived name', async () => {
     const HOME = await home()
     const { mkdir, writeFile } = await import('node:fs/promises')

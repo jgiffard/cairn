@@ -17,8 +17,9 @@ Two hooks make it happen without anyone being reminded: a briefing when a sessio
 and the session written down when it ends.
 
 > **One shared workspace.** Every active user and agent can work across the same projects,
-> tasks and memory. Administrators manage membership, roles and agent keys; owner columns
-> remain attribution metadata rather than visibility boundaries. Every task is **assigned
+> tasks and memory. Administrators manage membership and roles; each person pairs their own
+> agents' keys, and administrators can issue or revoke anyone's. Owner columns remain
+> attribution metadata rather than visibility boundaries. Every task is **assigned
 > to a person** — by default the human behind the agent's key that filed it — who owns it,
 > while the agent's claim only says who is executing it right now.
 >
@@ -29,10 +30,18 @@ and the session written down when it ends.
 > change the schema or the API. Anything that breaks an existing install is called out in
 > the [changelog](./CHANGELOG.md).
 
-**Jump to:** [Self-hosting](#self-hosting) · [Agent setup](#agent-setup) · [The CLI](#the-cli) ·
+**Jump to:** [Self-hosting](#self-hosting) · [Connect a machine](#connect-a-machine) · [The CLI](#the-cli) ·
 [Several instances](#several-instances-on-one-machine) · [API](#api) ·
 [Scheduled maintenance](#scheduled-maintenance--optional) · [Architecture](#architecture) ·
 [Contributing](#contributing)
+
+Deploy the server once ([Self-hosting](#self-hosting)); then each machine that runs agents
+connects with one command, which pairs its keys in your browser and installs the CLI, skill
+and hooks:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/montytorr/cairn/main/install.sh | sh -s -- --url https://your-cairn
+```
 
 It holds **four stores**, and one verb — `cairn check` — searches all four in a single
 pass:
@@ -209,7 +218,8 @@ Cairn makes the tracker the memory:
 
 ## Two mechanisms, so nobody has to remember
 
-This is the part that makes the rest hold. Installed by `node scripts/install-hooks.mjs`.
+This is the part that makes the rest hold. Installed by `cairn setup`, or on its own by
+`node scripts/install-hooks.mjs`.
 
 | When | What happens |
 |---|---|
@@ -384,7 +394,7 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | | |
 |---|---|
 | **Connect a machine** | |
-| `cairn setup --url <instance>` | Pairs a key, installs the CLI, skill, hooks and maintenance jobs — [more](#connect-a-machine). `--dry-run` to preview, safe to re-run |
+| `cairn setup --url <instance>` | Pairs this machine's keys in the browser, installs the CLI, skill, hooks and the `agent-files` job (`--maintenance` adds `reconcile` and `vitals`) — [more](#connect-a-machine). `--dry-run` to preview, safe to re-run |
 | **Find and read** | |
 | `cairn check "<subject>" [--assignee me\|<who>]` | **Start here.** Prior work across all four stores, with a `~tokens` cost per row. `--kinds task,note,knowledge,session` narrows the stores; `--assignee` narrows to that person's tasks |
 | `cairn context [--scope project\|all] [--project K]` | The briefing: what you hold, what is in flight (naming the owner when it is not your human), your human's open work here that nobody is on (five, most urgent first, then a count), where the last session here stopped. `--scope project` limits held work, stale claims, and the last session to the resolved project; the default `all` keeps cross-project awareness. An unresolved project is an error in project scope; an unknown explicit key returns 404. |
@@ -477,13 +487,17 @@ schemas the routes validate against, so it cannot drift. Browsable at `/api-docs
 /users  /users/{id}             administrator-only membership, roles, /password and /restore;
                                 disabling someone who owns open tasks needs ?reassignTo=
 /users/{id}/keys  /keys/{keyId} administrator-only agent keys: issue and revoke
+/connect  /connect/poll         unauthenticated, rate-limited: a machine asks to pair, then
+                                polls until it is handed its keys, once
+/connect/{code}/approve  /deny  a signed-in person answers it; agent keys get 403
 ```
 
 A test walks `src/app/api/v1` and asserts every route on disk appears in the spec, so the
 docs cannot fall behind the surface — which they had, by six routes, before that existed.
 
 Authenticate with `Authorization: Bearer sk_live_…`. Keys are stored as a sha256 hash: the
-plaintext is shown once, at creation, and never again. Issue **one key per agent**, so
+plaintext is shown once — on **Users** when an administrator issues it, or handed to
+`cairn setup` when a pairing is redeemed — and never again. Issue **one key per agent**, so
 writes are attributable and any single agent can be revoked without disturbing the others.
 This is not a convention — the key is the only thing that says who is writing, so agents
 sharing one are indistinguishable in every count and every history afterwards.
@@ -578,9 +592,12 @@ CAIRN_OPERATOR_PASSWORD='a-long-password' \
 npm run operator:create
 ```
 
-Then add members and issue per-user agent keys from **Users**. All active identities share
-the workspace; administrator privileges are required only for membership, roles, password
-resets and key management. Disabling someone who is still the assignee of open tasks asks
+Then add members from **Users**. Each of them connects their own machines with
+[`cairn setup`](#connect-a-machine), which pairs keys for their own agents in the browser; an
+administrator can also issue or revoke anyone's keys there. All active identities share the
+workspace; administrator privileges are required only for membership, roles, password
+resets, other people's keys, and approving a `maintenance` key. Disabling someone who is
+still the assignee of open tasks asks
 who takes them over, and the tasks move with the disable rather than being orphaned.
 
 ### Without a disk or a shell: App Runner and similar
@@ -617,25 +634,30 @@ repository. Keep `DATABASE_URL` and `CAIRN_ATTACHMENT_SIGNING_KEY` server-side o
 ### Connect a machine
 
 One command does what the rest of this section used to require by hand:
-pairs a key with your identity, installs the CLI on PATH, copies the skill,
-wires the hooks, and installs the maintenance jobs it needs.
+pairs a key per runtime with your identity, installs the CLI on PATH, copies the
+skill, wires the hooks, and installs the `agent-files` job that keeps those copies
+current. Any member can run it; no administrator is needed for their own agents.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/montytorr/cairn/main/install.sh | sh -s -- --url https://your-cairn
 ```
 
-`install.sh` only gets Node 22+ and a recent `cli/cairn.mjs` onto PATH; the
-work happens in `cairn setup` itself, so re-running either one is the upgrade
-path — keys are kept, files are replaced only where they differ.
+`install.sh` only checks for Node 22+, puts the latest release's `cli/cairn.mjs` in
+`~/.local/bin`, and runs `cairn setup` with the same arguments; the work happens in
+`cairn setup` itself, so re-running either one is the upgrade path — keys that still work
+are kept, files are replaced only where they differ. It detects Claude Code (`~/.claude`),
+Codex (`~/.codex`) and OpenClaw (only where this account's OpenClaw config runs a gateway),
+pairs a key for each one that lacks a working one, and installs the files of the release
+matching its own version.
 
 ```
-$ cairn setup --url https://cairn.app.dispofi.fr --name dispofi
-✓ instance  dispofi -> https://cairn.app.dispofi.fr
-✓ server    https://cairn.app.dispofi.fr (0.11.0)
+$ cairn setup --url https://cairn.acme.io
+✓ instance  https://cairn.acme.io -> ~/.cairn/env
+✓ server    https://cairn.acme.io (0.11.0)
 Open this link to connect this machine:
-  https://cairn.app.dispofi.fr/connect/K7QX-M2RD (code K7QX-M2RD)
+  https://cairn.acme.io/connect/K7QX-M2RD (code K7QX-M2RD)
 waiting for approval… ✓ approved by Julien
-✓ keys      claude-code, codex -> ~/.cairn/instances/dispofi/env
+✓ keys      claude-code, codex -> ~/.cairn/env
 ✓ release   v0.11.0 -> ~/.cairn/releases/0.11.0
 ✓ cli       ~/.local/bin/cairn (0.11.0)
 ✓ skill     ~/.claude/skills/cairn, ~/.codex/skills/cairn
@@ -648,17 +670,19 @@ waiting for approval… ✓ approved by Julien
 ✓ cairn 0.11.0 ↔ server 0.11.0 — restart your agent sessions to load the hooks
 ```
 
+The link opens a page on your instance; sign in if asked, and it comes back to the request.
 The approval page shows the host as the device reported it, where the request came from and
-who the keys will belong to. Approve a link only if you just ran `cairn setup` yourself: the
-keys are yours, so a link someone sends you would hand them your agents.
-
+who the keys will belong to, and lets you untick runtimes. Approve a link only if you just
+ran `cairn setup` yourself: the keys are yours, so a link someone sends you would hand them
+your agents. Each key is named `<runtime> on <host>`, is delivered once, and an administrator can
+revoke it on **Users** like any other. Unapproved, the request expires in ten minutes.
 
 | Flag | |
 |---|---|
-| `--url <instance>` | required the first time; otherwise the configured default |
-| `--name <instance-name>` | this machine will have more than one instance (default: derived from the url) |
+| `--url <instance>` | required the first time, and whenever the machine has several instances; otherwise the configured one |
+| `--name <instance-name>` | names the instance when this `--url` is a second (or later) one on the machine (default: derived from the url, `cairn.acme.io` → `acme`). A first instance needs no name |
 | `--runtimes a,b` | which agent runtimes to pair and install for (default: detected — `~/.claude`, `~/.codex`, and OpenClaw where this account runs its gateway) |
-| `--no-skill` / `--no-hooks` / `--no-jobs` | skip that step |
+| `--no-skill` / `--no-hooks` / `--no-jobs` | skip that step. Without `--maintenance` the only job is `agent-files`; OpenClaw's `openclaw-sessions` sweep is installed [by hand](#scheduled-maintenance--optional) |
 | `--maintenance` | also install `reconcile` and `vitals`, and pair a `maintenance` key for them — separately, because only an administrator can approve one: it releases anyone's claims |
 | `--dry-run` | print the plan, change nothing |
 
@@ -669,7 +693,8 @@ says so and prints where to get a key by hand instead of stopping dead — see
 ### The manual path
 
 The individual pieces `cairn setup` automates, for a machine that needs only
-one of them, or a server old enough that pairing is not available yet:
+one of them, or a server old enough that pairing is not available yet. Without
+pairing, keys come from an administrator on **Users**:
 
 ```bash
 # credentials — or export CAIRN_BASE_URL / CAIRN_API_KEY
@@ -688,7 +713,7 @@ install -m 755 cli/cairn.mjs /usr/local/bin/cairn
 `actor_id` comes from the key, never from what the caller claims — so a single key shared
 by Claude Code, Codex, OpenClaw and Hermes Agent by Nous Research files all of their work
 under one name, and no agent can be held to its own behaviour. Add a key per runtime and the
-CLI picks the right one:
+CLI picks the right one. `cairn setup` writes these for you, one per runtime it pairs:
 
 ```bash
 CAIRN_API_KEY=sk_live_...              # the fallback, when nothing else matches
@@ -721,7 +746,8 @@ filed as claude-code. When Claude Code's marker and a Codex marker are both pres
 walks up its parent processes and takes the nearest one named `codex` or `claude`. If `ps`
 cannot answer, the old order stands. Nothing is spawned when the environment is unambiguous.
 
-**A key also names a human: the user it was issued to.** A task an agent files is assigned
+**A key also names a human: the user it was issued to** — for a paired key, whoever
+approved it. A task an agent files is assigned
 to that person unless `--assignee` names someone else (`cairn people` lists who can be
 named), and `--assignee me` means them. The
 agent label stays on the claim and on the history; the human is who the work belongs to.
@@ -730,6 +756,8 @@ The CLI is deliberately dependency-free — Node 22's built-in `fetch` is enough
 be dropped onto a box and run with no install step.
 
 ### Skill and hooks
+
+`cairn setup` installs both; this is what it does, for doing it by hand.
 
 **Skill** (Claude Code, Codex and OpenClaw all read skill folders):
 
@@ -938,9 +966,10 @@ task ref, a project key or a directory name says which server a command is for, 
 choice is made explicitly or not at all:
 
 ```bash
-cairn instance add personal --url https://cairn.example.com --adopt   # this machine's existing setup
-cairn instance add work --url https://cairn.work.example              # then its keys in
-                                                                      # ~/.cairn/instances/work/env
+cairn setup --url https://cairn.work.example --name work   # adopts this machine's existing setup as an
+                                                          # instance (still the default), registers
+                                                          # `work`, pairs its keys into
+                                                          # ~/.cairn/instances/work/env
 cairn instance list
 cairn note ACME-42 "…" --instance work                                # or CAIRN_INSTANCE=work
 ```
@@ -948,13 +977,15 @@ cairn note ACME-42 "…" --instance work                                # or CAI
 - `~/.cairn/instances.json` names the instances and what happens in a directory with no
   route: `"unclassified": {"mode": "default", "instance": "personal"}` uses that one, and
   `{"mode": "ask"}` (the default) stops before any request with **exit 10**, so an agent asks
-  the user instead of guessing. Adding the second instance at a terminal asks which you want;
-  `--default` on `instance add`, or `cairn instance policy ask | default <name>` at any time,
+  the user instead of guessing. Adding the second instance with `instance add` at a terminal
+  asks which you want (`cairn setup` never asks, and says so when it is `ask`); `--default`
+  on `instance add`, or `cairn instance policy ask | default <name>` at any time,
   answers it directly.
 - Each instance keeps its own state in `~/.cairn/instances/<name>/`: `env` (the same per-runtime
   keys as [above](#keys-and-identity)), the outbox, ownership and `projects.json`. `--adopt` moves the files at the
   top of `~/.cairn` into the instance, and refuses if they were used with a different server
   (`CAIRN_BASE_URL`, then `~/.cairn/env`, then localhost). Interrupted, it finishes on a re-run.
+  `cairn setup` adding a second instance does this itself, naming the adopted one from its url.
 - `CAIRN_API_KEY` in the environment is refused once instances are configured — it cannot say
   which instance issued it — and so is a `CAIRN_BASE_URL` that disagrees with the chosen one.
 - People are per instance too: `--assignee me` is resolved by the server that answers, as
@@ -994,8 +1025,9 @@ checkpointing, since it may be days old).
 **Maintenance** is about an instance, not a directory, so `reconcile` and `vitals` take
 `--all-instances` — one run per instance under its own maintenance key — and the reports
 name their instance: `CAIRN_NOTIFY_VITALS=personal:CAIRN-107,work:OPS-3`. See
-[Scheduled maintenance](#scheduled-maintenance--optional); re-run its installer after adding
-instances. The MCP server routes by the directory it was started in, like any other command.
+[Scheduled maintenance](#scheduled-maintenance--optional); re-run its installer (or
+`cairn setup --url <it> --maintenance`, which also pairs its key) after adding instances.
+The MCP server routes by the directory it was started in, like any other command.
 
 **Telling them apart in the browser.** An administrator can give each instance its own name
 and accent colour under **Settings → Branding**. The name replaces "Cairn" in the sidebar, the
@@ -1047,7 +1079,9 @@ never install one because a plausible directory exists.
 
 Cairn works with none of these. They are the difference between a tracker that notices its
 own problems and one that waits to be asked, and each is independent: install none, some,
-or all.
+or all. [`cairn setup`](#connect-a-machine) installs `agent-files`, and `reconcile` and
+`vitals` too with `--maintenance`; the installer below is for the rest, or for doing it by
+hand.
 
 ```bash
 node scripts/install-cron.mjs              # print what would be installed, change nothing
@@ -1075,11 +1109,13 @@ broken, and `--install` places the maintenance script itself if it is not there 
 A laptop has no deploy to trigger its sync, and it sleeps through slots, so under launchd
 `agent-files` runs every 15 minutes and at load. launchd runs a slot that was missed during
 sleep as soon as the machine wakes, which is usually before the network is up, so the sync
-retries a network failure for about a minute and a half before it gives up. It needs a
-maintenance key (below), and warns about a missing one on every run.
+retries a network failure for about a minute and a half before it gives up. Reporting into
+a task (`CAIRN_NOTIFY_FILES`) needs a maintenance key (below), and warns about a missing one
+on every run.
 
 Install only what that machine is for. A laptop beside a server usually wants
-`--only agent-files`: `reconcile` and `vitals` are about the instance rather than the
+`--only agent-files`, which is what `cairn setup` installs: `reconcile` and `vitals` are
+about the instance rather than the
 machine, and running `vitals` in two places reports the same findings twice.
 
 | Job | What it is for |
@@ -1104,7 +1140,9 @@ instance: `CAIRN_NOTIFY_VITALS` is a comma list, one `<instance>:<ref>` per inst
 exists on only one of them.
 
 Run the jobs under an identity of their own: `CAIRN_AGENT=maintenance` with a matching
-`CAIRN_API_KEY_MAINTENANCE` (in each instance's `env`, where there are several). Where the
+`CAIRN_API_KEY_MAINTENANCE` (in each instance's `env`, where there are several).
+`cairn setup --maintenance` pairs it, in a request of its own that only an administrator
+can approve, since it releases anyone's claims. Where the
 keys are split per runtime, the CLI refuses to send a maintenance write under the default
 key (exit 3), because that key belongs to some other agent and a scheduled job's warning is
 read by nobody.
@@ -1231,8 +1269,10 @@ restarted, and restarting it would interrupt any job in flight.
 - **Auth**: opaque, revocable application sessions for the UI; hashed
   bearer API keys for agents, one key per agent
 - **Authorization**: active users and valid agent keys share workspace data; human
-  administrators alone manage users, roles, passwords and agent keys. PostgreSQL is
-  reachable only from the private application network.
+  administrators alone manage users, roles, passwords and other people's agent keys. A
+  signed-in person can pair keys for their own agents, and a `maintenance` key only if they
+  are an administrator. PostgreSQL
+  is reachable only from the private application network.
 
 **The data model**, in six groups:
 
@@ -1243,7 +1283,7 @@ restarted, and restarting it would interrupt any job in flight.
 | what happened, and where | `sessions`, `file_touches` |
 | groupings | `entities` + `project_entities`, between one project and everything |
 | whether it is read back | `search_events` (the query, whether it widened, which entries came back), `knowledge_reads` (every read by slug, with a `hit` flag — `false` says a named fact was asked for and missing), and `knowledge_recall_state` derived from both |
-| who | `app_users`, `app_sessions`, `api_keys` |
+| who | `app_users`, `app_sessions`, `api_keys`, and `connect_requests` for machine pairings (device codes hashed, kept 90 days once used as the record of who approved which host) |
 
 The migrations are the best description of it — each one is commented with *why*, not
 what. [`001_initial.sql`](./migrations/001_initial.sql) is the tracker;

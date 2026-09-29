@@ -90,7 +90,7 @@ cairn run    ACME-42 "npm test" --status passed --exit-code 0
 ```
 
 They record; none executes anything. "I fixed it" cannot be checked; `run_result failed
-exit 1` can. Repeats are deduplicated, so a retry is safe. Name another task's ref in a
+exit 1` can. Repeats dedupe, so retrying is safe. Name another task's ref in a
 `decision` or `finding` note when your work constrains it — it shows under that task's
 `mentionedIn`; the ref in prose is the link. `cairn comment` addresses the human, not the
 next agent.
@@ -253,7 +253,8 @@ TSV by default (`#count`, a header, rows); `--json` to parse, `--pretty` for a h
 `cairn --help` is the reference. `replay` sends writes queued offline. `task delete <ref>
 --confirm <ref>` is for junk only; `cancel` keeps the record and the reason.
 
-Requires `cairn` on PATH and a key per runtime (`~/.cairn/env`): the key is who wrote a thing.
+Requires `cairn` on PATH and a key per runtime (`~/.cairn/env`; a person pairs them with
+`cairn setup`): the key is who wrote a thing.
 **Exit 10: several Cairn instances, none known here.** Ask the user which, run the `cairn
 route add …` it prints, retry. Never pick one yourself. Stale/ambiguous project keys exit 10;
 use `--instance` only when certain.

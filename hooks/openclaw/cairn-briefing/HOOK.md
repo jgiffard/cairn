@@ -25,7 +25,7 @@ from their `SessionStart` hook.
 
 - The `cairn` CLI on the gateway's PATH, or `CAIRN_CLI` set to its absolute path.
 - A Cairn key for OpenClaw in `~/.cairn/env` (`CAIRN_API_KEY_OPENCLAW`, or the plain
-  `CAIRN_API_KEY`).
+  `CAIRN_API_KEY`). `cairn setup` pairs it.
 
 ## Configuration
 
@@ -36,9 +36,10 @@ openclaw hooks install --link ~/.cairn/hooks/openclaw/cairn-briefing --force
 # then restart the gateway
 ```
 
-`node scripts/install-hooks.mjs` in the Cairn repository copies this directory to
-`~/.cairn/hooks/openclaw/cairn-briefing` and runs that command for you when `openclaw` is on
-PATH. `scripts/sync-agent-files.mjs` keeps the copy current.
+`cairn setup` (or `node scripts/install-hooks.mjs` in the Cairn repository) copies this
+directory to `~/.cairn/hooks/openclaw/cairn-briefing` and runs that command for you when
+`openclaw` is on PATH and this account runs the gateway. `scripts/sync-agent-files.mjs`
+keeps the copy current.
 
 Environment: `CAIRN_CLI` (default `cairn`), `CAIRN_HOOK_TIMEOUT_MS` (default 5000).
 

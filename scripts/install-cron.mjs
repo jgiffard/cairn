@@ -11,6 +11,9 @@
  *   node scripts/install-cron.mjs --remove   # take it out again
  *   node scripts/install-cron.mjs --run agent-files   # run that job now
  *
+ * `cairn setup` runs this with `--only agent-files` (plus reconcile and vitals
+ * under `--maintenance`); the rest, like openclaw-sessions, are installed here.
+ *
  * Printing is the default on purpose: a script that edits a crontab the moment
  * it is run is a script nobody should run.
  *

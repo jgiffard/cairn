@@ -20,6 +20,9 @@
  * is how it knows what is safe to replace.
  *
  * Usage: node scripts/install-hooks.mjs [--dry-run] [--openclaw]
+ *
+ * `cairn setup` runs this for you, alongside pairing keys and copying the
+ * skill; run it by hand only to re-wire the hooks on their own.
  */
 import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -275,8 +278,8 @@ const installCodex = () => {
     log('  codex: SessionStart, Stop')
     if (unwired) log('  codex: removed the per-Read PreToolUse hook (CCS-40)')
     log('  codex: entries must be trusted on next launch — [hooks.state] in config.toml')
-    log('  codex: needs CAIRN_API_KEY_CODEX in ~/.cairn/env, or it writes as whoever')
-    log('         owns the plain CAIRN_API_KEY there')
+    log('  codex: needs CAIRN_API_KEY_CODEX (`cairn setup` pairs one), or it writes as')
+    log('         whoever owns the plain CAIRN_API_KEY')
   }
 
   // Said, never done. These are somebody else's hooks, and this installer has
@@ -486,7 +489,7 @@ const runOpenclawInstall = () => {
 const installOpenclaw = () => {
   if (!onPath(OPENCLAW_BIN)) {
     log('  openclaw: not on PATH — skipped. Where it runs, as the gateway user:')
-    log(`            node scripts/install-hooks.mjs   (or: ${openclawCommand})`)
+    log(`            cairn setup   (or: node scripts/install-hooks.mjs, or ${openclawCommand})`)
     return
   }
   // `openclaw` on PATH says it is installed, not that this user runs a gateway:
