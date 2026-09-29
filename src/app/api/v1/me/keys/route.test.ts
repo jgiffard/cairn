@@ -30,6 +30,8 @@ describe('GET /api/v1/me/keys', () => {
           created_at: new Date('2026-09-01T10:00:00Z'),
           last_used_at: null,
           revoked_at: null,
+          key_auth_epoch: '0',
+          user_auth_epoch: '0',
         },
       ],
     })
@@ -48,13 +50,35 @@ describe('GET /api/v1/me/keys', () => {
         createdAt: '2026-09-01T10:00:00.000Z',
         lastUsedAt: null,
         revokedAt: null,
+        revoked: false,
       },
     ])
     expect(JSON.stringify(body)).not.toContain('deadbeef')
     const [sql, values] = mocks.query.mock.calls[0]!
-    expect(sql).toMatch(/where user_id = \$1/)
+    expect(sql).toMatch(/where k\.user_id = \$1/)
     expect(sql).not.toMatch(/key_hash/)
     expect(values).toEqual(['user-1'])
+  })
+
+  it('reports a key as revoked when its auth_epoch has fallen behind its user\'s, even with revoked_at still null', async () => {
+    mocks.query.mockResolvedValue({
+      rows: [
+        {
+          id: 'key-1',
+          agent_name: 'claude-code',
+          name: 'claude-code on laptop',
+          key_prefix: 'sk_live_',
+          created_at: new Date('2026-09-01T10:00:00Z'),
+          last_used_at: null,
+          revoked_at: null,
+          key_auth_epoch: '0',
+          user_auth_epoch: '1',
+        },
+      ],
+    })
+    const response = await get()
+    const body = await response.json()
+    expect(body.data[0]).toMatchObject({ revokedAt: null, revoked: true })
   })
 
   it('works for a member, not just an administrator', async () => {

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
-import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { findTask, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 import { takeTask } from '@/lib/api/claim'
 import { withAssignee } from '@/lib/api/people'
 import { CLAIM_LEASE_SECONDS } from '@/lib/utils'
@@ -28,6 +28,8 @@ export const POST = route<{ ref: string }, z.infer<typeof claimBody>>({
   handler: async ({ actor, params, body }) => {
     const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
+    const archived = refuseArchived(task)
+    if (archived) return archived
 
     // A terminal task is settled history, not available work. Keep the public
     // claim endpoint from reopening a task that already has a resolution; the

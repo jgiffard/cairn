@@ -2,7 +2,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
-import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { findTask, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 import { createActivityEvidenceSchema } from '@/schemas/task'
 import { z } from 'zod'
 
@@ -40,6 +40,8 @@ export const POST = route<{ ref: string }, z.infer<typeof createActivityEvidence
   handler: async ({ actor, params, body }) => {
     const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
+    const archived = refuseArchived(task)
+    if (archived) return archived
 
     const { event, ...data } = body
     const { data: row, error } = await admin()

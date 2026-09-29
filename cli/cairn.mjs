@@ -289,6 +289,82 @@ const isStaleInstance = (name) => {
   }
 }
 
+/**
+ * Stricter than `isStaleInstance`: true only when an instance has NEVER
+ * produced a readable project-key cache, as opposed to one that did and has
+ * simply gone stale with age (the normal state of any secondary instance
+ * nobody has used in six hours). Staleness-by-age is a risk this file already
+ * accepts elsewhere — a brand-new project on a reachable instance, before its
+ * first key request, is invisible the same way. An instance that has never
+ * been reached at all is a sharper problem: EVERY project it owns is
+ * invisible, permanently, not just the ones created since its last refresh —
+ * so it gets its own check before this file lets an unclassified ref default
+ * to somewhere else.
+ */
+const neverReachedInstance = (name) => {
+  try {
+    const cached = JSON.parse(readFileSync(join(instanceDir(name), PROJECT_KEYS_FILE), 'utf8'))
+    return !Array.isArray(cached.keys)
+  } catch {
+    return true
+  }
+}
+
+/**
+ * A fixed, short budget for finding out whether a stale cache is merely old
+ * or genuinely unreachable, tried only for instances resolveRoute already
+ * knows are stale. Not CAIRN_DEADLINE_MS: that constant is not defined yet
+ * when this file's top-level routing runs (it is read from the environment
+ * further down, after the instance is already chosen), and this must not
+ * inherit a caller's much longer budget anyway — routing is a hint, and a
+ * hint that can take 15 seconds to fail defeats the point of being one.
+ */
+const ROUTE_REFRESH_TIMEOUT_MS = 1500
+
+/**
+ * Ask ONE instance — by its own URL and its own key, never this process's —
+ * what it currently owns, and update its cache if it answers. This is the
+ * same request `refreshProjectKeys` makes for the instance this process is
+ * running as, made usable for any instance named in instances.json, because a
+ * routing decision needs to know whether a stale neighbour is merely quiet or
+ * actually unreachable, and it needs to know that about instances this
+ * process never selected and has no session with.
+ *
+ * A missing env file, an instance with no key on it, a timeout, a network
+ * error, or a non-success payload all resolve to `false` — every one of them
+ * is "could not confirm", and the caller falls back to treating the cache as
+ * still stale.
+ */
+const refreshInstanceKeysFor = async (name, instances) => {
+  // Not `trimUrl`: that helper is declared later in this file, after the
+  // top-level routing decision that can already need this function has run.
+  const url = (instances[name]?.url ?? '').replace(/\/+$/, '')
+  if (!url) return false
+  const env = fileEnv(join(instanceDir(name), 'env'))
+  const key = env.CAIRN_API_KEY || Object.entries(env).find(([k]) => k.startsWith('CAIRN_API_KEY_'))?.[1]
+  if (!key) return false
+  try {
+    const res = await fetch(`${url}/api/v1/projects`, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(ROUTE_REFRESH_TIMEOUT_MS),
+    })
+    if (!res.ok) return false
+    const payload = await res.json()
+    if (!payload?.success || !Array.isArray(payload.data)) return false
+    // Active projects only, same as refreshProjectKeys: an archived project's
+    // copy must not keep claiming a ref that has moved on.
+    const keys = [...new Set(payload.data.flatMap((p) => [p.key, ...(p.former_keys ?? []).map((f) => f.key)]).filter(Boolean))]
+    const dir = instanceDir(name)
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    const path = join(dir, PROJECT_KEYS_FILE)
+    writeFileSync(`${path}.tmp`, `${JSON.stringify({ at: new Date().toISOString(), keys })}\n`, { mode: 0o600 })
+    renameSync(`${path}.tmp`, path)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** `session end --id` speaks for a session the hook is not running inside. */
 const routeSession = () => {
   const argv = process.argv.slice(2)
@@ -327,13 +403,19 @@ const parkedSessions = () => {
  * and the ref's side is a cache of project keys that can be hours old. When
  * the two disagree the route still wins, and the caller is told how to send
  * the one command elsewhere rather than having it done for them.
+ *
+ * Async because a ref-shaped command with a stale instance in play first
+ * tries to make that instance's cache current (`refreshInstanceKeysFor`)
+ * before deciding anything — see the block below the saved-route check. Every
+ * other path returns without awaiting anything, so a command with no stale
+ * instance to worry about pays nothing for this being async.
  */
-const resolveRoute = ({ config, dir, session, ref }) => {
+const resolveRoute = async ({ config, dir, session, ref }) => {
   const { instances, unclassified, routes } = config
-  const owners = ref ? instancesWithKey(ref, instances) : []
   const { key, repo } = routeKey(dir)
   const route = routeFor(key, routes)
   if (route) {
+    const owners = ref ? instancesWithKey(ref, instances) : []
     const elsewhere = owners.length === 1 && owners[0] !== route.instance
     return {
       name: route.instance,
@@ -341,41 +423,62 @@ const resolveRoute = ({ config, dir, session, ref }) => {
       ...(elsewhere ? { hint: `cairn: ${ref} is a project on ${owners[0]}, and this directory is routed to ${route.instance}; add --instance ${owners[0]} if it is meant for ${owners[0]}` } : {}),
     }
   }
+  const bySession = sessionRoute(session, instances)
+  if (!ref) {
+    if (bySession) return { name: bySession, why: 'chosen for this session' }
+    if (unclassified.mode === 'default') return { name: unclassified.instance, why: 'default instance' }
+    return { name: null, key, repo }
+  }
+
   // A ref-shaped command must not fall through to a session/default when the
   // ownership cache may have changed. An explicit --instance or saved route
   // remains available, and the next request to that instance refreshes keys.
-  const bySession = sessionRoute(session, instances)
-  // A session answer is explicit user routing when no cache claims the ref.
-  // With no owner and ask mode, preserve the normal routing question instead
-  // of inventing a stale-cache error. A positive owner or default, however,
-  // must not become a write target while another instance is unknown.
-  // The configured default still handles an unclassified ref when no cache
-  // claims it.
   //
   // CAIRN-305 refined this, and CAIRN-316 is why it had to: keys are
-  // PER-INSTANCE, so `owners` above already looked at every instance's
-  // last-known cache, stale or fresh, and only an instance whose cache
-  // actually LISTS this ref's key is in it. Blocking every ref-shaped command
-  // whenever ANY instance was stale — the original rule — refused personal
-  // work on every project a healthy instance plainly owns, for as long as one
-  // unrelated instance was unreachable (an office WAF returning 403 on every
-  // request was enough). What actually has to be refused is narrower: a ref
-  // whose only evidence of ownership is stale, or whose ownership is disputed.
-  // So block only when a stale instance's cache is itself one of `owners`
-  // (its last-known answer said it owns this key, and that answer is now too
-  // old to trust) or when two fresh instances both claim it. An instance that
-  // is stale but never listed this key is not silently trusted to have picked
-  // it up since — that is the one gap left open on purpose: a project CREATED
-  // on that instance after its cache went stale would not show up in `owners`
-  // at all yet, and would route to whichever fresh instance (or default)
-  // otherwise claims the ref, same as an ordinary unknown ref would. That is
-  // strictly the risk this file already accepted for any brand-new project on
-  // a reachable instance before its first key request; it is not new here.
-  const staleOwners = ref ? owners.filter((name) => isStaleInstance(name)) : []
+  // PER-INSTANCE, so `owners` below looks at every instance's last-known
+  // cache, stale or fresh, and only an instance whose cache actually LISTS
+  // this ref's key is in it. Blocking every ref-shaped command whenever ANY
+  // instance was stale — the original rule — refused personal work on every
+  // project a healthy instance plainly owns, for as long as one unrelated
+  // instance was unreachable (an office WAF returning 403 on every request
+  // was enough). What actually has to be refused is narrower: a ref whose
+  // only evidence of ownership is stale, or whose ownership is disputed.
+  //
+  // But "stale" is the ordinary state of any secondary instance nobody has
+  // used in six hours, not a sign of trouble — most of the time, asking it is
+  // cheap and just works. So before any of that: every instance this file
+  // currently believes is stale gets one short, parallel, best-effort chance
+  // (refreshInstanceKeysFor, ROUTE_REFRESH_TIMEOUT_MS each) to say what it
+  // owns right now, with its own key against its own URL. `owners` and
+  // `isStaleInstance` below are read AFTER this, so a neighbour that answers
+  // is treated exactly like one that was fresh all along — no separate "just
+  // refreshed" rule to keep in step with the normal one. A neighbour that
+  // does not answer (still down, still never reached) leaves the cache
+  // exactly as it was, and every rule below applies to it unchanged.
+  //
+  // This is also the fix for a NEVER-reached instance (no project-keys.json
+  // at all, not just an old one): without a chance to answer for itself first,
+  // such an instance can never appear in `owners` — every project it owns is
+  // permanently invisible, not just the ones created since some last refresh.
+  // A merely-aged cache that plainly does not list this key is a smaller,
+  // already-accepted risk (a brand-new project on a reachable instance,
+  // before its first key request, is invisible the same way) — this file
+  // does not chase that one further; the server's own 409 on an archived
+  // project is the backstop for the closely related case of a project that
+  // just moved: the instance it moved to may still show up here as the sole
+  // fresh owner while its own cache has not yet caught up, exactly as before.
+  const staleNow = Object.keys(instances).filter((name) => isStaleInstance(name))
+  if (staleNow.length > 0) {
+    await Promise.all(staleNow.map((name) => refreshInstanceKeysFor(name, instances)))
+  }
+
+  const owners = instancesWithKey(ref, instances)
+  const staleOwners = owners.filter((name) => isStaleInstance(name))
   if (staleOwners.length > 0) {
     return {
       name: null,
-      error: `cairn: project ownership data is stale; refresh it with an explicit --instance, then retry ${ref}`,
+      error: `cairn: ${staleOwners.join(', ')} last claimed ${ref} but could not be reached just now to confirm it still does; ` +
+        `retry with an explicit --instance once it answers`,
     }
   }
   if (owners.length > 1) {
@@ -383,11 +486,10 @@ const resolveRoute = ({ config, dir, session, ref }) => {
   }
   if (owners.length === 1) {
     // Every remaining owner is fresh (staleOwners was empty above); an
-    // unrelated instance that could not be checked did not claim this key, so
-    // it is worth a note, never a refusal.
-    const uncheckable = ref
-      ? Object.keys(instances).filter((name) => name !== owners[0] && isStaleInstance(name))
-      : []
+    // unrelated instance that still could not be checked, even after the
+    // refresh attempt above, did not claim this key, so it is worth a note,
+    // never a refusal.
+    const uncheckable = Object.keys(instances).filter((name) => name !== owners[0] && isStaleInstance(name))
     return {
       name: owners[0],
       why: `${ref} is a project there`,
@@ -397,7 +499,24 @@ const resolveRoute = ({ config, dir, session, ref }) => {
     }
   }
   if (bySession) return { name: bySession, why: 'chosen for this session' }
-  if (unclassified.mode === 'default') return { name: unclassified.instance, why: 'default instance' }
+  if (unclassified.mode === 'default') {
+    // Nothing claims this ref — the ordinary shape of a brand-new project.
+    // But a default only silently proceeds if no instance's silence about
+    // owning it is itself untrustworthy: an instance that has NEVER been
+    // reached (still true after the refresh attempt above) has told this
+    // file nothing at all, ever, and defaulting past it is exactly the "every
+    // project on that instance is invisible" bug this file must not repeat.
+    const unseen = Object.keys(instances).filter((name) => name !== unclassified.instance && neverReachedInstance(name))
+    if (unseen.length > 0) {
+      return {
+        name: null,
+        error: `cairn: ${unseen.join(', ')} has never been reached, so it is not known whether ${ref} belongs to it ` +
+          `rather than to the default (${unclassified.instance}); retry with an explicit --instance once it answers, ` +
+          `e.g. --instance ${unseen[0]}`,
+      }
+    }
+    return { name: unclassified.instance, why: 'default instance' }
+  }
   return { name: null, key, repo }
 }
 
@@ -563,7 +682,7 @@ const selectInstance = async () => {
     ? earlyPositional[2]
     : earlyPositional[1]
   const ref = REF_ARG.exec(refWord ?? '')?.[1]
-  const route = resolveRoute({ config: INSTANCES, dir: ROUTE_DIR, session: ROUTE_SESSION, ref })
+  const route = await resolveRoute({ config: INSTANCES, dir: ROUTE_DIR, session: ROUTE_SESSION, ref })
   if (route.hint) process.stderr.write(`${route.hint}\n`)
   if (route.error) return { undecided: route.error }
   if (route.name) return at(route.name, route.why)
@@ -2725,7 +2844,17 @@ const openclawRunsGateway = () => {
  * would point the sweep at the wrong agent's transcripts, or at nothing, and
  * say nothing about it, so this reports why instead and leaves it to whoever
  * runs setup to set CAIRN_OPENCLAW_SESSIONS by hand.
+ *
+ * The directory this returns ends up in a cron line and a launchd plist
+ * (scripts/install-cron.mjs), quoted for a shell there but never for cron's
+ * own `%` handling on the plain-cron backend. An agent name is not typed by a
+ * person — it is whatever a directory under `agents/` happens to be named —
+ * so it is checked against a plain allowlist before it is allowed anywhere
+ * near either backend, the same discipline CAIRN_OPENCLAW_SESSIONS itself
+ * gets when it comes from the environment instead (see `cairn setup`, step 9).
  */
+const SAFE_AGENT_NAME = /^[A-Za-z0-9._-]+$/
+
 const openclawSessionsDir = () => {
   const configPath = process.env.OPENCLAW_CONFIG_PATH?.trim() || join(HOME, '.openclaw', 'openclaw.json')
   const agentsDir = join(dirname(configPath), 'agents')
@@ -2736,14 +2865,19 @@ const openclawSessionsDir = () => {
   } catch (error) {
     return { error: `could not read ${agentsDir} (${error.message})` }
   }
-  const withSessions = names
+  const unsafe = names.filter((name) => !SAFE_AGENT_NAME.test(name))
+  const safe = names.filter((name) => SAFE_AGENT_NAME.test(name))
+  const withSessions = safe
     .map((name) => join(agentsDir, name, 'agent', 'codex-home', 'sessions'))
     .filter((dir) => existsSync(dir))
+  const ignoredNote = unsafe.length
+    ? ` (ignored ${unsafe.length} agent name(s) under ${agentsDir} that are not plain letters, digits, dots, dashes or underscores)`
+    : ''
   if (withSessions.length === 1) return { dir: withSessions[0] }
-  if (withSessions.length === 0) return { error: `no agent under ${agentsDir} has a codex-home/sessions directory yet` }
+  if (withSessions.length === 0) return { error: `no agent under ${agentsDir} has a codex-home/sessions directory yet${ignoredNote}` }
   const main = join(agentsDir, 'main', 'agent', 'codex-home', 'sessions')
   if (withSessions.includes(main)) return { dir: main }
-  return { error: `${withSessions.length} agents under ${agentsDir} each have sessions — ambiguous` }
+  return { error: `${withSessions.length} agents under ${agentsDir} each have sessions — ambiguous${ignoredNote}` }
 }
 
 /** Rewrite or append `KEY=value` lines in an env file, leaving everything else untouched. */
@@ -4196,10 +4330,10 @@ const commands = {
       return emit(INSTANCES.routes.map((r) => ({ path: tilde(r.path), match: r.match, instance: r.instance })))
     }
     if (sub === 'pending') {
-      return emit(parkedSessions().map((p) => ({
+      return emit(await Promise.all(parkedSessions().map(async (p) => ({
         session: p.sessionId, t: p.t, cwd: p.cwd ? tilde(p.cwd) : undefined, agent: p.agent ?? undefined,
-        routes_to: p.cwd ? resolveRoute({ config: INSTANCES, dir: p.cwd, session: p.sessionId }).name ?? undefined : undefined,
-      })))
+        routes_to: p.cwd ? (await resolveRoute({ config: INSTANCES, dir: p.cwd, session: p.sessionId })).name ?? undefined : undefined,
+      }))))
     }
     if (sub === 'remove') {
       const match = flags.folder ? 'folder' : 'exact'
@@ -4231,7 +4365,7 @@ const commands = {
     const sent = []
     const failed = []
     for (const parked of parkedSessions()) {
-      const target = parked.cwd && resolveRoute({ config: after, dir: parked.cwd, session: parked.sessionId }).name
+      const target = parked.cwd && (await resolveRoute({ config: after, dir: parked.cwd, session: parked.sessionId })).name
       if (!target || !Array.isArray(parked.args)) continue
       const args = parked.args.includes('--no-checkpoint') ? parked.args : [...parked.args, '--no-checkpoint']
       // The instance decides the server and the key; a CAIRN_API_KEY left in

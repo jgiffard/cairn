@@ -38,6 +38,21 @@ const serve = (seen: Seen, projects: string[] = []) =>
       resolve({ server, url: `http://127.0.0.1:${(server.address() as { port: number }).port}` }))
   })
 
+/**
+ * A URL nothing is listening on: bind a server, note the port, close it
+ * again. Used wherever a test needs an instance that is not stale by cache
+ * age but genuinely unreachable over the network — resolveRoute's short
+ * refresh attempt must fail fast against this, not hang for its timeout.
+ */
+const unreachableUrl = () =>
+  new Promise<string>((resolve) => {
+    const probe = createServer((_req, res) => res.end())
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as { port: number }
+      probe.close(() => resolve(`http://127.0.0.1:${port}`))
+    })
+  })
+
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd, stdio: 'ignore' })
 
@@ -225,23 +240,64 @@ describe('routing a command to its instance', () => {
     expect(where()).toEqual({ personal: 0, work: 0 })
   })
 
-  it('refuses stale project ownership instead of falling through to the default', async () => {
-    await configure({ unclassified: { mode: 'default', instance: 'personal' } })
+  // resolveRoute now tries a short, best-effort refresh of a stale instance's
+  // own project keys — from its own url and key — before deciding anything
+  // (see the comment above `staleNow` in resolveRoute). The four cases below
+  // are the ones that split apart once that refresh can succeed or fail:
+  // reachable-so-refreshed, unreachable-so-not, and both with and without an
+  // owner already on record.
+
+  it('refreshes a stale but reachable instance before deciding, and uses its own answer', async () => {
+    await configure()
+    // `work`'s cache is old AND, before the refresh this test is about, wrong
+    // — as if the project had moved there since work was last asked. `work`'s
+    // fake server (unlike its cache) has always said it owns WORK.
+    await writeFile(join(home, '.cairn', 'instances', 'work', 'project-keys.json'), JSON.stringify({
+      at: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(), keys: [],
+    }))
+    await writeFile(join(home, '.cairn', 'instances', 'personal', 'project-keys.json'), JSON.stringify({
+      at: new Date().toISOString(), keys: ['HOME'],
+    }))
+
+    const result = await run(home, ['note', 'WORK-9', 'x'])
+    expect(result.code).toBe(0)
+    expect(result.stderr).not.toContain('could not be checked')
+    expect(result.stderr).not.toContain('stale')
+    expect(where()).toEqual({ personal: 0, work: 1 })
+
+    const refreshed = JSON.parse(
+      await readFile(join(home, '.cairn', 'instances', 'work', 'project-keys.json'), 'utf8'),
+    )
+    expect(refreshed.keys).toContain('WORK')
+  })
+
+  it('refuses stale project ownership when the owner cannot be reached to reconfirm it', async () => {
+    const unreachable = await unreachableUrl()
+    await configure({
+      unclassified: { mode: 'default', instance: 'personal' },
+      instances: { personal: { url: a }, work: { url: unreachable } },
+    })
     await writeFile(join(home, '.cairn', 'instances', 'work', 'project-keys.json'), JSON.stringify({
       at: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(), keys: ['WORK'],
     }))
     const result = await run(home, ['note', 'WORK-3', 'x'])
     expect(result.code).toBe(10)
-    expect(result.stderr).toContain('project ownership data is stale')
+    expect(result.stderr).toContain('work')
+    expect(result.stderr).toContain('could not be reached')
     expect(where()).toEqual({ personal: 0, work: 0 })
   })
 
-  it('routes to a fresh owner even when an unrelated instance cannot be checked (CAIRN-316)', async () => {
-    // `work` behind a WAF or off the VPN must not block ordinary work a
+  it('routes to a fresh owner when an unrelated instance is genuinely unreachable (CAIRN-316)', async () => {
+    // A WAF or a VPN that is actually down must not block ordinary work a
     // reachable instance plainly owns — only a ref THAT instance's own
     // last-known cache actually claims would be a problem, and neither of
-    // these caches for `work` claims WORK-3 (one is absent, one unreadable).
-    await configure({ unclassified: { mode: 'default', instance: 'personal' } })
+    // these caches for `work` claims WORK-3 (one is absent, one unreadable),
+    // and work's refresh attempt cannot succeed either: nothing answers there.
+    const unreachable = await unreachableUrl()
+    await configure({
+      unclassified: { mode: 'default', instance: 'personal' },
+      instances: { personal: { url: a }, work: { url: unreachable } },
+    })
     await writeFile(join(home, '.cairn', 'instances', 'personal', 'project-keys.json'), JSON.stringify({
       at: new Date().toISOString(), keys: ['WORK'],
     }))
@@ -257,9 +313,29 @@ describe('routing a command to its instance', () => {
     }
   })
 
-  // The ref's own owner being stale (the case just above this section) is
-  // still refused — see 'refuses stale project ownership instead of falling
-  // through to the default', unchanged by CAIRN-316.
+  it('refuses to default an unclassified ref past a never-reached, unreachable instance', async () => {
+    // Nothing claims NEW-1, and `work` has never once answered — not just an
+    // aged cache, no cache at all — so defaulting straight to `personal`
+    // would be exactly the "every project on that instance is invisible" bug
+    // this refresh attempt exists to close. `work`'s own refresh attempt
+    // fails too (nothing is listening), so this must refuse, not default.
+    const unreachable = await unreachableUrl()
+    await configure({
+      unclassified: { mode: 'default', instance: 'personal' },
+      instances: { personal: { url: a }, work: { url: unreachable } },
+    })
+    const result = await run(home, ['note', 'NEW-1', 'x'])
+    expect(result.code).toBe(10)
+    expect(result.stderr).toContain('work has never been reached')
+    expect(result.stderr).toContain('--instance work')
+    expect(where()).toEqual({ personal: 0, work: 0 })
+  })
+
+  // The ref's own owner being stale is still refused when it cannot be
+  // reached to confirm it still owns the ref — see 'refuses stale project
+  // ownership when the owner cannot be reached to reconfirm it', above.
+  // Unchanged by CAIRN-316; what changed is only that a *reachable* stale
+  // owner now gets a chance to answer first (the test just above that one).
 
   it('routes nested task delete by its ref before making either request', async () => {
     await configure({ unclassified: { mode: 'default', instance: 'personal' } })

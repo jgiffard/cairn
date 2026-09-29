@@ -99,6 +99,7 @@ describe('self-service agent keys', () => {
       createdAt: expect.any(String),
       lastUsedAt: null,
       revokedAt: null,
+      revoked: false,
     })
     expect(JSON.stringify(body)).not.toContain(mine.key)
     expect(JSON.stringify(body)).not.toMatch(/key_hash|keyHash/)

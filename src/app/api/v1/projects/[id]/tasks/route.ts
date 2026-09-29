@@ -121,9 +121,27 @@ export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
   schema: createTaskSchema,
   secretFields: ['title', 'description'],
   handler: async ({ actor, params, body }) => {
-    const resolved = await resolveProject(params.id)
+    const resolved = await resolveProject<{ id: string; key: string; status: string }>(
+      params.id,
+      'id, key, status',
+    )
     if (!resolved) return fail('not_found', `No project ${params.id}.`)
     const { project, renamed } = resolved
+
+    // Same rule as writing to an existing task (F1): a project archived here
+    // is most likely the copy a move to another instance left behind, and a
+    // stale-cached CLI filing a new task into it would strand the task the
+    // same way a claim or a note would.
+    if (project.status === 'archived') {
+      return fail(
+        'conflict',
+        `${project.key} is archived — most likely because it moved to another Cairn instance and ` +
+          `this is the copy left behind. If it moved, point the CLI at the other one with ` +
+          `--instance <the other instance>. To file work here instead, restore ${project.key} first: ` +
+          `\`cairn project restore ${project.key}\`.`,
+        { project: project.key, projectStatus: 'archived' },
+      )
+    }
 
     const unreadable = refuseUnreadableBody(actor, body.description, `cairn add "<title>" --project ${project.key} --body -`)
     if (unreadable) return unreadable

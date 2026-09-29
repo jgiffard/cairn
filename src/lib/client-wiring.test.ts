@@ -419,6 +419,8 @@ describe('the Mac sync job', () => {
 
   it('leaves the server crontab hourly, where the deploy is the trigger', async () => {
     const { stdout } = await render('--cron')
-    expect(stdout).toMatch(/^23 \* \* \* \* CAIRN_AGENT=maintenance .*sync\.mjs/m)
+    // Every value is single-quoted for the shell now (CAIRN-... F2), so this
+    // matches the rendered line rather than pinning its old unquoted shape.
+    expect(stdout).toMatch(/^23 \* \* \* \* CAIRN_AGENT='maintenance' .*sync\.mjs'/m)
   })
 })

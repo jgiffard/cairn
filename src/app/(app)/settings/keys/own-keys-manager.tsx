@@ -32,8 +32,8 @@ export const OwnKeysManager = ({ keys }: { keys: OwnKey[] }) => {
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
   const [showRevoked, setShowRevoked] = useState(false)
 
-  const revokedCount = keys.filter((key) => key.revokedAt).length
-  const visible = showRevoked ? keys : keys.filter((key) => !key.revokedAt)
+  const revokedCount = keys.filter((key) => key.revoked).length
+  const visible = showRevoked ? keys : keys.filter((key) => !key.revoked)
   const groups = groupKeysByHost(visible)
 
   const revoke = async (target: NonNullable<Pending>, ids: string[], what: string) => {
@@ -133,7 +133,7 @@ const HostCard = ({
   onConfirm: (pending: Pending) => void
   onRevoke: (target: NonNullable<Pending>, ids: string[], what: string) => Promise<void>
 }) => {
-  const active = group.keys.filter((key) => !key.revokedAt)
+  const active = group.keys.filter((key) => !key.revoked)
   const hostTarget = { kind: 'host', id: group.id } as const
   const confirmingHost = confirming?.kind === 'host' && confirming.id === group.id
   const revokingHost = busy?.kind === 'host' && busy.id === group.id
@@ -229,7 +229,7 @@ const KeyRow = ({
   onConfirm: (pending: Pending) => void
   onRevoke: (target: NonNullable<Pending>, ids: string[], what: string) => Promise<void>
 }) => {
-  const revoked = ownKey.revokedAt !== null
+  const revoked = ownKey.revoked
   const target = { kind: 'key', id: ownKey.id } as const
 
   return (
@@ -260,7 +260,16 @@ const KeyRow = ({
 
       {revoked ? (
         <span className="text-fg-subtle shrink-0 text-[0.6875rem]">
-          Revoked <RelativeTime iso={ownKey.revokedAt!} />
+          {ownKey.revokedAt ? (
+            <>
+              Revoked <RelativeTime iso={ownKey.revokedAt} />
+            </>
+          ) : (
+            // Killed by an auth_epoch bump rather than an explicit revoke —
+            // no per-key timestamp for that exists, so there is nothing to
+            // put in a RelativeTime.
+            'Revoked'
+          )}
         </span>
       ) : confirming ? (
         <span className="flex shrink-0 items-center gap-3">
@@ -285,7 +294,7 @@ const KeyRow = ({
         </span>
       ) : (
         <span className="flex shrink-0 items-center gap-3">
-          <span className="text-status-done text-[0.6875rem]">Active</span>
+          <span className="text-fg-subtle text-[0.6875rem]">Active</span>
           <button
             type="button"
             disabled={anyBusy}

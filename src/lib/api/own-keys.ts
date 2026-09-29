@@ -14,6 +14,18 @@ export type OwnKey = {
   createdAt: string
   lastUsedAt: string | null
   revokedAt: string | null
+  /**
+   * Whether the key is actually usable — `revokedAt` alone is not enough.
+   *
+   * `authenticate()` also refuses a key whose `auth_epoch` has fallen behind
+   * its user's (a bump kills every key issued before it in one write, without
+   * touching each row's `revoked_at`). Today the one place that bumps a
+   * user's epoch — deactivating them — revokes every key in the same
+   * transaction, so the two never disagree in practice. This checks the
+   * epoch anyway rather than trusting that invariant to hold forever: a key
+   * the server would refuse must never read back as active here.
+   */
+  revoked: boolean
 }
 
 const iso = (value: Date | string | null): string | null =>
@@ -28,9 +40,15 @@ export const listOwnKeys = async (userId: string): Promise<OwnKey[]> => {
     created_at: Date
     last_used_at: Date | null
     revoked_at: Date | null
+    key_auth_epoch: string
+    user_auth_epoch: string
   }>(
-    `select id, agent_name, name, key_prefix, created_at, last_used_at, revoked_at
-       from api_keys where user_id = $1 order by created_at, id`,
+    `select k.id, k.agent_name, k.name, k.key_prefix, k.created_at, k.last_used_at, k.revoked_at,
+            k.auth_epoch as key_auth_epoch, u.auth_epoch as user_auth_epoch
+       from api_keys k
+       join app_users u on u.id = k.user_id
+      where k.user_id = $1
+      order by k.created_at, k.id`,
     [userId],
   )
   return result.rows.map((row) => ({
@@ -41,6 +59,7 @@ export const listOwnKeys = async (userId: string): Promise<OwnKey[]> => {
     createdAt: iso(row.created_at)!,
     lastUsedAt: iso(row.last_used_at),
     revokedAt: iso(row.revoked_at),
+    revoked: row.revoked_at !== null || row.key_auth_epoch !== row.user_auth_epoch,
   }))
 }
 

@@ -1011,10 +1011,21 @@ nothing is ever guessed from a project name, a remote or a directory name:
 3. the command's ref (`note WORK-12 …`, never a flag's value), when exactly one instance is
    known to have its project — each instance's keys are cached from its own responses, at
    most six hours old. A route still wins over it, with a hint to add `--instance`. Past six
-   hours, only the instance(s) whose *own* cache actually claims this ref are ever a problem:
-   if that cache is now stale, or two fresh caches both claim it, the command stops with
-   **exit 10** instead of guessing; an unrelated instance that cannot be reached at all (behind
-   a VPN, a WAF, a restart) never blocks a ref a reachable instance plainly owns;
+   hours a cache is stale, which is the ordinary state of any secondary instance nobody has
+   used in a while, so before deciding anything this gives every stale instance one short
+   (1.5s), best-effort chance to say what it currently owns, from its own URL and key. An
+   instance that answers is treated exactly like a fresh one; one that does not (still down,
+   or never reached at all) leaves the routing rule unchanged from before the attempt: only
+   the instance(s) whose *own* cache actually claims this ref are ever a problem — if that
+   cache is still stale after the attempt, or two fresh caches both claim it, the command
+   stops with **exit 10** instead of guessing; an unrelated instance that could not be reached
+   never blocks a ref a reachable instance plainly owns. The one case this refuses outright
+   rather than falling through to step 5 is an instance that has *never once* answered (no
+   cached keys at all, not merely an old cache) and still could not be reached to ask — every
+   project on such an instance would otherwise be permanently invisible to this rule. A
+   project that moved between instances within the old owner's six-hour window is the
+   server's problem, not this rule's: a write to the archived copy gets a `409`, naming the
+   project's new home;
 4. an answer saved for this session only;
 5. the default instance, if `unclassified` names one.
 

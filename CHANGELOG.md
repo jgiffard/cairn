@@ -31,10 +31,22 @@ out under **Breaking** with what to do about it.
 - **An unreachable instance blocked every ref on the others.** With one instance out of reach
   (Dispofi behind an office-only firewall, say), its cached project keys went stale. Every
   command naming a ref another instance owns was then refused: "project ownership data is
-  stale". Now a ref is refused only when the stale instance's own last-known keys claim it, or
-  when two instances do. A single fresh owner routes, with a note on stderr that the other
-  could not be checked. The remaining risk is a project with the same key created on the
-  unreachable instance since it was last seen, the same risk as any brand-new project.
+  stale". Routing now first tries a short refresh (1.5s, in parallel) of any stale instance.
+  - One that answers is used as if it had been fresh.
+  - One that cannot be reached blocks only the refs its own last-known keys claim.
+  - A single fresh owner then routes, with a note on stderr.
+  - An instance never reached at all still blocks the fallback to a default.
+- **A write to an archived project is refused** (409, naming the project and how to reach
+  where it went). A project moved to another instance leaves an archived copy, and a client
+  still routing to the old instance could close or annotate tasks there. Every task write
+  checks its home project now (notes, claims, checkpoints, evidence, dependencies,
+  attachments, creation); reads are untouched. The CLI's outbox treats the 409 as final.
+- **Scheduled jobs on cron are shell-quoted.** `install-cron` joined commands unquoted into
+  the crontab, so a path with a space broke a job, and a crafted directory name could run a
+  command. Every value is single-quoted and `%` escaped, and names derived for the OpenClaw
+  sweep must be plain. `--only` now replaces just those jobs, instead of dropping the others,
+  so re-running `cairn setup` on Linux no longer uninstalls `reconcile` and `vitals`.
+- **Your agent keys** shows a key disabled by an account-wide reset as revoked, not active.
 - **Revoking a key by a malformed id** answered 500 (a Postgres cast error). It is a 404 now.
 
 ## [0.11.0] — 2026-09-29

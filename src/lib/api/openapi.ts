@@ -656,9 +656,16 @@ export const openapiSpec = () => ({
           'caller is the human who owns its key. A bug or spike needs a `description` of 40 ' +
           'characters or more unless `forceEmpty`. From an agent, a `description` that reads as a ' +
           'wall of text — capitals for headings, a long unbroken paragraph, paths and calls outside ' +
-          'backticks — is refused with `validation_failed` and `problems`, one fix each.',
+          'backticks — is refused with `validation_failed` and `problems`, one fix each. A 409 ' +
+          'means the project is archived — most likely the copy left behind by a move to another ' +
+          'Cairn instance; restore it first, or point the CLI at the other instance.',
         requestBody: body(json(createTaskSchema)),
-        responses: { '201': okResponse('Created.', taskSummary), '400': errorResponse, '404': errorResponse },
+        responses: {
+          '201': okResponse('Created.', taskSummary),
+          '400': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+        },
       },
     },
     '/tasks/{ref}': {
@@ -707,12 +714,16 @@ export const openapiSpec = () => ({
           'its ref changes, so anything referring to the old ref goes stale. `assignee` ' +
           'reassigns it (`me`, an email, a display name or a user id) and is never cleared; ' +
           '`dueDate: null` clears the due date. An agent\'s changed `description` meets the same ' +
-          'readable-markdown check as on create.',
+          'readable-markdown check as on create. Every write here, including moving the task ' +
+          'elsewhere, is refused with 409 if its current project is archived — most likely the ' +
+          'copy left behind by a move to another Cairn instance; restore the project first, or ' +
+          'point the CLI at the other instance.',
         requestBody: body(json(updateTaskSchema)),
         responses: {
           '200': okResponse('Updated.', taskSummary),
           '400': errorResponse,
           '404': errorResponse,
+          '409': errorResponse,
         },
       },
       delete: {
@@ -720,17 +731,26 @@ export const openapiSpec = () => ({
         description:
           'For junk that should never have existed. Refused if the task has children, ' +
           'notes, comments or dependencies in either direction — cancel it instead, which ' +
-          'keeps the record and the reason. Requires `?confirm=<REF>`.',
+          'keeps the record and the reason. Requires `?confirm=<REF>`. Also refused with 409 ' +
+          'if the task\'s project is archived (see PATCH).',
         parameters: [{ name: 'confirm', in: 'query', required: true, schema: { type: 'string' },
           description: 'The task ref, repeated back.' }],
-        responses: { '200': okResponse('Deleted.'), '400': errorResponse, '404': errorResponse },
+        responses: {
+          '200': okResponse('Deleted.'),
+          '400': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+        },
       },
     },
     '/tasks/{ref}/claim': {
       parameters: [refParam],
       post: {
         summary: 'Claim a task',
-        description: 'A 409 means another agent holds it. Pick different work.',
+        description:
+          'A 409 means another agent holds it, or that the task\'s project is archived — most ' +
+          'likely the copy left behind by a move to another Cairn instance. Pick different work, ' +
+          'or restore the project / point the CLI at the other instance.',
         responses: { '200': okResponse('Claimed.'), '409': errorResponse },
       },
     },
@@ -748,12 +768,12 @@ export const openapiSpec = () => ({
           properties: { summary: { type: 'string' }, payload: { type: 'object' } },
           required: ['summary'],
         }),
-        responses: { '200': okResponse('Saved.'), '404': errorResponse },
+        responses: { '200': okResponse('Saved.'), '404': errorResponse, '409': errorResponse },
       },
     },
     '/tasks/{ref}/release': {
       parameters: [refParam],
-      post: { summary: 'Drop a claim', responses: { '200': okResponse('Released.') } },
+      post: { summary: 'Drop a claim', responses: { '200': okResponse('Released.'), '409': errorResponse } },
     },
     '/tasks/{ref}/block': {
       parameters: [refParam],
@@ -761,7 +781,7 @@ export const openapiSpec = () => ({
         summary: 'Block or unblock',
         description: 'Omit `reason`, or send null, to unblock.',
         requestBody: body({ type: 'object', properties: { reason: { type: ['string', 'null'] } } }),
-        responses: { '200': okResponse('Updated.') },
+        responses: { '200': okResponse('Updated.'), '409': errorResponse },
       },
     },
     '/tasks/{ref}/children': {
@@ -789,7 +809,7 @@ export const openapiSpec = () => ({
         description:
           'Appends a structured git_commit, git_push, or run_result event to the task history.',
         requestBody: body(json(createActivityEvidenceSchema)),
-        responses: { '201': okResponse('Evidence recorded.'), '404': errorResponse },
+        responses: { '201': okResponse('Evidence recorded.'), '404': errorResponse, '409': errorResponse },
       },
     },
     '/tasks/{ref}/dependencies': {
@@ -813,7 +833,7 @@ export const openapiSpec = () => ({
           },
           required: ['ref'],
         }),
-        responses: { '201': okResponse('Linked.'), '400': errorResponse, '404': errorResponse },
+        responses: { '201': okResponse('Linked.'), '400': errorResponse, '404': errorResponse, '409': errorResponse },
       },
       delete: {
         summary: 'Remove a link',
@@ -826,7 +846,7 @@ export const openapiSpec = () => ({
             schema: { type: 'string', enum: ['blocked-by', 'blocks'], default: 'blocked-by' },
           },
         ],
-        responses: { '200': okResponse('Removed.'), '404': errorResponse },
+        responses: { '200': okResponse('Removed.'), '404': errorResponse, '409': errorResponse },
       },
     },
     '/tasks/{ref}/notes/{id}': {
@@ -842,7 +862,7 @@ export const openapiSpec = () => ({
           'tried, and letting one agent erase another\'s would make it untrustworthy. Exists ' +
           'so a note written by mistake can be taken back, and so a scratch task that ' +
           'acquired one is not left permanently undeletable.',
-        responses: { '200': okResponse('Withdrawn.'), '403': errorResponse, '404': errorResponse },
+        responses: { '200': okResponse('Withdrawn.'), '403': errorResponse, '404': errorResponse, '409': errorResponse },
       },
     },
     '/tasks/{ref}/notes': {
@@ -856,9 +876,14 @@ export const openapiSpec = () => ({
         summary: 'Append to the work log',
         description:
           'Idempotent on content — a retry after a timeout returns `{duplicate:true}` ' +
-          'as a success rather than creating a second note. Record dead ends too.',
+          'as a success rather than creating a second note. Record dead ends too. Refused with ' +
+          '409 if the task\'s project is archived (see PATCH /tasks/{ref}).',
         requestBody: body(json(createNoteSchema)),
-        responses: { '201': okResponse('Created.'), '200': okResponse('Duplicate; nothing written.') },
+        responses: {
+          '201': okResponse('Created.'),
+          '200': okResponse('Duplicate; nothing written.'),
+          '409': errorResponse,
+        },
       },
     },
     '/tasks/{ref}/comments': {
@@ -871,7 +896,7 @@ export const openapiSpec = () => ({
           properties: { content: { type: 'string' } },
           required: ['content'],
         }),
-        responses: { '201': okResponse('Created.') },
+        responses: { '201': okResponse('Created.'), '409': errorResponse },
       },
     },
     '/tasks/{ref}/attachments': {
@@ -891,7 +916,7 @@ export const openapiSpec = () => ({
             },
           },
         },
-        responses: { '201': okResponse('Uploaded, with signed URLs.'), '400': errorResponse },
+        responses: { '201': okResponse('Uploaded, with signed URLs.'), '400': errorResponse, '409': errorResponse },
       },
     },
     '/attachments/{id}': {

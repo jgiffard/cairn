@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
-import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { findTask, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +22,8 @@ export const POST = route<{ ref: string }, z.infer<typeof blockBody>>({
   handler: async ({ actor, params, body }) => {
     const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
+    const archived = refuseArchived(task)
+    if (archived) return archived
 
     const blocking = Boolean(body.reason)
     const { data, error } = await admin()

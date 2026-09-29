@@ -1,7 +1,7 @@
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
-import { findTask } from '@/lib/api/tasks'
+import { findTask, refuseArchived } from '@/lib/api/tasks'
 import { recordActivity } from '@/lib/api/activity'
 import {
   buildStoragePath,
@@ -40,6 +40,8 @@ export const POST = route<{ ref: string }>({
   handler: async ({ actor, params, req }) => {
     const task = await findTask(actor, params.ref)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
+    const archived = refuseArchived(task)
+    if (archived) return archived
 
     const form = await req.formData().catch(() => null)
     const file = form?.get('file')
