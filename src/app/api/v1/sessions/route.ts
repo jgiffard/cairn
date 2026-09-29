@@ -56,7 +56,7 @@ export const POST = route({
       return ok({ id: session.id, endedAt: session.ended_at, checkpointed, redactions })
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'PZ001') {
-        return fail('conflict', error.message)
+        return fail('session_closed', error.message)
       }
       return fail('validation_failed', error instanceof Error ? error.message : 'Could not record.')
     }

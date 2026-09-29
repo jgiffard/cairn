@@ -87,6 +87,7 @@ const VERSION = '0.12.0'
 const INSTANCES_PATH = join(CAIRN_DIR, 'instances.json')
 const INSTANCE_NAME = /^[a-z0-9][a-z0-9-]{0,31}$/
 const UNDECIDED_EXIT = 10
+const EXIT_CODES = { already_claimed: 9, session_closed: 11 }
 
 const readInstances = () => {
   if (!existsSync(INSTANCES_PATH)) return null
@@ -918,8 +919,14 @@ const AGENT = detectAgent()
  * decides for a caller that did not.
  */
 const SESSION_PLATFORMS = { 'claude-code': 'claude', codex: 'codex', openclaw: 'openclaw' }
-const defaultPlatform = () =>
-  process.env.CAIRN_PLATFORM?.trim() || (AGENT ? (SESSION_PLATFORMS[AGENT] ?? 'other') : 'claude')
+const PLATFORM_SOURCES = new Set(['claude', 'codex', 'openclaw', 'other'])
+const defaultPlatform = () => {
+  // Hermes's hooks set CAIRN_PLATFORM=hermes: a value the server's enum would
+  // refuse, and before this default existed the CLI never read it here.
+  const named = process.env.CAIRN_PLATFORM?.trim()
+  if (named) return PLATFORM_SOURCES.has(named) ? named : 'other'
+  return AGENT ? (SESSION_PLATFORMS[AGENT] ?? 'other') : 'claude'
+}
 
 /**
  * An explicit CAIRN_API_KEY in the environment always wins -- it is how a
@@ -1937,8 +1944,10 @@ const request = async (method, path, body, { soft = false } = {}) => {
       ? '\n  write where it lives instead: `$ENV_VAR`, `process.env.X`, a vault path, or `<password>`.' +
         '\n  if it was a real credential, rotate it: it has already been in this transcript.'
       : ''
-    // 409 gets its own exit code so a caller can branch on "someone else has it".
-    die(`${payload.error}${extra}${hint}`, payload.code === 'already_claimed' ? 9 : 1)
+    // Some 409s get their own exit code so a caller can branch on them:
+    // "someone else has it", and "that session is already closed" (the
+    // session hook stops checkpointing it, CAIRN-319).
+    die(`${payload.error}${extra}${hint}`, EXIT_CODES[payload.code] ?? 1)
   }
 
   // Any response reached through a retired key says so here, once, rather than

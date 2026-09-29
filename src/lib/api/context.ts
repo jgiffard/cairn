@@ -158,7 +158,11 @@ type OwnedRow = TaskRow & { priority: string; assignee_user_id: string | null }
 
 const refOf = (t: TaskRow) => `${t.project.key}-${t.number}`
 
-const LAST_SESSION_CANDIDATES = 5
+/**
+ * Wide enough that finished sessions re-posted late (a retried summary bumps
+ * updated_at but not ended_at) cannot crowd out the one that is really latest.
+ */
+const LAST_SESSION_CANDIDATES = 20
 
 /**
  * An open session nobody has written to for this long is not live: it was

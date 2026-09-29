@@ -193,6 +193,24 @@ describe('the session-end hook', () => {
     ])
   })
 
+  it('stops paying for live checkpoints of a session whose row is already closed', async () => {
+    // Refuses checkpoints the way the CLI does for a 409 session_closed.
+    fake('cairn', `const a = process.argv.slice(2); require('fs').appendFileSync(process.env.OUT + '/cli.jsonl', JSON.stringify(a) + '\\n'); process.exit(a[1] === 'checkpoint' ? 11 : 0)`)
+    const path = transcript('closed', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    const turn = () => run({ transcript_path: path, session_id: 'closed', cwd: '/work/demo' }, {}, ['--ongoing'])
+
+    await turn()
+    // A new turn, so a new digest: only the remembered refusal saves the call.
+    transcript('closed', [user('Please fix the login redirect'), edit('/work/demo/a.ts'), user('And the logout'), edit('/work/demo/b.ts')])
+    await turn()
+    expect(lines('cli.jsonl').map((a) => a[1])).toEqual(['checkpoint'])
+    expect(lines('summariser.jsonl')).toHaveLength(1)
+
+    // Its real close still records.
+    await run({ transcript_path: path, session_id: 'closed', cwd: '/work/demo' })
+    expect(lines('cli.jsonl').map((a) => a[1])).toEqual(['checkpoint', 'end'])
+  })
+
   it('does not retry while the summariser is still failing', async () => {
     const a = transcript('a', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
     const b = transcript('b', [user('Please fix the logout redirect'), edit('/work/demo/b.ts')])

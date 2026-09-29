@@ -101,7 +101,7 @@ describe('context project scope', () => {
     const context = await buildContext(actor, { project: 'MES', cwd: '/repo', scope: 'project' })
     expect(context.lastSession?.request).toBe('MES request')
     expect(db.calls.find((call) => call.table === 'sessions'))
-      .toMatchObject({ filters: [['cwd', '/repo'], ['projects.key', 'MES']], limit: 5 })
+      .toMatchObject({ filters: [['cwd', '/repo'], ['projects.key', 'MES']], limit: 20 })
   })
 
   /**

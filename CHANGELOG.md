@@ -19,8 +19,10 @@ out under **Breaking** with what to do about it.
 - **Codex closed its session on the first turn** (CAIRN-319). Its `Stop` hook ran the
   recorder as a session end, so every turn ended the session, which cannot be reopened, and
   checkpointed every held task. `Stop` now writes a live checkpoint and Codex's `SessionEnd`
-  closes the session. Re-run `node scripts/install-hooks.mjs` (or `cairn setup`) and trust
-  the new `SessionEnd` entry in `~/.codex/config.toml`.
+  closes the session. A session whose row is already closed answers `409 session_closed`
+  (CLI exit 11), and the hook stops summarising and checkpointing it until its real close.
+  Re-run `node scripts/install-hooks.mjs` (or `cairn setup`) and trust the new `SessionEnd`
+  entry in `~/.codex/config.toml`.
 - **`cairn context` hid the session in progress** (CAIRN-320). It picked the last session by
   end time, so an open one only showed when nothing here had ever finished. It now picks the
   latest by activity, and the briefing says when that session is still open.

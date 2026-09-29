@@ -126,6 +126,7 @@ describe('cairn session end project attribution', () => {
     expect(await platform({ CAIRN_AGENT: 'openclaw' })).toBe('openclaw')
     expect(await platform({ CAIRN_AGENT: 'hermes' })).toBe('other')
     expect(await platform({ CAIRN_AGENT: 'codex', CAIRN_PLATFORM: 'openclaw' })).toBe('openclaw')
+    expect(await platform({ CAIRN_PLATFORM: 'hermes' })).toBe('other')
     expect(await platform({ CAIRN_AGENT: 'codex' }, ['--platform', 'claude'])).toBe('claude')
   })
 })

@@ -709,6 +709,27 @@ const rememberSummary = (sessionId, digestHash, summary) => {
 }
 
 /**
+ * A session whose row is already closed refuses every live checkpoint (409,
+ * CLI exit SESSION_CLOSED_EXIT): the old per-turn hook ended it mid-upgrade,
+ * or someone ran `cairn session end` by hand. Checkpointing it again each turn
+ * would pay the summariser for a write that cannot land, so the refusal is
+ * remembered and later live checkpoints of that session stop before either.
+ * Its real close still records — ending an ended session is allowed.
+ */
+const markClosed = (sessionId) => {
+  try {
+    const state = readSummaryState()
+    state[sessionId] = { ...state[sessionId], at: Date.now(), closed: true }
+    mkdirSync(dirname(SUMMARY_STATE), { recursive: true })
+    writeFileSync(SUMMARY_STATE, JSON.stringify(state))
+  } catch {
+    // Unremembered, the next turn pays once more and is refused again.
+  }
+}
+
+const knownClosed = (sessionId) => Boolean(readSummaryState()[sessionId]?.closed)
+
+/**
  * The summary for this digest, from the model or from last time.
  *
  * Returns the summary, whether it is new, and — when the model was asked and
@@ -925,6 +946,7 @@ const DEBUG = process.env.CAIRN_HOOK_DEBUG === '1'
 
 /** The CLI's "several instances, and nothing says which" (cli/cairn.mjs). */
 const UNDECIDED_EXIT = 10
+const SESSION_CLOSED_EXIT = 11
 const UNROUTED_DIR = join(homedir(), '.cairn', 'unrouted')
 
 const post = (args) =>
@@ -1040,6 +1062,8 @@ const record = async (payload, opts = {}) => {
   // for, a file touched, or a task worked — one of those has to be true.
   if (t.prompts.length === 0 && t.files.size === 0 && t.refs.size === 0) return
 
+  if (opts.ongoing && knownClosed(sessionId)) return { sessionId }
+
   const cwd = payload.cwd ?? t.cwd
   const platform = opts.platform ?? process.env.CAIRN_PLATFORM ?? 'claude'
   const agent = opts.agent ?? process.env.CAIRN_AGENT
@@ -1109,6 +1133,7 @@ const record = async (payload, opts = {}) => {
 
   const code = await post(args)
   if (code === UNDECIDED_EXIT) park(sessionId, cwd ?? process.cwd(), args, platform, agent)
+  if (code === SESSION_CLOSED_EXIT && opts.ongoing) markClosed(sessionId)
   return { sessionId, failed: Boolean(outcome.error) }
 }
 
