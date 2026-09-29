@@ -1,11 +1,14 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronsUpDown } from 'lucide-react'
-import { Avatar, LabelPill, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
+import { Avatar, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
 import { usePeople } from '@/components/people-context'
+import { Input, InlineInput } from '@/components/ui/control'
 import { ResolutionDialog } from '../../resolution-dialog'
+import { LabelEditor } from '../../label-editor'
 import { AlsoIn } from './also-in'
 import { DependencyEditor } from './dependency-editor'
 import {
@@ -18,7 +21,6 @@ import {
   type TaskType,
 } from '@/schemas/task'
 import { cn } from '@/lib/utils'
-import { shortDateWithYear } from '@/lib/dates'
 import { RelativeTime } from '@/components/relative-time'
 import { useRenderedClaimStale } from '@/lib/use-mounted'
 import type { Task, Project, Relation } from '@/lib/data'
@@ -107,7 +109,85 @@ const SelectRow = <T extends string>({
   </div>
 )
 
-type OptimisticValues = Partial<Pick<Task, 'status' | 'priority' | 'type' | 'assignee_user_id' | 'assignee'>>
+/**
+ * A ref, editable in place — the same click-to-edit shape as the title.
+ * Failure is left on the toast `onSave` already raises, but editing stays
+ * open rather than closing on a rejected ref: a mistyped one fails a loop
+ * check on the server, and the caller needs the field there to try again.
+ */
+const ParentEditor = ({
+  parent,
+  onSave,
+}: {
+  parent: { ref: string; title: string } | null
+  onSave: (ref: string | null) => Promise<boolean>
+}) => {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const startEdit = () => {
+    setValue(parent?.ref ?? '')
+    setEditing(true)
+  }
+
+  const save = async () => {
+    const next = value.trim().toUpperCase()
+    if (next === (parent?.ref ?? '')) {
+      setEditing(false)
+      return
+    }
+    setSaving(true)
+    const ok = await onSave(next || null)
+    setSaving(false)
+    if (ok) setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <InlineInput
+        autoFocus
+        value={value}
+        disabled={saving}
+        placeholder="CAI-42 — empty clears it"
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => void save()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void save()
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        className="h-[1.75rem] text-[0.75rem]"
+      />
+    )
+  }
+
+  return (
+    <div className="flex h-[1.75rem] items-center justify-between gap-2">
+      {parent ? (
+        <Link
+          href={`/projects/${parent.ref.slice(0, parent.ref.lastIndexOf('-'))}/tasks/${parent.ref.slice(parent.ref.lastIndexOf('-') + 1)}`}
+          className="text-fg-muted hover:text-fg min-w-0 truncate text-[0.8125rem] transition-colors"
+          title={parent.title}
+        >
+          {parent.ref}
+        </Link>
+      ) : (
+        <span className="text-fg-subtle text-[0.8125rem]">None</span>
+      )}
+      <button
+        type="button"
+        onClick={startEdit}
+        className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 shrink-0 rounded px-1.5 py-px text-[0.6875rem] transition-colors duration-[var(--dur-1)]"
+      >
+        Edit
+      </button>
+    </div>
+  )
+}
+
+type OptimisticValues = Partial<
+  Pick<Task, 'status' | 'priority' | 'type' | 'assignee_user_id' | 'assignee' | 'due_date' | 'labels'>
+>
 
 export const Properties = ({
   task,
@@ -115,18 +195,35 @@ export const Properties = ({
   relations = [],
   alsoProjects = [],
   projects = [],
+  parent = null,
 }: {
   task: Task
   project: Project
   relations?: Relation[]
   alsoProjects?: string[]
   projects?: { key: string; title: string }[]
+  parent?: { ref: string; title: string } | null
 }) => {
   const router = useRouter()
   const request = useMutate()
   const { people } = usePeople()
   const stale = useRenderedClaimStale(task.heartbeat_at)
   const [pendingClose, setPendingClose] = useState<TaskStatus | null>(null)
+  const [moving, setMoving] = useState(false)
+  const [knownLabels, setKnownLabels] = useState<string[]>([])
+
+  // Fetched once. Offering labels already in use is what keeps this from
+  // growing a second spelling of a label the list view already offers.
+  useEffect(() => {
+    const load = async () => {
+      const res = await fetch('/api/v1/labels')
+      if (!res.ok) return
+      const json = await res.json().catch(() => null)
+      setKnownLabels(((json?.data ?? []) as { label: string }[]).map((l) => l.label))
+    }
+    void load()
+  }, [])
+
   // An optimistic overlay, stamped with the version of the task it was applied
   // to. When the refresh lands `updated_at` moves on and the overlay stops
   // matching, so it retires itself without an effect clearing state.
@@ -158,6 +255,39 @@ export const Properties = ({
   const onAssignee = (userId: string) => {
     const person = people.find((p) => p.id === userId) ?? null
     void patch({ assignee: userId }, { assignee_user_id: userId, assignee: person })
+  }
+
+  /**
+   * Moving is its own request rather than going through `patch` above:
+   * per-project numbering means the ref changes underneath this page, so a
+   * success here has to navigate rather than just refresh in place.
+   */
+  const onProject = async (nextKey: string) => {
+    if (nextKey === project.key || moving) return
+    setMoving(true)
+    const result = await request<{ moved?: { ref: string; from: string } | null }>(
+      `/api/v1/tasks/${task.id}`,
+      { method: 'PATCH', body: { project: nextKey } },
+    )
+    setMoving(false)
+    if (!result.ok) return
+    const moved = result.data?.moved
+    if (!moved) {
+      router.refresh()
+      return
+    }
+    const idx = moved.ref.lastIndexOf('-')
+    router.replace(`/projects/${moved.ref.slice(0, idx)}/tasks/${moved.ref.slice(idx + 1)}`)
+  }
+
+  const onParent = async (ref: string | null) => {
+    const result = await request(`/api/v1/tasks/${task.id}`, {
+      method: 'PATCH',
+      body: { parentRef: ref },
+    })
+    if (!result.ok) return false
+    router.refresh()
+    return true
   }
 
   const onStatus = (next: TaskStatus) => {
@@ -265,24 +395,64 @@ export const Properties = ({
         </div>
       </Section>
 
-      {task.labels.length > 0 && (
-        <Section title="Labels">
-          <div className="flex flex-wrap gap-1.5">
-            {task.labels.map((l) => (
-              <LabelPill key={l}>{l}</LabelPill>
-            ))}
-          </div>
-        </Section>
-      )}
+      <Section title="Labels">
+        <div className="group">
+          <LabelEditor
+            taskRef={`${project.key}-${task.number}`}
+            labels={shown.labels}
+            known={knownLabels}
+            onChange={(next) => void patch({ labels: next }, { labels: next })}
+          />
+        </div>
+      </Section>
+
+      <Section title="Due date">
+        <div className="flex h-[1.75rem] items-center gap-1.5">
+          <Input
+            type="date"
+            size="sm"
+            value={shown.due_date ?? ''}
+            onChange={(e) =>
+              void patch({ dueDate: e.target.value || null }, { due_date: e.target.value || null })
+            }
+            aria-label="Due date"
+            className="w-auto"
+          />
+          {shown.due_date && (
+            <button
+              type="button"
+              onClick={() => void patch({ dueDate: null }, { due_date: null })}
+              className="text-fg-subtle hover:text-fg shrink-0 text-[0.6875rem]"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </Section>
 
       <DependencyEditor taskRef={`${project.key}-${task.number}`} relations={relations} />
 
+      <Section title="Parent">
+        <ParentEditor parent={parent} onSave={onParent} />
+      </Section>
+
       <div className="hidden lg:block">
       <Section title="Project">
-        <span className="text-fg-muted flex h-[1.75rem] min-w-0 items-center gap-2 text-[0.8125rem]">
-          <ProjectIcon size={13} projectKey={project.key} />
-          <span className="truncate">{project.title}</span>
-        </span>
+        {projects.length > 0 ? (
+          <SelectRow
+            value={project.key}
+            options={projects.map((p) => p.key)}
+            labels={Object.fromEntries(projects.map((p) => [p.key, p.title]))}
+            icon={<ProjectIcon size={13} projectKey={project.key} />}
+            disabled={moving}
+            onChange={onProject}
+          />
+        ) : (
+          <span className="text-fg-muted flex h-[1.75rem] min-w-0 items-center gap-2 text-[0.8125rem]">
+            <ProjectIcon size={13} projectKey={project.key} />
+            <span className="truncate">{project.title}</span>
+          </span>
+        )}
       </Section>
       </div>
 
@@ -312,7 +482,6 @@ export const Properties = ({
               ['Created', task.created_at],
               ['Updated', task.updated_at],
               ['Resolved', task.resolved_at],
-              ['Due', task.due_date],
             ] as const
           )
             .filter(([, value]) => Boolean(value))
@@ -320,9 +489,7 @@ export const Properties = ({
               <div key={label} className="flex items-baseline justify-between gap-2">
                 <dt className="text-fg-subtle text-[0.75rem]">{label}</dt>
                 <dd className="text-fg-muted text-[0.75rem] tabular-nums">
-                  {label === 'Due' ? shortDateWithYear(value as string) : (
-                    <RelativeTime iso={value as string} />
-                  )}
+                  <RelativeTime iso={value as string} />
                 </dd>
               </div>
             ))}

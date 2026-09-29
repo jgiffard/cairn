@@ -148,6 +148,8 @@ export const updateTaskSchema = taskFields.partial().extend({
   parentRef: z.string().min(2).max(60).nullable().optional(),
   /** Reassign: `me`, an email, a display name or a user id. Never cleared. */
   assignee: assigneeField.optional(),
+  /** `null` clears it — the one field on `taskFields` that can be unset rather than just left alone. */
+  dueDate: z.string().date().nullable().optional(),
   /**
    * Move the task to another project, by key or uuid. Per-project numbering
    * means the ref changes, so this is handled apart from the field updates.
