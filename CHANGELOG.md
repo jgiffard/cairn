@@ -9,6 +9,15 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **Agents are asked to `cairn learn`** (CAIRN-323). `cairn done` ends, for an agent, by
+  asking whether the task established anything the next agent should know, with the command
+  to record it. On Claude Code and Codex a new `Stop` hook asks the same question once per
+  session, after a turn that edited a file or committed, which covers sessions that close no
+  task. Neither calls a model. `CAIRN_LEARN_NUDGE=0` turns the hook off. Re-run
+  `node scripts/install-hooks.mjs` (or `cairn setup`) to wire it.
+
 ### Fixed
 
 - **A late CI run could roll a deploy back** (CAIRN-318). Each successful CI run on `main`
