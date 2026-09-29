@@ -2,6 +2,7 @@ import { hash } from 'bcryptjs'
 import type { PoolClient } from 'pg'
 import { pool, transaction } from '@/lib/db/client'
 import type { UserRole } from './actor'
+import type { Actor } from './auth'
 import { generateApiKey } from './keys'
 
 export type AdminUser = {
@@ -16,16 +17,22 @@ export type AdminUser = {
   updatedAt: string
   keyCount: number
   activeKeyCount: number
+  /** Tasks not done or cancelled with this user as the assignee (CAIRN-310). */
+  openTaskCount: number
 }
 
 export class UserAdminError extends Error {
   constructor(
-    readonly code: 'not_found' | 'conflict' | 'final_admin',
+    readonly code: 'not_found' | 'conflict' | 'final_admin' | 'open_tasks' | 'invalid_reassignee',
     message: string,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message)
   }
 }
+
+/** The administrator a lifecycle change is recorded against. */
+export type ActingAdmin = Pick<Actor, 'userId' | 'actorType' | 'actorId'>
 
 const selectUser = `
   select u.id, u.email,
@@ -35,7 +42,9 @@ const selectUser = `
          u.deleted_at as "deletedAt", u.banned_until as "bannedUntil",
          u.created_at as "createdAt", u.updated_at as "updatedAt",
          count(k.id)::int as "keyCount",
-         count(k.id) filter (where k.revoked_at is null)::int as "activeKeyCount"
+         count(k.id) filter (where k.revoked_at is null)::int as "activeKeyCount",
+         (select count(*)::int from tasks t
+           where t.assignee_user_id = u.id and t.status not in ('done', 'cancelled')) as "openTaskCount"
     from app_users u
     left join user_profiles p on p.id = u.id
     left join api_keys k on k.user_id = u.id`
@@ -142,26 +151,91 @@ export const updateUser = async (
   }
 }
 
-export const deactivateUser = async (id: string): Promise<AdminUser> => transaction(async (client) => {
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
+
+/**
+ * Hands a user's open tasks to someone else, one `assignee_changed` event per
+ * task, inside the caller's transaction so the move and its history land
+ * together or not at all.
+ */
+const reassignOpenTasks = async (
+  client: PoolClient,
+  from: AdminUser,
+  toId: string,
+  by: ActingAdmin,
+): Promise<number> => {
+  if (toId === from.id) {
+    throw new UserAdminError('invalid_reassignee', `${from.displayName}'s tasks cannot be handed to ${from.displayName}.`)
+  }
+  const result = await client.query<AdminUser>(`${selectUser} where u.id = $1 ${groupUser}`, [toId])
+  const to = result.rows[0]
+  if (!to) throw new UserAdminError('invalid_reassignee', `No user ${toId} to take over the tasks.`)
+  if (!to.active) {
+    throw new UserAdminError('invalid_reassignee', `${to.displayName} is no longer active and cannot be assigned work.`)
+  }
+  const moved = await client.query(
+    `with moved as (
+       update tasks set assignee_user_id = $2
+        where assignee_user_id = $1 and status not in ('done', 'cancelled')
+       returning id, project_id
+     )
+     insert into task_activity_events (owner_user_id, project_id, task_id, actor_type, actor_id, event, data)
+     select $3, project_id, id, $4, $5, 'assignee_changed', $6::jsonb from moved`,
+    [
+      from.id,
+      to.id,
+      by.userId,
+      by.actorType,
+      by.actorId,
+      { from: from.id, to: to.id, from_name: from.displayName, to_name: to.displayName, reason: 'user_deactivated' },
+    ],
+  )
+  return moved.rowCount ?? 0
+}
+
+/**
+ * Disables a user, and hands their open tasks to `reassignTo` in the same
+ * transaction (CAIRN-310). A disabled assignee is an owner nobody can reach,
+ * so a user who still owns open work is refused until the caller names who
+ * takes it over — silently orphaning it is the failure this exists to stop.
+ *
+ * Disabling someone already disabled changes nothing, unless `reassignTo` is
+ * given: that is how work orphaned before this rule is handed on.
+ */
+export const deactivateUser = async (
+  id: string,
+  { by, reassignTo }: { by: ActingAdmin; reassignTo?: string | null },
+): Promise<AdminUser & { reassignedTaskCount: number }> => transaction(async (client) => {
   await lockAdminInvariant(client)
   await lockUser(client, id)
   const current = await userById(client, id)
-  if (current.deletedAt) return current
-  if (current.role === 'admin' && await activeAdminCount(client) <= 1) {
+  if (current.deletedAt && !reassignTo) return { ...current, reassignedTaskCount: 0 }
+  if (!current.deletedAt && current.role === 'admin' && await activeAdminCount(client) <= 1) {
     throw new UserAdminError('final_admin', 'The final active administrator cannot be disabled.')
   }
-  await client.query(
-    `update app_users
-        set deleted_at = now(),
-            auth_epoch = auth_epoch + 1,
-            session_epoch = session_epoch + 1,
-            updated_at = now()
-      where id = $1`,
-    [id],
-  )
-  await client.query('delete from app_sessions where user_id = $1', [id])
-  await client.query('update api_keys set revoked_at = now() where user_id = $1 and revoked_at is null', [id])
-  return userById(client, id)
+  if (current.openTaskCount > 0 && !reassignTo) {
+    throw new UserAdminError(
+      'open_tasks',
+      `${current.displayName} is the assignee of ${plural(current.openTaskCount, 'open task')}. ` +
+        'Pass reassignTo with the id of an active user to hand them over.',
+      { openTaskCount: current.openTaskCount },
+    )
+  }
+  const reassignedTaskCount = reassignTo ? await reassignOpenTasks(client, current, reassignTo, by) : 0
+  if (!current.deletedAt) {
+    await client.query(
+      `update app_users
+          set deleted_at = now(),
+              auth_epoch = auth_epoch + 1,
+              session_epoch = session_epoch + 1,
+              updated_at = now()
+        where id = $1`,
+      [id],
+    )
+    await client.query('delete from app_sessions where user_id = $1', [id])
+    await client.query('update api_keys set revoked_at = now() where user_id = $1 and revoked_at is null', [id])
+  }
+  return { ...await userById(client, id), reassignedTaskCount }
 })
 
 export const restoreUser = async (id: string): Promise<AdminUser> => transaction(async (client) => {

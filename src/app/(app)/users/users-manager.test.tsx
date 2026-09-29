@@ -24,6 +24,7 @@ const user = (overrides: Partial<AdminUser>): AdminUser => ({
   updatedAt: '2026-09-17T00:00:00.000Z',
   keyCount: 1,
   activeKeyCount: 1,
+  openTaskCount: 0,
   ...overrides,
 })
 
@@ -80,7 +81,7 @@ describe('UsersManager destructive actions', () => {
           keyCount: 0,
           activeKeyCount: 0,
         }),
-      ]} />)
+      ]} currentUserId="active-user" />)
     })
   })
 
@@ -112,5 +113,103 @@ describe('UsersManager destructive actions', () => {
       expect.anything(),
       expect.objectContaining({ method: 'PATCH' }),
     )
+  })
+})
+
+describe('UsersManager handing over open tasks (CAIRN-310)', () => {
+  let container: HTMLDivElement
+  let root: ReturnType<typeof createRoot>
+  const confirmMock = vi.fn(() => true)
+
+  const render = async (users: AdminUser[]) => {
+    await act(async () => {
+      root.render(<UsersManager users={users} currentUserId="admin" />)
+    })
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    mutateMock.mockReset().mockResolvedValue({ ok: true, data: {} })
+    refreshMock.mockReset()
+    confirmMock.mockClear()
+    vi.stubGlobal('confirm', confirmMock)
+  })
+
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    container.remove()
+    vi.unstubAllGlobals()
+  })
+
+  const admin = user({ id: 'admin', email: 'admin@example.test', displayName: 'Admin', role: 'admin' })
+  const other = user({ id: 'other', email: 'other@example.test', displayName: 'Other' })
+  const owner = user({ id: 'owner', email: 'owner@example.test', displayName: 'Owner', openTaskCount: 4 })
+
+  it('shows each user’s open-task count', async () => {
+    await render([admin, owner])
+    expect(container.textContent).toContain('4 open tasks')
+    expect(container.textContent).toContain('0 open tasks')
+  })
+
+  it('asks who takes the tasks over, defaulting to the acting admin, and sends reassignTo', async () => {
+    await render([admin, other, owner])
+    const ownerCard = [...container.querySelectorAll('article')]
+      .find((article) => article.querySelector<HTMLInputElement>('input[name="email"]')?.value === 'owner@example.test')
+    await click(buttonNamed(ownerCard!, 'Disable user'))
+
+    expect(confirmMock).not.toHaveBeenCalled()
+    expect(mutateMock).not.toHaveBeenCalled()
+    const panel = container.querySelector('[role="group"]')
+    expect(panel?.textContent).toContain('4 open tasks')
+    const picker = panel?.querySelector('select')
+    expect(picker?.value).toBe('admin')
+    expect([...(picker?.options ?? [])].map((option) => option.value)).toEqual(['admin', 'other'])
+
+    for (const button of panel?.querySelectorAll('button') ?? []) {
+      expect(button.type).toBe('button')
+      expect(button.form).toBeNull()
+    }
+
+    await act(async () => {
+      picker!.value = 'other'
+      picker!.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await click(buttonNamed(container, 'Disable and reassign'))
+
+    expect(mutateMock).toHaveBeenCalledTimes(1)
+    expect(mutateMock).toHaveBeenCalledWith('/api/v1/users/owner', {
+      method: 'DELETE',
+      body: { reassignTo: 'other' },
+    })
+    expect(refreshMock).toHaveBeenCalled()
+    expect(container.querySelector('[role="group"]')).toBeNull()
+  })
+
+  it('says when nobody can take the tasks over, and cancels without writing anything', async () => {
+    await render([owner])
+    await click(buttonNamed(container, 'Disable user'))
+    expect(container.textContent).toContain('No other active user can take them over.')
+    expect(container.textContent).not.toContain('Disable and reassign')
+    await click(buttonNamed(container, 'Cancel'))
+
+    expect(container.querySelector('[role="group"]')).toBeNull()
+    expect(mutateMock).not.toHaveBeenCalled()
+  })
+
+  it('offers to hand on the open tasks of a user disabled before the rule', async () => {
+    await render([
+      admin,
+      user({ ...owner, active: false, deletedAt: '2026-09-17T01:00:00.000Z' }),
+    ])
+    await click(buttonNamed(container, 'Reassign open tasks'))
+    await click(buttonNamed(container, 'Reassign tasks'))
+
+    expect(mutateMock).toHaveBeenCalledWith('/api/v1/users/owner', {
+      method: 'DELETE',
+      body: { reassignTo: 'admin' },
+    })
   })
 })

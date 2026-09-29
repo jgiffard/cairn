@@ -1283,7 +1283,26 @@ export const openapiSpec = () => ({
       },
       delete: {
         summary: 'Disable a user and revoke sessions and active keys',
-        responses: { '200': okResponse('User disabled.'), '403': errorResponse, '409': errorResponse },
+        description:
+          'A user who is the assignee of open tasks (not done or cancelled) is refused with 409 ' +
+          '`reason: open_tasks` and `openTaskCount` until `reassignTo` names an active user to take them ' +
+          'over; each moved task gets an `assignee_changed` event with `reason: user_deactivated`. ' +
+          'On a user already disabled, `reassignTo` hands on any open tasks they still own. ' +
+          'This route also reads `reassignTo` from a JSON body `{"reassignTo": "<uuid>"}`.',
+        parameters: [
+          {
+            name: 'reassignTo',
+            in: 'query',
+            description: 'The active user, other than this one, who becomes the assignee of their open tasks.',
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          '200': okResponse('User disabled; `reassignedTaskCount` says how many open tasks moved.'),
+          '400': errorResponse,
+          '403': errorResponse,
+          '409': errorResponse,
+        },
       },
     },
     '/users/{id}/restore': {

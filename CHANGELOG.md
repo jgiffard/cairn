@@ -33,6 +33,13 @@ out under **Breaking** with what to do about it.
   - *Guidance.* The skill, `AGENTS.md`, the OpenClaw block and hook, and the session briefing
     say the rule: assigned to your human unless `--assignee` says otherwise; the assignee owns
     the work, the claim is only which agent is running it.
+- **Disabling a user hands their open tasks on** (CAIRN-310). A disabled assignee silently
+  orphaned every open task they owned. `DELETE /users/{id}` now refuses a user who is the
+  assignee of open tasks (409, `reason: open_tasks`, with `openTaskCount`) until `reassignTo`
+  names an active user; the tasks move in the same transaction as the disable, each with an
+  `assignee_changed` event carrying `reason: user_deactivated`. On a user already disabled,
+  `reassignTo` hands on the tasks orphaned before this rule. `/users` shows each user's open
+  task count, and disabling someone who owns work asks who takes it over (you, by default).
 
 ### Changed
 

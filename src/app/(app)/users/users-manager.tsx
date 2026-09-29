@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, ChevronRight, Copy, KeyRound, RotateCcw, UserRoundPlus } from 'lucide-react'
+import { Check, ChevronRight, Copy, KeyRound, RotateCcw, UserRoundCog, UserRoundPlus } from 'lucide-react'
 import { mutate } from '@/lib/api/mutate'
 import { Button, Field, Input, Select } from '@/components/ui/control'
 import type { AdminUser } from '@/lib/api/users'
@@ -21,7 +21,9 @@ export type UserKey = {
 
 const errorMessage = (value: unknown) => value instanceof Error ? value.message : 'Something went wrong.'
 
-export const UsersManager = ({ users }: { users: AdminUser[] }) => {
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
+
+export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; currentUserId: string }) => {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -32,6 +34,10 @@ export const UsersManager = ({ users }: { users: AdminUser[] }) => {
   const [keys, setKeys] = useState<Record<string, UserKey[]>>({})
   const [freshKey, setFreshKey] = useState<{ userId: string; key: string } | null>(null)
   const [copied, setCopied] = useState(false)
+  // Whose open tasks are being handed over, and to whom (CAIRN-310).
+  const [handover, setHandover] = useState<{ userId: string; to: string } | null>(null)
+
+  const successorsFor = (user: AdminUser) => users.filter((candidate) => candidate.active && candidate.id !== user.id)
 
   const run = async (key: string, action: () => Promise<void>) => {
     setBusy(key)
@@ -72,15 +78,38 @@ export const UsersManager = ({ users }: { users: AdminUser[] }) => {
     router.refresh()
   })
 
+  // A user who owns open work is not disabled from here: the picker below asks
+  // who takes it over first, because the server refuses to orphan it.
+  const startHandover = (user: AdminUser) => {
+    const successors = successorsFor(user)
+    const to = successors.some((candidate) => candidate.id === currentUserId) ? currentUserId : successors[0]?.id ?? ''
+    setError(null)
+    setHandover({ userId: user.id, to })
+  }
+
   const deactivate = (user: AdminUser) => {
+    if (user.openTaskCount > 0) return startHandover(user)
     if (!confirm(`Disable ${user.displayName}? Their sessions and active agent keys will be revoked immediately.`)) return
     void run(`user:${user.id}`, async () => {
       const result = await mutate(`/api/v1/users/${user.id}`, { method: 'DELETE' })
-      if (!result.ok) throw new Error(result.error)
+      if (!result.ok) {
+        // Work assigned since the page loaded: refresh so the count, and the
+        // picker on the next click, reflect it.
+        if (result.code === 'conflict') router.refresh()
+        throw new Error(result.error)
+      }
       setKeys((current) => ({ ...current, [user.id]: [] }))
       router.refresh()
     })
   }
+
+  const handOver = (user: AdminUser, reassignTo: string) => run(`user:${user.id}`, async () => {
+    const result = await mutate(`/api/v1/users/${user.id}`, { method: 'DELETE', body: { reassignTo } })
+    if (!result.ok) throw new Error(result.error)
+    setHandover(null)
+    setKeys((current) => ({ ...current, [user.id]: [] }))
+    router.refresh()
+  })
 
   const restore = (user: AdminUser) => run(`user:${user.id}`, async () => {
     const result = await mutate(`/api/v1/users/${user.id}/restore`, { method: 'POST' })
@@ -187,7 +216,12 @@ export const UsersManager = ({ users }: { users: AdminUser[] }) => {
                   <span aria-hidden className="size-1.5 rounded-full bg-current" />
                   {user.active ? 'Active' : 'Disabled'}
                 </span>
-                <span className="text-fg-subtle tabular ml-auto text-[0.6875rem]">{user.activeKeyCount} active keys</span>
+                <span className="text-fg-subtle tabular ml-auto flex gap-3 text-[0.6875rem]">
+                  <span className={cn(!user.active && user.openTaskCount > 0 && 'text-danger')}>
+                    {plural(user.openTaskCount, 'open task')}
+                  </span>
+                  <span>{user.activeKeyCount} active keys</span>
+                </span>
               </div>
               <form onSubmit={(event) => { event.preventDefault(); void update(user, event.currentTarget) }}>
                 <div className="grid gap-3 sm:grid-cols-[1fr_1fr_9rem]">
@@ -214,7 +248,60 @@ export const UsersManager = ({ users }: { users: AdminUser[] }) => {
                     <RotateCcw size={12} aria-hidden /> Restore user
                   </Button>
                 )}
+                {!user.active && user.deletedAt && user.openTaskCount > 0 && handover?.userId !== user.id && (
+                  <Button type="button" size="sm" onClick={() => startHandover(user)} disabled={busy === `user:${user.id}`}>
+                    <UserRoundCog size={12} aria-hidden /> Reassign open tasks
+                  </Button>
+                )}
               </div>
+
+              {handover?.userId === user.id && (
+                <div
+                  role="group"
+                  aria-label={`Hand over ${user.displayName}'s open tasks`}
+                  className="border-border bg-surface-raised/30 enter-rise mt-3 rounded-md border p-3"
+                >
+                  <p className="text-[0.75rem] leading-relaxed">
+                    {user.displayName} is the assignee of{' '}
+                    <strong className="tabular font-medium">{plural(user.openTaskCount, 'open task')}</strong>.{' '}
+                    {user.active
+                      ? 'Choose who takes them over; disabling hands them on in the same step.'
+                      : 'Choose who takes them over.'}
+                  </p>
+                  {successorsFor(user).length === 0 ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <p className="text-danger text-[0.6875rem]">No other active user can take them over.</p>
+                      <Button type="button" size="sm" variant="quiet" onClick={() => setHandover(null)}>Cancel</Button>
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex flex-wrap items-end gap-2">
+                      <Field label="Reassign to">
+                        <Select
+                          size="sm"
+                          value={handover.to}
+                          onChange={(event) => setHandover({ userId: user.id, to: event.target.value })}
+                        >
+                          {successorsFor(user).map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                              {candidate.id === currentUserId ? `${candidate.displayName} (you)` : candidate.displayName}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={user.active ? 'danger' : 'secondary'}
+                        onClick={() => void handOver(user, handover.to)}
+                        disabled={!handover.to || busy === `user:${user.id}`}
+                      >
+                        {user.active ? 'Disable and reassign' : 'Reassign tasks'}
+                      </Button>
+                      <Button type="button" size="sm" variant="quiet" onClick={() => setHandover(null)}>Cancel</Button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {user.active && (
                 <div className="border-border mt-4 border-t pt-3">

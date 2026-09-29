@@ -25,11 +25,12 @@ const UsersPage = async () => {
             <h1 className="font-display headline text-2xl leading-none">Users</h1>
             <p className="text-fg-subtle mt-2 max-w-2xl text-[0.75rem] leading-relaxed">
               Manage workspace access, roles, passwords, and each user&apos;s agent identities.
-              Disabling a user revokes their browser sessions and active agent keys immediately.
+              Disabling a user revokes their browser sessions and active agent keys immediately, and
+              hands their open tasks to someone you choose.
             </p>
           </div>
         </header>
-        <UsersManager users={users} />
+        <UsersManager users={users} currentUserId={user.id} />
       </div>
     </div>
   )
