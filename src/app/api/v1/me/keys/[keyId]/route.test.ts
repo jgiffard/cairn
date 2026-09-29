@@ -30,8 +30,8 @@ describe('DELETE /api/v1/me/keys/{keyId}', () => {
     mocks.authenticate.mockReset().mockResolvedValue(actor())
     mocks.revokeUserKey.mockReset().mockResolvedValue({
       id: KEY_ID,
-      agent_name: 'codex',
-      revoked_at: new Date('2026-09-29T12:00:00Z'),
+      agentName: 'codex',
+      revokedAt: '2026-09-29T12:00:00.000Z',
     })
   })
 

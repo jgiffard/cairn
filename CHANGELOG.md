@@ -9,6 +9,20 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking: the admin key endpoints answer in the same shape as Your agent keys**
+  (CAIRN-317).
+  - `GET /api/v1/users/{id}/keys` returned raw rows (`agent_name`, `key_prefix`,
+    `last_used_at`, `revoked_at`, `created_at`); it now returns what `GET /api/v1/me/keys`
+    does (`agentName`, `keyPrefix`, `lastUsedAt`, `revokedAt`, `createdAt`, `revoked`).
+  - Creating a key and revoking one answer in the same camelCase.
+  - All three are now documented in the OpenAPI spec, with one shared key schema.
+  - `revoked` is true for a key disabled by an account-wide reset too, which `revokedAt`
+    alone does not show, so `/users` now marks those correctly.
+  - Nothing in the repository outside the admin page read the old shape. Update any script
+    that calls these endpoints directly.
+
 ## [0.11.1] — 2026-09-29
 
 ### Added

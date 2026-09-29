@@ -60,12 +60,13 @@ describe('UsersManager destructive actions', () => {
       json: async () => ({
         data: [{
           id: 'key-1',
-          agent_name: 'clawclaw',
+          agentName: 'clawclaw',
           name: 'Workstation',
-          key_prefix: 'cairn_abcd',
-          last_used_at: null,
-          revoked_at: null,
-          created_at: '2026-09-17T00:00:00.000Z',
+          keyPrefix: 'cairn_abcd',
+          lastUsedAt: null,
+          revokedAt: null,
+          createdAt: '2026-09-17T00:00:00.000Z',
+          revoked: false,
         }],
       }),
     }))

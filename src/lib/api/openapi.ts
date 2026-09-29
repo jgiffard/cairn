@@ -164,7 +164,8 @@ const person = {
   required: ['id', 'email', 'name', 'active'],
 }
 
-const ownKey = {
+/** One agent key, the same shape to an administrator and to its owner (CAIRN-317). */
+const agentKey = {
   type: 'object',
   properties: {
     id: { type: 'string', format: 'uuid' },
@@ -174,8 +175,36 @@ const ownKey = {
     createdAt: { type: 'string', format: 'date-time' },
     lastUsedAt: { type: ['string', 'null'], format: 'date-time' },
     revokedAt: { type: ['string', 'null'], format: 'date-time' },
+    revoked: {
+      type: 'boolean',
+      description: 'Refused by the server: revoked, or disabled by an account-wide reset (which leaves `revokedAt` null).',
+    },
   },
-  required: ['id', 'agentName', 'name', 'keyPrefix', 'createdAt', 'lastUsedAt', 'revokedAt'],
+  required: ['id', 'agentName', 'name', 'keyPrefix', 'createdAt', 'lastUsedAt', 'revokedAt', 'revoked'],
+}
+
+const revokedKey = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    agentName: { type: 'string' },
+    revokedAt: { type: 'string', format: 'date-time' },
+  },
+  required: ['id', 'agentName', 'revokedAt'],
+}
+
+const createdKey = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    agentName: { type: 'string' },
+    name: { type: 'string' },
+    keyPrefix: { type: 'string' },
+    createdAt: { type: 'string', format: 'date-time' },
+    key: { type: 'string', description: 'The key itself. Shown in this response only; never recoverable.' },
+    warning: { type: 'string' },
+  },
+  required: ['id', 'agentName', 'name', 'keyPrefix', 'createdAt', 'key', 'warning'],
 }
 
 const taskSummary = {
@@ -1554,7 +1583,10 @@ export const openapiSpec = () => ({
     },
     '/users/{id}/keys': {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-      get: { summary: 'List a user’s agent keys (never the hash)', responses: { '200': okResponse('Keys.'), '403': errorResponse } },
+      get: {
+        summary: 'List a user’s agent keys (never the hash)',
+        responses: { '200': okResponse('Keys, oldest first.', { type: 'array', items: agentKey }), '403': errorResponse },
+      },
       post: {
         summary: 'Create an agent key for an active user',
         requestBody: body({
@@ -1565,7 +1597,7 @@ export const openapiSpec = () => ({
           },
           required: ['agentName', 'name'],
         }),
-        responses: { '201': okResponse('Created; includes the plaintext key.'), '403': errorResponse, '409': errorResponse },
+        responses: { '201': okResponse('Created; includes the plaintext key.', createdKey), '403': errorResponse, '409': errorResponse },
       },
     },
     '/users/{id}/keys/{keyId}': {
@@ -1573,7 +1605,10 @@ export const openapiSpec = () => ({
         { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
         { name: 'keyId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
       ],
-      delete: { summary: 'Revoke one of a user’s agent keys', responses: { '200': okResponse('Key revoked.'), '403': errorResponse } },
+      delete: {
+        summary: 'Revoke one of a user’s agent keys',
+        responses: { '200': okResponse('Key revoked.', revokedKey), '403': errorResponse, '404': errorResponse },
+      },
     },
     '/me/keys': {
       get: {
@@ -1584,7 +1619,7 @@ export const openapiSpec = () => ({
           'itself: that was shown once, when it was minted. An agent API key gets 403, even an ' +
           'administrator\'s: a key must not be able to list or revoke its siblings.',
         responses: {
-          '200': okResponse('Your keys, oldest first.', { type: 'array', items: ownKey }),
+          '200': okResponse('Your keys, oldest first.', { type: 'array', items: agentKey }),
           '401': errorResponse,
           '403': errorResponse,
         },
@@ -1599,15 +1634,7 @@ export const openapiSpec = () => ({
           'next request. A key that is someone else\'s, already revoked, or does not exist is the ' +
           'same 404 — this never says whose a key is. An agent API key gets 403.',
         responses: {
-          '200': okResponse('Key revoked.', {
-            type: 'object',
-            properties: {
-              id: { type: 'string', format: 'uuid' },
-              agentName: { type: 'string' },
-              revokedAt: { type: 'string', format: 'date-time' },
-            },
-            required: ['id', 'agentName', 'revokedAt'],
-          }),
+          '200': okResponse('Key revoked.', revokedKey),
           '401': errorResponse,
           '403': errorResponse,
           '404': errorResponse,
