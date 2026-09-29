@@ -2398,7 +2398,13 @@ const renderContext = (d, { fileOnly = false } = {}) => {
     }
   }
 
-  if (d.lastSession?.nextSteps) {
+  // A live session is worth naming even before it has next steps: it is
+  // another agent working in this directory right now.
+  if (d.lastSession?.ongoing) {
+    const said = d.lastSession.nextSteps ?? d.lastSession.request
+    out.push('', `A session here is still open (${d.lastSession.agent ?? 'unknown'})${said ? ':' : ''}`)
+    if (said) out.push(`  ${truncate(said, 400)}`)
+  } else if (d.lastSession?.nextSteps) {
     out.push('', `Last session here left off (${d.lastSession.agent ?? 'unknown'}):`)
     out.push(`  ${truncate(d.lastSession.nextSteps, 400)}`)
   }

@@ -62,7 +62,7 @@ vi.mock('./people', () => ({
     new Map(ids.map((id) => [id, { id, email: `${id}@example.test`, name: id === 'julien' ? 'Julien' : id, active: true }])),
 }))
 
-import { buildContext } from './context'
+import { buildContext, isLive, latestByActivity } from './context'
 
 const actor = { userId: 'user', actorId: 'agent', actorType: 'agent', role: 'member', rateKey: 'agent', userDisplayName: 'Agent', sessionId: null } satisfies Actor
 const task = (project: string, number: number, claimedAt: string) => ({
@@ -70,8 +70,8 @@ const task = (project: string, number: number, claimedAt: string) => ({
   status: 'doing', claimed_by: 'agent', claimed_at: claimedAt, created_at: claimedAt,
   heartbeat_at: '2020-01-01T00:00:00Z', updated_at: claimedAt,
 })
-const session = (project: string, cwd: string, endedAt: string) => ({
-  project_id: project, project: { key: project }, cwd, ended_at: endedAt,
+const session = (project: string, cwd: string, endedAt: string | null, updatedAt = endedAt ?? '2020-01-01T00:00:00Z') => ({
+  project_id: project, project: { key: project }, cwd, ended_at: endedAt, updated_at: updatedAt,
   request: `${project} request`, next_steps: null, agent_id: 'agent',
 })
 
@@ -101,7 +101,18 @@ describe('context project scope', () => {
     const context = await buildContext(actor, { project: 'MES', cwd: '/repo', scope: 'project' })
     expect(context.lastSession?.request).toBe('MES request')
     expect(db.calls.find((call) => call.table === 'sessions'))
-      .toMatchObject({ filters: [['cwd', '/repo'], ['projects.key', 'MES']], limit: 1 })
+      .toMatchObject({ filters: [['cwd', '/repo'], ['projects.key', 'MES']], limit: 5 })
+  })
+
+  /**
+   * CAIRN-320: ordered by ended_at, an open session — no end yet — ranked
+   * below every finished one, and the briefing showed an older session.
+   */
+  it('shows the open session over an older finished one, and says it is live', async () => {
+    const recent = new Date(Date.now() - 5 * 60_000).toISOString()
+    db.sessions = [session('CAL', '/repo', '2020-01-01T00:00:00Z'), { ...session('MES', '/repo', null, recent) }]
+    const context = await buildContext(actor, { cwd: '/repo' })
+    expect(context.lastSession).toMatchObject({ request: 'MES request', ongoing: true, endedAt: null })
   })
 
   it('filters stale claims before their limit', async () => {
@@ -211,5 +222,23 @@ describe('context and the assignee', () => {
     const byRef = new Map(context.inFlight.map((t) => [t.ref, t]))
     expect(byRef.get('MES-1')?.assignee).toBe('Julien')
     expect(byRef.get('MES-2')).not.toHaveProperty('assignee')
+  })
+})
+
+describe('the last session by activity', () => {
+  const row = (ended_at: string | null, updated_at: string, request: string) =>
+    ({ ended_at, updated_at, request, next_steps: null, agent_id: null })
+
+  it('ranks a finished session by when it ended, even when it was re-posted later', () => {
+    const retried = row('2026-01-01T00:00:00Z', '2026-01-03T00:00:00Z', 'retried summary')
+    const newer = row('2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z', 'newer')
+    expect(latestByActivity([retried, newer]).map((s) => s.request)).toEqual(['newer', 'retried summary'])
+  })
+
+  it('calls an open session live only while it is being written to', () => {
+    const now = Date.parse('2026-01-01T12:00:00Z')
+    expect(isLive(row(null, '2026-01-01T11:30:00Z', 'x'), now)).toBe(true)
+    expect(isLive(row(null, '2026-01-01T08:00:00Z', 'x'), now)).toBe(false)
+    expect(isLive(row('2026-01-01T11:59:00Z', '2026-01-01T11:59:00Z', 'x'), now)).toBe(false)
   })
 })
