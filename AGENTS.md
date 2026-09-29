@@ -159,11 +159,10 @@ turn. "What did we decide and why" is a Cairn question; "what did I type at 11:0
 ## Setup
 
 ```bash
-export CAIRN_BASE_URL=https://cairn.example.com
-export CAIRN_API_KEY=sk_live_...
+cairn setup --url https://cairn.example.com   # a person, once per machine
 ```
 
-The key *is* the identity, so a machine running several runtimes wants one each —
-`CAIRN_API_KEY_CODEX`, `CAIRN_API_KEY_CLAUDE_CODE`.
+It pairs a key per runtime — `CAIRN_API_KEY_CODEX`, `CAIRN_API_KEY_CLAUDE_CODE` — because
+the key *is* the identity.
 
 Full verb reference: `cairn --help`. Machine-readable API: `GET /api/v1/openapi.json`.

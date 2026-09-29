@@ -17,13 +17,15 @@ rule followed by the live briefing (what the agent holds, what is in flight, its
 work nobody is on, where the last session stopped). If the CLI is missing, slow or failing, the rule is injected alone; if
 anything else goes wrong, the session starts as if the hook were not there.
 
-Install it as the user the gateway runs as:
+Install it as the user the gateway runs as. `cairn setup` does it, together with the
+OpenClaw key and the skill (see [section 3](#3-sessions-and-identity)); on its own:
 
 ```bash
-node scripts/install-hooks.mjs            # --dry-run prints the exact command instead
+cairn setup --url https://your-cairn      # detects OpenClaw by the same test as below
+node scripts/install-hooks.mjs            # the hook alone; --dry-run prints the exact command instead
 ```
 
-It only links for an account that runs a gateway: one whose OpenClaw config
+Either way it only links for an account that runs a gateway: one whose OpenClaw config
 (`~/.openclaw/openclaw.json`, or `OPENCLAW_CONFIG_PATH`) configures it — a `gateway.mode` or
 `gateway.port`, agents or channels. A global install puts `openclaw` on every account's PATH,
 and another account may hold a *client* config that only mirrors the gateway's auth token
@@ -133,11 +135,14 @@ is one project's.
 
 ## 3. Sessions and identity
 
-- **Sessions:** `node scripts/install-cron.mjs` installs `openclaw-sessions`, which runs
-  `hooks/cairn-session-end.mjs --scan "$CAIRN_OPENCLAW_SESSIONS"` every 30 minutes.
+- **Sessions:** `node scripts/install-cron.mjs --only openclaw-sessions --install` installs
+  `openclaw-sessions`, which runs `hooks/cairn-session-end.mjs --scan
+  "$CAIRN_OPENCLAW_SESSIONS"` every 30 minutes. `cairn setup` does not install it.
 - **Identity:** set `CAIRN_AGENT=openclaw` where the gateway starts (the hook sets it for its
-  own call), and give OpenClaw its own `CAIRN_API_KEY_OPENCLAW` in `~/.cairn/env`. OpenClaw
-  runs on Codex, so without its own key its work is filed under whichever runtime owns the
-  key it borrows.
-- **Skill:** copy `skills/cairn` into the workspace's skills directory; `sync-agent-files
+  own call), and give OpenClaw its own `CAIRN_API_KEY_OPENCLAW`. `cairn setup` pairs it
+  wherever it detects a gateway (or with `--runtimes openclaw`); otherwise put one in
+  `~/.cairn/env` by hand. OpenClaw runs on Codex, so without its own key its work is filed
+  under whichever runtime owns the key it borrows.
+- **Skill:** `cairn setup` copies `skills/cairn` into `$CLAWD_HOME/skills/` when `CLAWD_HOME`
+  is set; otherwise copy it into the workspace's skills directory yourself. `sync-agent-files
   --also skill=<that path>/cairn/SKILL.md` keeps it current.

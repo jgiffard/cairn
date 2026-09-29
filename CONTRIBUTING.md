@@ -134,7 +134,9 @@ strings to keep in step — `package.json`, which the server reports, and the co
 disagree, or if `[Unreleased]` is empty.
 
 **It does not push.** Pushing a tag is a release, and that stays a decision: review the
-commit, then push it and the tag yourself.
+commit, then push it and the tag yourself. Until the tag is pushed, `cairn setup` at the new
+version cannot download its release files (`v<version>` on GitHub); `install.sh` takes the
+CLI from the latest *published GitHub release*, so it moves on only once that exists.
 
 The CLI carries its own version number because it is copied onto machines rather than
 installed from a registry — there is no package.json beside the copy in `/usr/local/bin`.

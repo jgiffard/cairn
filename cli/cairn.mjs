@@ -796,7 +796,8 @@ const IDENTITY_REFUSAL =
   BORROWING && MUST_NOT_BORROW.has(AGENT)
     ? `cairn: CAIRN_AGENT=${AGENT} has no ${keyNameFor(AGENT)} in ${ENV_LABEL}, and this identity ` +
       `refuses to fall back to the default key, which belongs to another runtime. ` +
-      `Add ${keyNameFor(AGENT)}=<a key named ${AGENT}> to ${ENV_LABEL}.`
+      `Add ${keyNameFor(AGENT)}=<a key named ${AGENT}> to ${ENV_LABEL}, or pair one with ` +
+      '`cairn setup --maintenance` (an administrator approves it).'
     : null
 
 /** Every path that would send the key goes through this first. */
@@ -810,7 +811,10 @@ const requireKey = () => {
     process.exit(3)
   }
   if (!KEY) {
-    process.stderr.write(`CAIRN_API_KEY is not set (${INSTANCE.name ? ENV_LABEL : `env, or ${ENV_LABEL}`}).\n`)
+    process.stderr.write(
+      `CAIRN_API_KEY is not set (${INSTANCE.name ? ENV_LABEL : `env, or ${ENV_LABEL}`}). ` +
+        '`cairn setup --url <instance>` pairs one for each runtime on this machine.\n',
+    )
     process.exit(1)
   }
 }
@@ -2440,9 +2444,9 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn block <ref> --reason "<why>"   |   cairn unblock <ref>
 
   connect a machine
-    cairn setup --url <instance>   one command: pair a key, install the CLI,
-                                   skill, hooks and maintenance jobs. Safe to
-                                   re-run — it is the upgrade path
+    cairn setup --url <instance>   one command: pair keys in the browser, install
+                                   the CLI, skill, hooks and the agent-files job.
+                                   Safe to re-run — it is the upgrade path
     cairn setup --name <instance>  this machine has (or will have) more than
                                    one instance; names the new one
     cairn setup --runtimes claude-code,codex,openclaw   default: detected
@@ -2531,10 +2535,13 @@ const summariseEvent = (data) => {
  * `unclassified` is the caller's already-decided policy (from `--default`, or
  * asked at a terminal) — this function never prompts.
  */
-const addInstance = async ({ name, url, makeDefault = false, adopt = false, unclassified }) => {
-  if (INSTANCES?.error) throw new Error(`cairn: ${INSTANCES.error} — fix it before adding to it`)
-  const config = INSTANCES
-    ? { ...INSTANCES.raw, version: 1, instances: { ...INSTANCES.instances } }
+const addInstance = async ({ name, url, makeDefault = false, adopt = false, unclassified, pairing = false }) => {
+  // Read now, not at startup: `cairn setup` adds two in one run (the one it
+  // adopts, then the new one), and the second must not overwrite the first.
+  const current = readInstances()
+  if (current?.error) throw new Error(`cairn: ${current.error} — fix it before adding to it`)
+  const config = current
+    ? { ...current.raw, version: 1, instances: { ...current.instances } }
     : { version: 1, instances: {} }
   const existing = config.instances[name]
   if (existing && trimUrl(existing.url) !== url) {
@@ -2595,12 +2602,14 @@ const addInstance = async ({ name, url, makeDefault = false, adopt = false, uncl
 
   const notes = []
   if (moved.length) notes.push(`moved ${moved.join(', ')} into ~/.cairn/instances/${name}/`)
-  else if (legacy.includes('env') && !INSTANCES && !adopt) {
+  else if (legacy.includes('env') && !current && !adopt) {
     notes.push('~/.cairn/env is no longer read now that instances are configured; ' +
       'its keys belong in the instance they were issued by (or re-run with --adopt)')
   }
-  if (!existsSync(join(dir, 'env'))) {
-    notes.push(`put this instance's keys in ~/.cairn/instances/${name}/env (CAIRN_API_KEY_<RUNTIME>=..., mode 600)`)
+  // Setup pairs them next, so the hint is only for `cairn instance add`.
+  if (!pairing && !existsSync(join(dir, 'env'))) {
+    notes.push(`pair this instance's keys with \`cairn setup --url ${url}\`, or put them in ` +
+      `~/.cairn/instances/${name}/env (CAIRN_API_KEY_<RUNTIME>=..., mode 600)`)
   }
   if ((config.unclassified?.mode ?? 'ask') === 'ask') {
     notes.push('in a directory with no route, commands stop and ask (exit 10); ' +
@@ -4325,12 +4334,28 @@ const commands = {
           die(`"${explicitName}" is not an instance name: lowercase letters, digits and dashes, up to 32`)
         }
         instanceName = explicitName || deriveInstanceName(url)
+        // A machine connected to one instance keeps its keys in ~/.cairn/env,
+        // which is no longer read once instances are configured. Adopt it as an
+        // instance of its own first, still the default, or adding a second one
+        // would quietly disconnect the first.
+        const adopting = !hasInstances && existingTopUrl && existingTopUrl !== url
+        let adoptedName = adopting ? deriveInstanceName(existingTopUrl) : null
+        if (adoptedName === instanceName) adoptedName = `${adoptedName}-1`
         if (dry) {
+          if (adopting) line(`! instance  would adopt ~/.cairn/env as ${adoptedName} -> ${existingTopUrl} (still the default)`)
           line(`! instance  would register ${instanceName} -> ${url}`)
         } else {
+          if (adopting) {
+            try {
+              await addInstance({ name: adoptedName, url: existingTopUrl, adopt: true, makeDefault: true, pairing: true })
+            } catch (error) {
+              die(error.message)
+            }
+            line(`✓ instance  ${adoptedName} -> ${existingTopUrl} (adopted from ~/.cairn/env, still the default)`)
+          }
           let result
           try {
-            result = await addInstance({ name: instanceName, url })
+            result = await addInstance({ name: instanceName, url, pairing: true })
           } catch (error) {
             die(error.message)
           }

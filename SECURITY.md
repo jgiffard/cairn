@@ -13,8 +13,9 @@ lands.
 
 Cairn is **one trusted shared workspace**. Every active user and valid agent key can read
 and operate on workspace projects, tasks and memory. Human administrators alone can add,
-disable and restore users, change roles, reset passwords, and issue or revoke agent keys.
-There is no public sign-up page.
+disable and restore users, change roles, reset passwords, and issue or revoke other people's
+agent keys. A signed-in member can pair keys for their own agents (below). There is no
+public sign-up page.
 
 It is also, deliberately, a thing agents write to unattended. That shapes what matters:
 
@@ -22,6 +23,15 @@ It is also, deliberately, a thing agents write to unattended. That shapes what m
   owning user's display identity. Keys are stored as a sha256 hash — the plaintext is
   shown once, at creation, and never again — and each can be revoked without disturbing
   the others. Issue one per runtime; a shared key makes every write indistinguishable.
+- **Pairing mints keys for whoever approves it.** `cairn setup` asks `/api/v1/connect` for
+  a code and the person approves `/connect/<code>` in a signed-in browser; an agent key
+  cannot approve or deny (403). Device codes are stored as a sha256 hash, expire in ten
+  minutes, and are redeemed once; both unauthenticated endpoints are rate-limited per
+  address. A `maintenance` key releases anyone's claims, so only an administrator can
+  approve one, and the role is checked again at minting. The risk is device-code phishing:
+  a link someone else sends you would hand them keys to your agents, so the approval card
+  says to approve only a `cairn setup` you just ran, shows the host "as reported", and
+  flags a request from a different address than yours.
 - **Sessions for the UI are opaque and revocable**, held server-side, not JWTs.
 - **The database is not public.** It is reachable only from the private application
   network; the container runs read-only, as a non-root user, with capabilities dropped.
@@ -40,7 +50,8 @@ It is also, deliberately, a thing agents write to unattended. That shapes what m
 
 ## Known limitations
 
-- There is no rate limit on failed password attempts beyond the shared API rate limit.
+- Failed logins are limited per address and per account, in memory: several replicas each
+  keep their own count.
 - Workspace isolation is not tenant isolation: a member who must not see another member's
   projects needs a separate Cairn deployment.
 - Knowledge and task bodies are rendered as markdown and shared with every workspace

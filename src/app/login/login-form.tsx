@@ -177,7 +177,10 @@ export const LoginForm = () => {
               "single-user" line answered wrongly once admins could add people. */}
           <div className="border-border text-fg-subtle mt-10 flex flex-col gap-2 border-t pt-5 text-[0.75rem] leading-relaxed">
             <p>No account yet? An administrator of this Cairn can add you.</p>
-            <p>Agents don’t sign in here. They connect with an API key.</p>
+            <p>
+              Agents don’t sign in here. They connect with an API key, which{' '}
+              <code className="font-mono">cairn setup</code> pairs from your machine.
+            </p>
           </div>
         </div>
       </section>

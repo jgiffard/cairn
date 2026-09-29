@@ -4,8 +4,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/montytorr/cairn/main/install.sh | sh -s -- --url https://your-cairn
 #
 # This script does exactly two things: put a recent cli/cairn.mjs on PATH,
-# and hand off to it. Everything else -- pairing a key, the skill, the hooks,
-# the maintenance jobs -- is `cairn setup`'s job (cli/cairn.mjs), not this
+# and hand off to it. Everything else -- pairing keys, the skill, the hooks,
+# the scheduled jobs -- is `cairn setup`'s job (cli/cairn.mjs), not this
 # script's; duplicating that logic here in POSIX sh would be a second place
 # for it to drift out of step with the CLI it is supposed to install.
 set -eu

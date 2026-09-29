@@ -27,7 +27,7 @@ out under **Breaking** with what to do about it.
 
   Re-running it is the upgrade path: working keys are kept and unchanged files left alone.
   Flags: `--dry-run`, `--name`, `--runtimes`, `--no-skill`, `--no-hooks`, `--no-jobs`,
-  `--yes`. `install.sh` at the repository root puts the CLI on PATH and runs it:
+  `--maintenance`. `install.sh` at the repository root puts the CLI on PATH and runs it:
   `curl -fsSL https://raw.githubusercontent.com/montytorr/cairn/main/install.sh | sh -s -- --url <instance>`.
 - **Browser pairing: a machine gets keys without an admin** (CAIRN-314).
   - `cairn setup` asks `POST /api/v1/connect` for a code and prints `<instance>/connect/<CODE>`.
@@ -47,7 +47,19 @@ out under **Breaking** with what to do about it.
     record of who approved which host.
   - Migration 068 adds `connect_requests`.
 
+### Changed
+
+- **The docs and messages send people to `cairn setup`.** The README opens with the
+  one-line install, and its key, API, scheduled-job and several-instances sections describe
+  pairing. SECURITY.md covers it and its phishing risk, `AGENTS.md` and the skill say a
+  person pairs keys with `cairn setup`, and the CLI's "no key" errors name the command.
+
 ### Fixed
+
+- **`cairn setup` adding a second instance disconnected the first.** A machine set up for one
+  instance keeps its keys in `~/.cairn/env`, which is no longer read once instances are
+  configured. Setup now adopts it as an instance of its own, still the default, before
+  registering the new one.
 
 - **An expired session lost where it was going.** The middleware lets any request with a
   session cookie through; when the layout then found the session invalid it sent a bare
