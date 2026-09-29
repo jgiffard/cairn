@@ -37,6 +37,7 @@ const REPO = dirname(import.meta.dirname)
 
 const CONTEXT = join(HOME, '.cairn', 'hooks', 'cairn-context.mjs')
 const SESSION_END = join(HOME, '.cairn', 'hooks', 'cairn-session-end.mjs')
+const LEARN_NUDGE = join(HOME, '.cairn', 'hooks', 'cairn-learn-nudge.mjs')
 
 /** Marks the entries this installer owns, so re-running replaces rather than duplicates. */
 const TAG = 'cairn-memory'
@@ -105,6 +106,7 @@ const installScripts = () => {
   mkdirSync(dirname(CONTEXT), { recursive: true })
   copyFileSync(join(REPO, 'hooks', 'cairn-context.mjs'), CONTEXT)
   copyFileSync(join(REPO, 'hooks', 'cairn-session-end.mjs'), SESSION_END)
+  copyFileSync(join(REPO, 'hooks', 'cairn-learn-nudge.mjs'), LEARN_NUDGE)
   log(`  scripts -> ${dirname(CONTEXT)}`)
 }
 
@@ -126,7 +128,7 @@ const installScripts = () => {
  * would miss exactly the stale entry that most needs replacing. Nothing else
  * on a machine runs a file called `cairn-session-end.mjs`.
  */
-const SCRIPT_NAMES = ['cairn-context.mjs', 'cairn-session-end.mjs']
+const SCRIPT_NAMES = ['cairn-context.mjs', 'cairn-session-end.mjs', 'cairn-learn-nudge.mjs']
 
 const isMine = (hook) =>
   Boolean(hook?.[TAG]) ||
@@ -215,11 +217,11 @@ const installClaude = () => {
 
   const mine = (command, extra = {}) => ({ type: 'command', command, [TAG]: true, ...extra })
 
-  const replace = (event, matcher, entry) => {
+  const replace = (event, matcher, ...entries) => {
     const groups = (settings.hooks[event] ?? []).filter(
       (g) => !(g.hooks ?? []).some(isMine),
     )
-    groups.push(matcher ? { matcher, hooks: [entry] } : { hooks: [entry] })
+    groups.push(matcher ? { matcher, hooks: entries } : { hooks: entries })
     settings.hooks[event] = groups
   }
 
@@ -229,9 +231,11 @@ const installClaude = () => {
   // No matcher: both `manual` and `auto` compactions are the same event to us,
   // and naming them would only add a spelling to get wrong.
   replace('PreCompact', null, mine(`node ${SESSION_END}`, { timeout: 120, async: true }))
+  // Not async: a Stop hook can only block by answering before the turn ends.
+  replace('Stop', null, mine(`node ${LEARN_NUDGE}`, { timeout: 10 }))
 
   if (writeJson(path, settings, before)) {
-    log('  claude: SessionStart, SessionEnd, PreCompact')
+    log('  claude: SessionStart, SessionEnd, PreCompact, Stop (asks once per session to cairn learn)')
     if (unwired) log('  claude: removed the per-Read PreToolUse hook (CCS-40)')
   }
 }
@@ -257,9 +261,9 @@ const installCodex = () => {
 
   const mine = (command, extra = {}) => ({ type: 'command', command, [TAG]: true, ...extra })
 
-  const replace = (event, matcher, entry) => {
+  const replace = (event, matcher, ...entries) => {
     const groups = (config.hooks[event] ?? []).filter((g) => !(g.hooks ?? []).some(isMine))
-    groups.push(matcher ? { matcher, hooks: [entry] } : { hooks: [entry] })
+    groups.push(matcher ? { matcher, hooks: entries } : { hooks: entries })
     config.hooks[event] = groups
   }
 
@@ -271,14 +275,19 @@ const installCodex = () => {
 
   replace('SessionStart', 'startup|resume|clear', mine(`${env} node ${CONTEXT}`, { timeout: 10 }))
   const unwired = strip(config.hooks, 'PreToolUse')
-  replace('Stop', null, mine(`${env} node ${SESSION_END} --ongoing`, { timeout: 120, async: true }))
+  replace(
+    'Stop',
+    null,
+    mine(`${env} node ${SESSION_END} --ongoing`, { timeout: 120, async: true }),
+    mine(`${env} node ${LEARN_NUDGE}`, { timeout: 10 }),
+  )
   replace('SessionEnd', null, mine(`${env} node ${SESSION_END}`, { timeout: 120, async: true }))
 
   // The trust warning is printed only when the file actually moved. Printed
   // every run it is wallpaper, and the one run where it matters reads the same
   // as the twenty where it did not.
   if (writeJson(path, config, before)) {
-    log('  codex: SessionStart, Stop (live checkpoint), SessionEnd')
+    log('  codex: SessionStart, Stop (live checkpoint; asks once per session to cairn learn), SessionEnd')
     if (unwired) log('  codex: removed the per-Read PreToolUse hook (CCS-40)')
     log('  codex: entries must be trusted on next launch — [hooks.state] in config.toml')
     log('  codex: needs CAIRN_API_KEY_CODEX (`cairn setup` pairs one), or it writes as')

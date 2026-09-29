@@ -2695,6 +2695,19 @@ const closeTask = async (status, defaultKind) => {
         `Next time claim first (\`cairn add\` now claims for agents).\n`,
     )
   }
+
+  // The close is when the agent knows most about what the work taught, and
+  // the last moment anyone will ask (CAIRN-323). Not for a duplicate, and not
+  // when something was already learned on this task.
+  if (body.resolutionKind === 'duplicate') return
+  const closedRef = refOfTask(closed) ?? ref
+  const recall = await request('GET', `/api/v1/tasks/${closedRef}/recall?decisions=1&knowledge=30`, undefined, { soft: true })
+  const learnedHere = (recall?.knowledge ?? []).some((k) => k.why?.includes('learned on this task'))
+  if (learnedHere) return
+  process.stderr.write(
+    `Did ${closedRef} establish anything the next agent should know — a constraint, a trap, a decision and its reason? ` +
+      `cairn learn "<title>" --project ${closedRef.split('-')[0]} --task ${closedRef} --body -\n`,
+  )
 }
 
 /** `from -> to`, or the raw keys, kept to one short cell. */

@@ -366,7 +366,10 @@ describe('the installer and the per-Read hook CCS-40 removed', () => {
       { matcher: 'Read', hooks: [foreignPre] },
       { matcher: 'Bash', hooks: [{ type: 'command', command: '/guard.sh' }] },
     ])
-    expect(Object.keys(claude.hooks).sort()).toEqual(['PreCompact', 'PreToolUse', 'SessionEnd', 'SessionStart'])
+    expect(Object.keys(claude.hooks).sort()).toEqual(['PreCompact', 'PreToolUse', 'SessionEnd', 'SessionStart', 'Stop'])
+    // The learn nudge blocks Stop, which only a synchronous hook can (CAIRN-323).
+    expect(claude.hooks.Stop).toEqual([{ hooks: [expect.objectContaining({ command: expect.stringMatching(/cairn-learn-nudge\.mjs$/) })] }])
+    expect(claude.hooks.Stop[0].hooks[0].async).toBeUndefined()
 
     const codex = JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))
     expect(codex.hooks.PreToolUse).toBeUndefined()
@@ -375,12 +378,13 @@ describe('the installer and the per-Read hook CCS-40 removed', () => {
     expect(first.stdout).toContain('Stop (runs every turn): node /x/.quarry/hooks/quarry-session-end.mjs')
     // Stop is a live checkpoint and SessionEnd closes the session: a Stop that
     // ended it closed every Codex session on its first turn (CAIRN-319).
-    const cairnCommand = (event: string) =>
+    const cairnCommand = (event: string, script = 'cairn-session-end.mjs') =>
       codex.hooks[event]
         .flatMap((g: { hooks: { command: string }[] }) => g.hooks)
         .map((h: { command: string }) => h.command)
-        .find((command: string) => command.includes('cairn-session-end.mjs'))
+        .find((command: string) => command.includes(script))
     expect(cairnCommand('Stop')).toMatch(/cairn-session-end\.mjs --ongoing$/)
+    expect(cairnCommand('Stop', 'cairn-learn-nudge.mjs')).toMatch(/cairn-learn-nudge\.mjs$/)
     expect(cairnCommand('SessionEnd')).toMatch(/cairn-session-end\.mjs$/)
     expect(first.stdout).toContain('removed the per-Read PreToolUse hook')
 

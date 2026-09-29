@@ -161,9 +161,10 @@ describe('cairn add, for a person', () => {
   })
 })
 
-const closeServer = (activity: unknown[]): Reply => (req) => {
+const closeServer = (activity: unknown[], recalled: unknown[] = []): Reply => (req) => {
   if (req.method === 'PATCH') return { id: 't', number: 7, status: 'done', resolution: 'x', resolution_kind: 'fixed' }
   if (req.path.includes('/activity')) return activity
+  if (req.path.includes('/recall')) return { decisions: [], knowledge: recalled }
   return {}
 }
 
@@ -211,11 +212,31 @@ describe('cairn done', () => {
     }
   })
 
+  /** CAIRN-323: the close is the last moment anyone asks what the work taught. */
+  it('asks an agent whether the task taught anything, with the command to record it', async () => {
+    const base = await serve(closeServer([{ event: 'claimed', data: {} }]), [])
+    const { stderr } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'], base, 'codex')
+    expect(stderr).toContain('Did ACME-7 establish anything the next agent should know')
+    expect(stderr).toContain('cairn learn "<title>" --project ACME --task ACME-7 --body -')
+  })
+
+  it('does not ask when something was already learned on the task, or it was a duplicate', async () => {
+    const learned = [{ slug: 'x', why: ['learned on this task'] }]
+    const base = await serve(closeServer([{ event: 'claimed', data: {} }], learned), [])
+    const { stderr } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'], base, 'codex')
+    expect(stderr).not.toContain('establish anything')
+
+    const again = await serve(closeServer([{ event: 'claimed', data: {} }]), [])
+    const duplicate = await run(['done', 'ACME-7', '--resolution', 'same bug', '--duplicate-of', 'ACME-3'], again, 'codex')
+    expect(duplicate.stderr).not.toContain('establish anything')
+  })
+
   it('does not warn a person, who is documented as never claiming', async () => {
     const seen: Seen[] = []
     const base = await serve(closeServer(CLOSE_ONLY), seen)
     const { stderr } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'], base)
     expect(stderr).not.toContain('without ever being claimed')
+    expect(stderr).not.toContain('establish anything')
     expect(seen.some((s) => s.path.includes('/activity'))).toBe(false)
   })
 })

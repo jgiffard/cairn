@@ -664,8 +664,8 @@ waiting for approval… ✓ approved by Julien
 ✓ cli       ~/.local/bin/cairn (0.11.0)
 ✓ skill     ~/.claude/skills/cairn, ~/.codex/skills/cairn
 ✓ hooks     installed:
-     claude: SessionStart, SessionEnd, PreCompact
-     codex: SessionStart, Stop (live checkpoint), SessionEnd
+     claude: SessionStart, SessionEnd, PreCompact, Stop (asks once per session to cairn learn)
+     codex: SessionStart, Stop (live checkpoint; asks once per session to cairn learn), SessionEnd
      …
 ✓ jobs      agent-files:
      …
@@ -789,10 +789,22 @@ its own and touches nobody else's. Coverage differs by runtime:
 
 | Runtime | Session start | Session recorded |
 |---|---|---|
-| Claude Code | `SessionStart` | `SessionEnd` **and** `PreCompact` |
-| Codex | `SessionStart` | `SessionEnd`, with a live checkpoint on every `Stop` that never ends the session or touches held tasks |
+| Claude Code | `SessionStart` | `SessionEnd` **and** `PreCompact`; `Stop` asks once per session to `cairn learn` |
+| Codex | `SessionStart` | `SessionEnd`, with a live checkpoint on every `Stop` that never ends the session or touches held tasks; `Stop` also asks once per session to `cairn learn` |
 | Hermes Agent by Nous Research | `pre_llm_call` on the first turn only | — session recording is deliberately not installed |
 | OpenClaw | `agent:bootstrap`, via the `cairn-briefing` hook package the installer links with `openclaw hooks install --link` (restart the gateway after) | swept from disk on a schedule — it has no session event of any kind |
+
+**Asking the agent to `cairn learn`** (CAIRN-323). Agents can record what the work taught,
+but nothing used to ask them. Two questions, neither of which calls a model:
+
+- `cairn done` ends, for an agent, by asking whether the task established anything the next
+  agent should know, with the `cairn learn … --task <ref>` command to run. It stays quiet for
+  a duplicate, or when something was already learned on that task.
+- On Claude Code and Codex, `Stop` runs `cairn-learn-nudge.mjs`, which covers the sessions
+  that close no task. It blocks the hand-back with the same question, **once per session**,
+  and only after a turn that edited a file or made a commit. It never asks on the
+  continuation its own block caused, in a session that already ran `cairn learn`, or inside
+  a summariser. `CAIRN_LEARN_NUDGE=0` turns it off.
 
 On Codex the installer also lists every hook in `hooks.json` that is not Cairn's, and marks
 the ones on `Stop`: `Stop` fires after **every turn**, so a session-end script written for
