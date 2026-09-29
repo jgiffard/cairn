@@ -9,6 +9,14 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A late CI run could roll a deploy back** (CAIRN-318). Each successful CI run on `main`
+  deployed its own commit. Two pushes close together could finish CI out of order, and the
+  older commit then deployed last: v0.12.0's release commit was replaced by the merge before
+  it. A gate job now deploys a commit only if it is still the tip of `main`. A superseded one
+  stands down, since the newer commit's own run deploys it.
+
 ## [0.12.0] — 2026-09-29
 
 ### Changed

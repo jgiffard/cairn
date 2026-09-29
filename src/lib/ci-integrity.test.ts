@@ -26,6 +26,13 @@ describe('release validation boundary', () => {
     expect(canDeploy).toBe(false)
   })
 
+  it('deploys only the commit main is on, so a late CI run cannot roll it back (CAIRN-318)', () => {
+    const deploy = readFileSync(join(process.cwd(), '.github/workflows/deploy.yml'), 'utf8')
+    expect(deploy).toMatch(/\n  gate:\n/)
+    expect(deploy).toContain('repos/$REPO/commits/main')
+    expect(deploy).toMatch(/\n  deploy:\n    needs: gate\n    if: needs\.gate\.outputs\.current == 'true'/)
+  })
+
   it('makes PostgreSQL integrity coverage a blocking CI job', () => {
     const ci = readFileSync(join(process.cwd(), '.github/workflows/ci.yml'), 'utf8')
     expect(ci).toContain('image: postgres:16')
