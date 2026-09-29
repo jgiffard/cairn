@@ -435,7 +435,7 @@ export const openapiSpec = () => ({
           'sessions. Returns an index, never bodies. Hits carrying an answer rank first. ' +
           'Matching is keyword-based (Postgres FTS ANDs terms, widening to OR when the ' +
           'precise pass comes back thin), so a paraphrase can still miss. ' +
-          'A `type` or `status` filter is a statement about tasks and narrows to them.',
+          'A `type`, `status` or `assignee` filter is a statement about tasks and narrows to them.',
         parameters: [
           { name: 'q', in: 'query', required: true, schema: { type: 'string' } },
           { name: 'project', in: 'query', schema: { type: 'string' } },
@@ -448,6 +448,10 @@ export const openapiSpec = () => ({
           { name: 'tasksOnly', in: 'query', schema: { type: 'boolean', default: false } },
           { name: 'type', in: 'query', schema: { type: 'string', enum: [...TASK_TYPES] } },
           { name: 'status', in: 'query', schema: { type: 'string', enum: [...TASK_STATUSES] } },
+          { name: 'assignee', in: 'query', schema: { type: 'string' },
+            description:
+              'Only tasks owned by: `me`, an email, a display name or a user id. Chosen from ' +
+              'the best 200 matches, so a subject with more hits than that can miss some.' },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 20, maximum: 100 } },
         ],
         responses: {
@@ -1095,12 +1099,17 @@ export const openapiSpec = () => ({
           'checkpoint, then dropped without one, then in-review, todo and backlog. ' +
           'Anything blocked, waiting on an unfinished task, or actively held by another ' +
           'agent is absent rather than ranked last. Each pick carries the reason it won. ' +
+          'Inside a tier, work assigned to the caller\'s user ranks before anyone else\'s, ' +
+          'which stays offered but says whose it is in `reason`; every pick carries `assignee` ' +
+          '(a name). ' +
           'A `project` that is a retired key ranks the live project and returns `renamed_from`; ' +
           'one that names no project at all is a 404 rather than "nothing open".',
         parameters: [
           { name: 'project', in: 'query', schema: { type: 'string' } },
           { name: 'limit', in: 'query', schema: { type: 'integer' },
             description: 'How many runners-up to return (default 5).' },
+          { name: 'assignee', in: 'query', schema: { type: 'string' },
+            description: 'Only tasks owned by: `me`, an email, a display name or a user id.' },
         ],
         responses: { '200': okResponse('A pick, the runners-up, and what was considered.') },
       },
@@ -1109,7 +1118,8 @@ export const openapiSpec = () => ({
       get: {
         summary: 'The briefing a session opens with',
         description:
-          'What you are still holding, what is in flight around you, where the last session ' +
+          'What you are still holding, what is in flight around you, your user\'s open work ' +
+          'here that nobody is on, where the last session ' +
           'in this directory stopped, and what is known here. Index only, never bodies. ' +
           'With `file`, it answers the narrower question instead: what is known about that ' +
           'path. Read by a hook that has milliseconds and no way to recover from a failure, ' +
@@ -1143,6 +1153,41 @@ export const openapiSpec = () => ({
                       description: 'Refs from before a rename in the last 30 days, e.g. ["AC-113"] beside HOL-113.',
                     },
                   },
+                },
+              },
+              inFlight: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    ref: { type: 'string' },
+                    assignee: {
+                      type: 'string',
+                      description: 'Whose it is, present only when that is not the caller\'s user.',
+                    },
+                  },
+                },
+              },
+              unattended: {
+                type: 'object',
+                description:
+                  'The caller\'s user\'s todo, backlog and doing tasks in this project with no ' +
+                  'live claim, not already in `held` or `inFlight`. Most urgent first, at most 5; ' +
+                  '`more` counts the rest.',
+                properties: {
+                  tasks: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        ref: { type: 'string' },
+                        title: { type: 'string' },
+                        status: { type: 'string' },
+                        priority: { type: 'string' },
+                      },
+                    },
+                  },
+                  more: { type: 'integer' },
                 },
               },
             },

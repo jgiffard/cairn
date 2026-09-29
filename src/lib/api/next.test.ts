@@ -173,3 +173,93 @@ describe('rankNext across concurrent sessions', () => {
     expect(out[0]?.tier).toBe('checkpointed')
   })
 })
+
+/**
+ * Whose it is (CAIRN-310).
+ *
+ * The claim says which agent is on a task; the assignee says which human it
+ * belongs to. An agent asking what to pick up is asking on behalf of its
+ * human, so their work comes first — but another person's task is still work
+ * in a shared workspace, so it is ranked lower and labelled, never hidden.
+ */
+describe('rankNext and the assignee', () => {
+  const ME = 'user-me'
+  const JULIEN = 'user-julien'
+  const rank = (tasks: Candidate[], myUserId: string | null = ME) =>
+    rankNext(tasks, { me: 'claude-code', now: NOW, myUserId })
+
+  it('puts the callers own humans work ahead of an otherwise equal task', () => {
+    const out = rank([
+      task({ ref: 'A-1', status: 'todo', assigneeId: JULIEN, assignee: 'Julien', updatedAt: hoursAgo(200) }),
+      task({ ref: 'A-2', status: 'todo', assigneeId: ME, assignee: 'Cal', updatedAt: hoursAgo(1) }),
+    ])
+    // A-1 is older and would win on age alone.
+    expect(out.map((t) => t.ref)).toEqual(['A-2', 'A-1'])
+  })
+
+  it('ranks someone elses work lower without dropping it', () => {
+    const out = rank([task({ ref: 'A-1', status: 'todo', assigneeId: JULIEN, assignee: 'Julien' })])
+    expect(out.map((t) => t.ref)).toEqual(['A-1'])
+  })
+
+  it('says whose it is when it is not the callers', () => {
+    const [julien] = rank([task({ ref: 'A-1', status: 'todo', assigneeId: JULIEN, assignee: 'Julien' })])
+    expect(julien?.reason).toBe('queued and ready · assigned to Julien')
+    expect(julien?.assignee).toBe('Julien')
+
+    const [mine] = rank([task({ ref: 'A-2', status: 'todo', assigneeId: ME, assignee: 'Cal' })])
+    expect(mine?.reason).toBe('queued and ready')
+    expect(mine?.assignee).toBe('Cal')
+  })
+
+  it('puts the callers own work ahead of a higher priority task that is someone elses', () => {
+    // Urgent for whoever owns it. An agent working for its human should not be
+    // steered onto Julien's queue because Julien marked it urgent.
+    const out = rank([
+      task({ ref: 'A-1', status: 'todo', priority: 'urgent', assigneeId: JULIEN, assignee: 'Julien' }),
+      task({ ref: 'A-2', status: 'todo', priority: 'low', assigneeId: ME }),
+    ])
+    expect(out.map((t) => t.ref)).toEqual(['A-2', 'A-1'])
+  })
+
+  it('still lets the tier decide first: finishing beats starting, whoever it belongs to', () => {
+    const out = rank([
+      task({ ref: 'A-1', status: 'todo', assigneeId: ME }),
+      task({ ref: 'A-2', status: 'doing', checkpoint: 'half way', assigneeId: JULIEN, assignee: 'Julien' }),
+    ])
+    expect(out.map((t) => t.ref)).toEqual(['A-2', 'A-1'])
+    expect(out[0]?.reason).toMatch(/assigned to Julien$/)
+  })
+
+  it('keeps every existing exclusion for someone elses work', () => {
+    expect(
+      rank([
+        task({ ref: 'A-1', status: 'todo', blockedAt: hoursAgo(1), assigneeId: JULIEN }),
+        task({ ref: 'A-2', status: 'todo', unmetDeps: 1, assigneeId: JULIEN }),
+        task({ ref: 'A-3', status: 'doing', claimedBy: 'codex', heartbeatAt: hoursAgo(1), assigneeId: JULIEN }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('changes nothing for a caller with no user', () => {
+    const out = rank(
+      [
+        task({ ref: 'A-1', status: 'todo', assigneeId: JULIEN, assignee: 'Julien', updatedAt: hoursAgo(200) }),
+        task({ ref: 'A-2', status: 'todo', assigneeId: ME, updatedAt: hoursAgo(1) }),
+      ],
+      null,
+    )
+    expect(out.map((t) => t.ref)).toEqual(['A-1', 'A-2'])
+    expect(out[0]?.reason).toBe('queued and ready')
+  })
+
+  it('does not treat a task that names no owner as someone elses', () => {
+    // Unknown is not "somebody else's": it ranks with the caller's own, on age.
+    const out = rank([
+      task({ ref: 'A-1', status: 'todo', assigneeId: ME, updatedAt: hoursAgo(1) }),
+      task({ ref: 'A-2', status: 'todo', updatedAt: hoursAgo(200) }),
+    ])
+    expect(out.map((t) => t.ref)).toEqual(['A-2', 'A-1'])
+    expect(out[0]?.reason).toBe('queued and ready')
+  })
+})

@@ -33,6 +33,20 @@ out under **Breaking** with what to do about it.
   - *Guidance.* The skill, `AGENTS.md`, the OpenClaw block and hook, and the session briefing
     say the rule: assigned to your human unless `--assignee` says otherwise; the assignee owns
     the work, the claim is only which agent is running it.
+- **`cairn next`, `check` and the briefing know whose work it is** (CAIRN-310).
+  - *`next`.* Inside a tier, work assigned to your human ranks before anyone else's — ahead
+    of priority, since an urgent task is urgent for whoever owns it. Someone else's work is
+    still offered, never hidden, and its reason says so (`… · assigned to Julien`). Every pick
+    carries `assignee`, and the CLI prints it on each line. `?assignee=` / `--assignee
+    me|<who>` narrows the ranking to one person.
+  - *`check`.* `--assignee me|<who>` (`?assignee=` on `GET /search`, `assignee` on
+    `cairn_check`) keeps only that person's tasks. Like `--type`, it is a statement about
+    tasks, so the answer is tasks only; it is chosen from the best 200 matches.
+  - *Briefing.* A new "Assigned to you, nobody on it" section: your human's todo, backlog and
+    doing tasks in this project with no live claim, five at most, most urgent first, then
+    `+N more`. "In flight" and "Started and dropped" name the owner (`· Julien's`) when it is
+    not your human, so a dropped task is not picked up as your own by mistake.
+    `GET /context` returns `unattended: {tasks, more}` and `inFlight[].assignee`.
 
 ### Changed
 

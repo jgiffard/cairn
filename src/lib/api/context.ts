@@ -5,6 +5,8 @@ import { stalenessFor } from './staleness'
 import { contextForFile, type FileContext } from './files'
 import { projectForCwd, projectForRepo } from './project-resolution'
 import { formerKeysByProject, formerRefsOf, liveProjectKey, resolveProject, type FormerKey, type KeyRename } from './project-keys'
+import { peopleByIds } from './people'
+import { TASK_PRIORITIES } from '@/schemas/task'
 
 /**
  * The briefing a session opens with.
@@ -26,6 +28,14 @@ const LEASE_MINUTES = 15
 
 /** Past this with no note, a held task is a hold nobody is acting on. */
 const QUIET_HOURS = 24
+
+/**
+ * How many of the caller's unattended tasks the briefing names. The rest are a
+ * count: this is read at the top of every session, and a backlog is not news.
+ */
+const UNATTENDED_SHOWN = 5
+/** How many are read to rank and count them; a count past this is a floor. */
+const UNATTENDED_READ = 100
 
 export type ContextPayload = {
   project: string | null
@@ -64,7 +74,24 @@ export type ContextPayload = {
      * claim either, so nothing surfaces it again.
      */
     stalled: boolean
+    /**
+     * Whose it is — set ONLY when that is not the caller's human (CAIRN-310).
+     * Absent means the caller's own, or that it cannot be told; the briefing
+     * names an owner only when picking the task up would be taking someone
+     * else's work.
+     */
+    assignee?: string
   }[]
+  /**
+   * The caller's human's open work in this project that nobody is on: no
+   * claim, or one past its lease. Most urgent first, then most recently
+   * touched; `more` is how many were left out. Tasks already listed in
+   * `inFlight` or `held` are not repeated here.
+   */
+  unattended: {
+    tasks: { ref: string; title: string; status: string; priority: string }[]
+    more: number
+  }
   lastSession: {
     endedAt: string | null
     request: string | null
@@ -79,6 +106,9 @@ export type ContextPayload = {
 const TASK_SELECT =
   'id, number, title, status, claimed_by, claimed_at, heartbeat_at, updated_at, ' +
   'project:projects!project_id!inner(key)'
+
+/** In-flight and unattended rows also say whose they are. */
+const OWNED_SELECT = `${TASK_SELECT}, priority, assignee_user_id`
 
 /** Held tasks also carry what a recent rename is measured against. */
 const HELD_SELECT = `${TASK_SELECT}, project_id, created_at`
@@ -122,7 +152,14 @@ type TaskRow = {
   project: { key: string }
 }
 
+type OwnedRow = TaskRow & { priority: string; assignee_user_id: string | null }
+
 const refOf = (t: TaskRow) => `${t.project.key}-${t.number}`
+
+const priorityRank = (priority: string) => {
+  const index = (TASK_PRIORITIES as readonly string[]).indexOf(priority)
+  return index === -1 ? TASK_PRIORITIES.length : index
+}
 
 const humanDuration = (fromIso: string | null): string => {
   if (!fromIso) return 'unknown'
@@ -191,20 +228,45 @@ export const buildContext = async (
     }
   }
 
-  // --- what else is in flight here --------------------------------------
+  // --- what else is in flight here, and what of yours nobody is on -----
   let inFlight: ContextPayload['inFlight'] = []
+  let unattended: ContextPayload['unattended'] = { tasks: [], more: 0 }
   if (project) {
-    const { data, error } = await admin()
-      .from('tasks')
-      .select(TASK_SELECT)
-      .eq('projects.key', project)
-      .in('status', ['doing', 'in-review'])
-      .order('updated_at', { ascending: false })
-      .limit(8)
-    if (error) throw new Error(error.message)
-    inFlight = ((data ?? []) as unknown as TaskRow[]).map((row) => {
+    // Read together: this route is on the path of every session start.
+    const [flight, owned] = await Promise.all([
+      admin()
+        .from('tasks')
+        .select(OWNED_SELECT)
+        .eq('projects.key', project)
+        .in('status', ['doing', 'in-review'])
+        .order('updated_at', { ascending: false })
+        .limit(8),
+      admin()
+        .from('tasks')
+        .select(OWNED_SELECT)
+        .eq('projects.key', project)
+        .eq('assignee_user_id', actor.userId)
+        .in('status', ['todo', 'backlog', 'doing'])
+        .order('updated_at', { ascending: false })
+        .limit(UNATTENDED_READ),
+    ])
+    if (flight.error) throw new Error(flight.error.message)
+    if (owned.error) throw new Error(owned.error.message)
+
+    const flightRows = (flight.data ?? []) as unknown as OwnedRow[]
+    // Names are looked up only for somebody else's work, which is the only
+    // work the briefing names an owner for — usually none, so usually no query.
+    const others = flightRows
+      .map((row) => row.assignee_user_id)
+      .filter((id): id is string => Boolean(id) && id !== actor.userId)
+    const people = others.length > 0 ? await peopleByIds(others) : new Map<string, { name: string }>()
+
+    inFlight = flightRows.map((row) => {
       const quietSince = row.heartbeat_at ?? row.updated_at
       const quietMs = quietSince ? Date.now() - new Date(quietSince).getTime() : 0
+      const owner = row.assignee_user_id && row.assignee_user_id !== actor.userId
+        ? people.get(row.assignee_user_id)?.name
+        : undefined
       return {
         ref: refOf(row),
         title: row.title,
@@ -212,8 +274,34 @@ export const buildContext = async (
         claimedBy: row.claimed_by,
         quietFor: humanDuration(quietSince),
         stalled: !row.claimed_by && quietMs > QUIET_HOURS * 3_600_000,
+        ...(owner ? { assignee: owner } : {}),
       }
     })
+
+    // Nobody on it: no claim, or a claim past its lease — the same test the
+    // stale-claim list uses, so a claim with no heartbeat yet is still live.
+    // The caller's own claims are its held list, and in-flight rows are
+    // already on screen; saying either twice spends the budget on repetition.
+    const leaseCutoff = Date.now() - LEASE_MINUTES * 60_000
+    const shown = new Set([...inFlight.map((t) => t.ref), ...held.map((t) => t.ref)])
+    const idle = ((owned.data ?? []) as unknown as OwnedRow[])
+      .filter((row) =>
+        !row.claimed_by ||
+        (row.claimed_by !== actor.actorId &&
+          Boolean(row.heartbeat_at) &&
+          Date.parse(row.heartbeat_at ?? '') < leaseCutoff))
+      .filter((row) => !shown.has(refOf(row)))
+      // Stable, so recency (the query's order) breaks a priority tie.
+      .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority))
+    unattended = {
+      tasks: idle.slice(0, UNATTENDED_SHOWN).map((row) => ({
+        ref: refOf(row),
+        title: row.title,
+        status: row.status,
+        priority: row.priority,
+      })),
+      more: Math.max(0, idle.length - UNATTENDED_SHOWN),
+    }
   }
 
   // --- where the last session here stopped ------------------------------
@@ -305,6 +393,7 @@ export const buildContext = async (
     ...(asked?.renamed ? { projectRenamed: asked.renamed } : {}),
     held,
     inFlight,
+    unattended,
     lastSession,
     knowledge,
     staleClaims,

@@ -7,6 +7,7 @@ import { TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 import { admin } from '@/lib/db/client'
 import { stalenessFor } from '@/lib/api/staleness'
 import { liveProjectKey } from '@/lib/api/project-keys'
+import { resolveAssignee } from '@/lib/api/people'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,8 @@ const searchQuery = z.object({
     .optional()
     .transform((v) => (v ? v.split(',').map((k) => k.trim()).filter(Boolean) : undefined)),
   tasksOnly: z.coerce.boolean().default(false),
+  /** Whose tasks: `me` (the human behind the key), an email, a name or an id. */
+  assignee: z.string().trim().min(1).max(320).optional(),
 })
 
 /**
@@ -60,13 +63,21 @@ export const GET = route({
     const { key: project, renamed } = await liveProjectKey(parsed.data.project)
     const told = renamed ? { renamed_from: renamed } : {}
 
-    // A type or status filter is a statement about tasks, so it selects the
-    // task-only path rather than being silently ignored on the others.
-    const taskPath = tasksOnly || Boolean(type) || Boolean(status) || kinds?.join() === 'task'
+    // Resolved rather than matched, and a name nobody has is refused: "nothing
+    // found — this subject looks new" is the wrong answer to a typo.
+    const owner = parsed.data.assignee ? await resolveAssignee(parsed.data.assignee, actor.userId) : null
+    if (owner && !owner.ok) return fail(owner.code, owner.error)
+    const assignee = owner?.ok ? owner.person.id : undefined
+
+    // A type, status or assignee filter is a statement about tasks, so it
+    // selects the task-only path rather than being silently ignored on the
+    // others.
+    const taskPath =
+      tasksOnly || Boolean(type) || Boolean(status) || Boolean(assignee) || kinds?.join() === 'task'
 
     try {
       if (taskPath) {
-        const { rows, widened } = await searchTasks(actor.userId, q, { project, type, status }, limit)
+        const { rows, widened } = await searchTasks(actor.userId, q, { project, type, status, assignee }, limit)
         const results = rows.map(taskResult)
         await recordSearch(actor, q, ['task'], rows.length, widened, results.map((r) => r.ref))
         return ok({ count: rows.length, query: q, widened, results, ...told })

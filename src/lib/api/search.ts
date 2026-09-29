@@ -234,7 +234,41 @@ const asSearchAllRow = (task: ExactTask): SearchAllRow => ({
   ...(task.renamed_from ? { requested_ref: task.requested_ref, renamed_from: task.renamed_from } : {}),
 })
 
+/**
+ * How many ranked rows an assignee filter chooses from. `search_tasks` applies
+ * its limit inside the ranking, so narrowing its answer afterwards would return
+ * two of someone's tasks out of twenty hits rather than twenty of theirs. A
+ * larger pool keeps the order — the precise head is capped by p_min_precise,
+ * not p_limit, so the first rows are the same rows — and the filter stays
+ * here rather than in a fourth rewrite of the function's text (CAIRN-310).
+ */
+const ASSIGNEE_POOL = 200
+
+/**
+ * Only the tasks one person is assigned. The filter a caller sets is a
+ * statement about what they want back, exact addresses included.
+ */
 export const searchTasks = async (
+  userId: string,
+  q: string,
+  { assignee, ...filters }: { project?: string; type?: string; status?: string; assignee?: string },
+  limit: number,
+): Promise<{ rows: SearchRow[]; widened: boolean }> => {
+  if (!assignee) return rankTasks(userId, q, filters, limit)
+
+  const { rows } = await rankTasks(userId, q, filters, Math.max(limit, ASSIGNEE_POOL))
+  if (rows.length === 0) return { rows, widened: false }
+  const { data } = await admin()
+    .from('tasks')
+    .select('id')
+    .in('id', rows.map((row) => row.id))
+    .eq('assignee_user_id', assignee)
+  const theirs = new Set(((data ?? []) as { id: string }[]).map((task) => task.id))
+  const kept = rows.filter((row) => theirs.has(row.id)).slice(0, limit)
+  return { rows: kept, widened: kept.some((row) => row.widened) }
+}
+
+const rankTasks = async (
   userId: string,
   q: string,
   filters: { project?: string; type?: string; status?: string },
