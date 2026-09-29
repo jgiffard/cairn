@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { currentUser } from '@/lib/data'
-import { findConnectRequestByUserCode, normalizeUserCode } from '@/lib/api/connect'
+import { headers } from 'next/headers'
+import { clientAddress } from '@/lib/api/client-address'
+import { findConnectRequestByUserCode, normalizeUserCode, PRIVILEGED_RUNTIMES } from '@/lib/api/connect'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { ConnectApproval, type ConnectView } from './connect-approval'
 import { loginRedirectTarget } from '@/lib/auth/login-redirect-server'
@@ -47,7 +49,13 @@ const ConnectPage = async ({ params }: { params: Promise<{ code: string }> }) =>
                   runtimes: request.runtimes,
                   cliVersion: request.cli_version,
                   clientAddress: request.client_address,
+                  // Device-code phishing (RFC 8628 §5.4) is someone else's
+                  // pairing link approved by you, so say when it did not come
+                  // from where you are.
+                  sameAddress: request.client_address === clientAddress(await headers()),
                   expiresAt: request.expires_at,
+                  privileged: request.runtimes.filter((runtime) => PRIVILEGED_RUNTIMES.has(runtime)),
+                  isAdmin: user.role === 'admin',
                 }
 
   return (

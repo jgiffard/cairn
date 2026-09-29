@@ -67,7 +67,7 @@ describe('device pairing', () => {
   it('goes create → approve → poll once for the keys → poll again for expired', async () => {
     const created = await start('pairing-test-full', ['claude-code', 'codex'])
 
-    await approveConnectRequest(created.userCode, { runtimes: ['claude-code'], approvedBy: ownerId })
+    await approveConnectRequest(created.userCode, { runtimes: ['claude-code'], approvedBy: ownerId, approverRole: 'member' })
 
     const first = await pollConnectRequest(created.deviceCode)
     expect(first.status).toBe('approved')
@@ -98,7 +98,7 @@ describe('device pairing', () => {
     await denyConnectRequest(created.userCode)
 
     await expect(
-      approveConnectRequest(created.userCode, { runtimes: ['claude-code'], approvedBy: ownerId }),
+      approveConnectRequest(created.userCode, { runtimes: ['claude-code'], approvedBy: ownerId, approverRole: 'member' }),
     ).rejects.toMatchObject({ code: 'not_pending' } satisfies Partial<ConnectError>)
 
     expect(await pollConnectRequest(created.deviceCode)).toEqual({ status: 'denied' })
@@ -112,20 +112,44 @@ describe('device pairing', () => {
 
     expect(await pollConnectRequest(created.deviceCode)).toEqual({ status: 'expired' })
     await expect(
-      approveConnectRequest(created.userCode, { runtimes: ['claude-code'], approvedBy: ownerId }),
+      approveConnectRequest(created.userCode, { runtimes: ['claude-code'], approvedBy: ownerId, approverRole: 'member' }),
     ).rejects.toMatchObject({ code: 'not_pending' })
+  })
+
+  it('keeps maintenance keys for administrators, and re-checks the role when minting', async () => {
+    const asMember = await start('pairing-test-maint-member', ['maintenance'])
+    await expect(
+      approveConnectRequest(asMember.userCode, { runtimes: ['maintenance'], approvedBy: ownerId, approverRole: 'member' }),
+    ).rejects.toMatchObject({ code: 'forbidden_runtime' })
+
+    // Approved while the role claimed admin, but the database says member by
+    // the time the keys are minted: nothing is minted.
+    const demoted = await start('pairing-test-maint-demoted', ['maintenance'])
+    await approveConnectRequest(demoted.userCode, { runtimes: ['maintenance'], approvedBy: ownerId, approverRole: 'admin' })
+    await expect(pollConnectRequest(demoted.deviceCode)).resolves.toEqual({ status: 'expired' })
+
+    await pool().query(`update app_users set role = 'admin' where id = $1`, [ownerId])
+    try {
+      const asAdmin = await start('pairing-test-maint-admin', ['maintenance'])
+      await approveConnectRequest(asAdmin.userCode, { runtimes: ['maintenance'], approvedBy: ownerId, approverRole: 'admin' })
+      const polled = await pollConnectRequest(asAdmin.deviceCode)
+      expect(polled.status).toBe('approved')
+      if (polled.status === 'approved') expect(polled.keys.map((k) => k.agentName)).toEqual(['maintenance'])
+    } finally {
+      await pool().query(`update app_users set role = 'member' where id = $1`, [ownerId])
+    }
   })
 
   it('refuses to approve runtimes outside what was requested', async () => {
     const created = await start('pairing-test-scope', ['claude-code'])
     await expect(
-      approveConnectRequest(created.userCode, { runtimes: ['codex'], approvedBy: ownerId }),
+      approveConnectRequest(created.userCode, { runtimes: ['codex'], approvedBy: ownerId, approverRole: 'member' }),
     ).rejects.toMatchObject({ code: 'invalid_runtimes' })
   })
 
   it('mints keys only for the approving user, never the requester of some other pairing', async () => {
     const created = await start('pairing-test-owner')
-    await approveConnectRequest(created.userCode, { runtimes: ['claude-code'], approvedBy: otherOwnerId })
+    await approveConnectRequest(created.userCode, { runtimes: ['claude-code'], approvedBy: otherOwnerId, approverRole: 'member' })
     const result = await pollConnectRequest(created.deviceCode)
     expect(result.status).toBe('approved')
     if (result.status !== 'approved') throw new Error('unreachable')

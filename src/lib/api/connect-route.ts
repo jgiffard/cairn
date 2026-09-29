@@ -16,6 +16,7 @@ export const connectFailure = (error: unknown): Response => {
   if (error instanceof ConnectError) {
     if (error.code === 'not_found') return fail('not_found', error.message)
     if (error.code === 'invalid_runtimes') return fail('validation_failed', error.message)
+    if (error.code === 'forbidden_runtime') return fail('forbidden', error.message)
     return fail('conflict', error.message)
   }
   throw error

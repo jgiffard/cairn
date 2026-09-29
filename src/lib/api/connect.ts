@@ -21,9 +21,19 @@ const USER_CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ23456789'
 
 export const RUNTIME_PATTERN = /^[a-z][a-z0-9-]{1,40}$/
 
+/**
+ * Runtimes whose key is a grant, not just an identity. A `maintenance` key
+ * releases any agent's claim across the workspace (reconcile.ts treats the
+ * name itself as the permission, because only an administrator could mint
+ * one). Pairing lets anyone mint keys for themself, so these stay
+ * administrator-only here too — checked on approval and again at minting,
+ * since a role can change in between.
+ */
+export const PRIVILEGED_RUNTIMES: ReadonlySet<string> = new Set(['maintenance'])
+
 export class ConnectError extends Error {
   constructor(
-    readonly code: 'not_found' | 'not_pending' | 'invalid_runtimes',
+    readonly code: 'not_found' | 'not_pending' | 'invalid_runtimes' | 'forbidden_runtime',
     message: string,
   ) {
     super(message)
@@ -48,7 +58,7 @@ export const normalizeUserCode = (input: string): string => {
   return stripped.length === 8 ? `${stripped.slice(0, 4)}-${stripped.slice(4)}` : stripped
 }
 
-type ConnectRequestRow = {
+export type ConnectRequestRow = {
   id: string
   device_code_hash: string
   user_code: string
@@ -61,6 +71,10 @@ type ConnectRequestRow = {
   approved_runtimes: string[] | null
   expires_at: string
   created_at: string
+}
+
+/** A row as the approval page reads it: with the expiry decided by Postgres. */
+export type ConnectRequestView = ConnectRequestRow & {
   /**
    * Whether `expires_at` has passed, decided in SQL against Postgres's clock
    * rather than the app server's. A `pending` or `approved` row only turns
@@ -83,10 +97,15 @@ export const createConnectRequest = async (input: {
   baseUrl: string
 }) => {
   // Best-effort housekeeping, on the write path rather than a cron this
-  // deployment does not have: rows more than a day past expiry are done
-  // meaning anything, and the small user-code alphabet is worth reclaiming.
+  // deployment does not have. A request that never minted anything is done
+  // meaning anything a day after it expires. One that did is the record of who
+  // approved which host from where, so it stays for a quarter.
   await pool()
-    .query(`delete from connect_requests where expires_at < now() - interval '1 day'`)
+    .query(
+      `delete from connect_requests
+        where (status <> 'consumed' and expires_at < now() - interval '1 day')
+           or expires_at < now() - interval '90 days'`,
+    )
     .catch(() => undefined)
 
   const expiresAt = new Date(Date.now() + EXPIRES_IN_SECONDS * 1000)
@@ -122,14 +141,18 @@ export const createConnectRequest = async (input: {
 }
 
 /** For the approval page: read-only, never mints anything, never consumes. */
-export const findConnectRequestByUserCode = async (userCode: string): Promise<ConnectRequestRow | null> => {
+export const findConnectRequestByUserCode = async (userCode: string): Promise<ConnectRequestView | null> => {
   const normalized = normalizeUserCode(userCode)
   if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(normalized)) return null
-  const { rows } = await pool().query<ConnectRequestRow>(
+  // Only live rows hold a code uniquely; a finished one keeps its code, so the
+  // live row wins and the newest after it.
+  const { rows } = await pool().query<ConnectRequestView>(
     `select id, device_code_hash, user_code, host, runtimes, cli_version, client_address,
             status, approved_by, approved_runtimes, expires_at, created_at,
             expires_at <= now() as timed_out
-       from connect_requests where user_code = $1`,
+       from connect_requests where user_code = $1
+      order by (status in ('pending', 'approved')) desc, created_at desc
+      limit 1`,
     [normalized],
   )
   return rows[0] ?? null
@@ -143,7 +166,7 @@ export const findConnectRequestByUserCode = async (userCode: string): Promise<Co
  */
 export const approveConnectRequest = async (
   userCode: string,
-  { runtimes, approvedBy }: { runtimes: string[]; approvedBy: string },
+  { runtimes, approvedBy, approverRole }: { runtimes: string[]; approvedBy: string; approverRole: string },
 ): Promise<void> => {
   const normalized = normalizeUserCode(userCode)
   const request = await findConnectRequestByUserCode(normalized)
@@ -153,6 +176,13 @@ export const approveConnectRequest = async (
   const approved = [...new Set(runtimes)]
   if (approved.length === 0 || approved.some((runtime) => !requested.has(runtime))) {
     throw new ConnectError('invalid_runtimes', 'Choose one or more of the runtimes that were requested.')
+  }
+  const privileged = approved.filter((runtime) => PRIVILEGED_RUNTIMES.has(runtime))
+  if (privileged.length > 0 && approverRole !== 'admin') {
+    throw new ConnectError(
+      'forbidden_runtime',
+      `Only an administrator can approve a ${privileged.join(', ')} key: it acts on everyone's work, not just yours.`,
+    )
   }
 
   const result = await pool().query(
@@ -195,6 +225,10 @@ const lastPolledAt = new Map<string, number>()
 
 const tooSoon = (deviceCodeHash: string): boolean => {
   const now = Date.now()
+  // A code lives ten minutes; anything older is a code nobody will poll again.
+  if (lastPolledAt.size >= 1_000) {
+    for (const [hash, at] of lastPolledAt) if (now - at > 15 * 60_000) lastPolledAt.delete(hash)
+  }
   const last = lastPolledAt.get(deviceCodeHash)
   lastPolledAt.set(deviceCodeHash, now)
   return last !== undefined && now - last < POLL_INTERVAL_SECONDS * 1000
@@ -209,36 +243,38 @@ const tooSoon = (deviceCodeHash: string): boolean => {
  */
 export const pollConnectRequest = async (deviceCode: string): Promise<PollResult> => {
   const deviceCodeHash = hashDeviceCode(deviceCode)
-  const slowDown = tooSoon(deviceCodeHash)
 
-  return transaction(async (client) => {
-    const { rows } = await client.query<ConnectRequestRow>(
-      `select id, device_code_hash, user_code, host, runtimes, cli_version, client_address,
-              status, approved_by, approved_runtimes, expires_at, created_at
-         from connect_requests where device_code_hash = $1`,
-      [deviceCodeHash],
+  // A plain read, no transaction: nearly every poll is `pending`, and a poll
+  // is unauthenticated, so it must not hold a pooled transaction open to say so.
+  const { rows } = await pool().query<ConnectRequestRow>(
+    `select id, device_code_hash, user_code, host, runtimes, cli_version, client_address,
+            status, approved_by, approved_runtimes, expires_at, created_at
+       from connect_requests where device_code_hash = $1`,
+    [deviceCodeHash],
+  )
+  const row = rows[0]
+  // Unknown code doesn't leak existence, and neither does a hash that
+  // merely looks right: the index lookup above is exact, so this is a
+  // constant-time confirmation of that match, not the primary guard.
+  if (!row || !hashesMatch(row.device_code_hash, deviceCodeHash)) return { status: 'expired' }
+
+  if (row.status === 'denied') return { status: 'denied' }
+  if (row.status === 'consumed' || row.status === 'expired') return { status: 'expired' }
+
+  if (!notExpired(row)) {
+    await pool().query(
+      `update connect_requests set status = 'expired' where id = $1 and status in ('pending', 'approved')`,
+      [row.id],
     )
-    const row = rows[0]
-    // Unknown code doesn't leak existence, and neither does a hash that
-    // merely looks right: the index lookup above is exact, so this is a
-    // constant-time confirmation of that match, not the primary guard.
-    if (!row || !hashesMatch(row.device_code_hash, deviceCodeHash)) return { status: 'expired' }
+    return { status: 'expired' }
+  }
 
-    if (row.status === 'denied') return { status: 'denied' }
-    if (row.status === 'consumed' || row.status === 'expired') return { status: 'expired' }
+  if (row.status === 'pending') {
+    // Recorded only for codes that exist, so random guesses leave nothing behind.
+    return tooSoon(deviceCodeHash) ? { status: 'pending', slowDown: true } : { status: 'pending' }
+  }
 
-    if (!notExpired(row)) {
-      await client.query(
-        `update connect_requests set status = 'expired' where id = $1 and status in ('pending', 'approved')`,
-        [row.id],
-      )
-      return { status: 'expired' }
-    }
-
-    if (row.status === 'pending') return slowDown ? { status: 'pending', slowDown } : { status: 'pending' }
-
-    return mintApprovedKeys(client, row)
-  })
+  return transaction((client) => mintApprovedKeys(client, row))
 }
 
 const mintApprovedKeys = async (client: PoolClient, row: ConnectRequestRow): Promise<PollResult> => {
@@ -247,16 +283,17 @@ const mintApprovedKeys = async (client: PoolClient, row: ConnectRequestRow): Pro
   // between approving and this poll (deactivated, deleted) has to be a
   // decision this makes deliberately, not a failure discovered mid-mint with
   // the row already marked redeemed and some keys already committed.
-  const { rows: userRows } = await client.query<{ id: string; email: string; name: string }>(
-    `select u.id, u.email, coalesce(nullif(trim(p.display_name), ''), u.email) as name
+  const { rows: userRows } = await client.query<{ id: string; email: string; name: string; role: string }>(
+    `select u.id, u.email, coalesce(nullif(trim(p.display_name), ''), u.email) as name, u.role
        from app_users u
        left join user_profiles p on p.id = u.id
       where u.id = $1 and u.deleted_at is null
         and coalesce(u.banned_until, '-infinity'::timestamptz) <= now()`,
     [row.approved_by],
   )
-  const user = userRows[0]
-  if (!user) {
+  const approver = userRows[0]
+  const privileged = (row.approved_runtimes ?? []).some((runtime) => PRIVILEGED_RUNTIMES.has(runtime))
+  if (!approver || (privileged && approver.role !== 'admin')) {
     await client.query(`update connect_requests set status = 'expired' where id = $1 and status = 'approved'`, [row.id])
     return { status: 'expired' }
   }
@@ -276,6 +313,7 @@ const mintApprovedKeys = async (client: PoolClient, row: ConnectRequestRow): Pro
   // and can be retried beats one left 'consumed' with some keys minted and
   // none of them ever handed to the caller.
   const keys: { agentName: string; key: string }[] = []
+  const user = { id: approver.id, email: approver.email, name: approver.name }
   for (const runtime of claim.approved_runtimes) {
     const created = await createUserKey(user.id, { agentName: runtime, name: `${runtime} on ${claim.host}` }, client)
     keys.push({ agentName: runtime, key: created.key })

@@ -20,7 +20,7 @@ export const POST = route<{ code: string }, z.infer<typeof approveSchema>>({
     const denied = requireHumanActor(actor)
     if (denied) return denied
     try {
-      await approveConnectRequest(params.code, { runtimes: body.runtimes, approvedBy: actor.userId })
+      await approveConnectRequest(params.code, { runtimes: body.runtimes, approvedBy: actor.userId, approverRole: actor.role })
       return ok({ approved: true })
     } catch (error) {
       return connectFailure(error)

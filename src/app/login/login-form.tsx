@@ -7,14 +7,9 @@ import { Button, Input } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
 import { BrandMark, useBrand } from '@/components/brand'
 import { CairnIllustration } from './cairn-illustration'
+// `?redirect=` comes from the URL bar, so it is attacker-controlled; this
+// honours a same-site path only.
 import { safeRedirect } from '@/lib/auth/login-redirect'
-
-/**
- * `?redirect=` comes from the URL bar, so it is attacker-controlled. Only a
- * same-site path is honoured — `//host` and `https://host` are absolute
- * despite the leading slash, and would turn the login page into an open
- * redirect.
- */
 
 /** The four things the memory holds, for someone signing in for the first time. */
 const PILLARS = [

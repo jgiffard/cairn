@@ -629,27 +629,38 @@ work happens in `cairn setup` itself, so re-running either one is the upgrade
 path — keys are kept, files are replaced only where they differ.
 
 ```
-$ cairn setup --url https://cairn.app.dispofi.fr
-  Open this link to connect this machine:
-    https://cairn.app.dispofi.fr/connect/K7QX-M2RD
-  waiting for approval… ✓ approved by Julien
-  keys   claude-code, codex  → ~/.cairn/instances/dispofi/env
-  cli    ~/.local/bin/cairn (0.11.0)
-  skill  ~/.claude/skills/cairn, ~/.codex/skills/cairn
-  hooks  Claude Code (SessionStart, SessionEnd, PreCompact), Codex (SessionStart, Stop)
-  job    agent-files every 15 min (launchd)
-  ✓ cairn 0.11.0 ↔ server 0.11.0 — restart your agent sessions to load the hooks
+$ cairn setup --url https://cairn.app.dispofi.fr --name dispofi
+✓ instance  dispofi -> https://cairn.app.dispofi.fr
+✓ server    https://cairn.app.dispofi.fr (0.11.0)
+Open this link to connect this machine:
+  https://cairn.app.dispofi.fr/connect/K7QX-M2RD (code K7QX-M2RD)
+waiting for approval… ✓ approved by Julien
+✓ keys      claude-code, codex -> ~/.cairn/instances/dispofi/env
+✓ release   v0.11.0 -> ~/.cairn/releases/0.11.0
+✓ cli       ~/.local/bin/cairn (0.11.0)
+✓ skill     ~/.claude/skills/cairn, ~/.codex/skills/cairn
+✓ hooks     installed:
+     claude: SessionStart, SessionEnd, PreCompact
+     codex: SessionStart, Stop
+     …
+✓ jobs      agent-files:
+     …
+✓ cairn 0.11.0 ↔ server 0.11.0 — restart your agent sessions to load the hooks
 ```
+
+The approval page shows the host as the device reported it, where the request came from and
+who the keys will belong to. Approve a link only if you just ran `cairn setup` yourself: the
+keys are yours, so a link someone sends you would hand them your agents.
+
 
 | Flag | |
 |---|---|
 | `--url <instance>` | required the first time; otherwise the configured default |
 | `--name <instance-name>` | this machine will have more than one instance (default: derived from the url) |
-| `--runtimes a,b` | which agent runtimes to pair and install for (default: detected — `~/.claude`, `~/.codex`, `openclaw` on PATH or `~/.openclaw`) |
+| `--runtimes a,b` | which agent runtimes to pair and install for (default: detected — `~/.claude`, `~/.codex`, and OpenClaw where this account runs its gateway) |
 | `--no-skill` / `--no-hooks` / `--no-jobs` | skip that step |
-| `--maintenance` | also install `reconcile` and `vitals` (pairs a `maintenance` key too) |
+| `--maintenance` | also install `reconcile` and `vitals`, and pair a `maintenance` key for them — separately, because only an administrator can approve one: it releases anyone's claims |
 | `--dry-run` | print the plan, change nothing |
-| `--yes` | no prompts (implied when not run at a terminal) |
 
 Where a server predates pairing (`/api/v1/connect` answers 404), `cairn setup`
 says so and prints where to get a key by hand instead of stopping dead — see

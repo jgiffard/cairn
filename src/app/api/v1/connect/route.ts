@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { addressLimiter } from '@/lib/api/address-limiter'
 import { clientAddress } from '@/lib/api/client-address'
 import { createConnectRequest, RUNTIME_PATTERN } from '@/lib/api/connect'
 import { servedOrigin } from '@/lib/api/handler'
@@ -7,7 +8,10 @@ import { fail, failValidation, ok } from '@/lib/api/response'
 export const dynamic = 'force-dynamic'
 
 const bodySchema = z.object({
-  host: z.string().trim().min(1).max(100),
+  // A hostname, as `hostOf` in auth.ts accepts one. The approval card shows it
+  // and the key's name carries it, so it may not smuggle in bidi overrides,
+  // newlines or a name dressed up to look like someone else's machine.
+  host: z.string().trim().regex(/^[A-Za-z0-9._-]{1,100}$/),
   runtimes: z.array(z.string().regex(RUNTIME_PATTERN)).min(1).max(6),
   cliVersion: z.string().trim().min(1).max(100).optional(),
 })
@@ -18,29 +22,15 @@ const bodySchema = z.object({
  * bypasses it — the same way /api/auth/login and /api/v1/health do — and is
  * the one endpoint in this file whose job is to be reachable without one.
  */
-const WINDOW_MS = 10 * 60_000
-const MAX_PER_ADDRESS = 10
-const attempts = new Map<string, { count: number; resetAt: number }>()
-
-const rateLimited = (address: string, now: number): boolean => {
-  const current = attempts.get(address)
-  return Boolean(current && current.resetAt > now && current.count >= MAX_PER_ADDRESS)
-}
-
-const recordAttempt = (address: string, now: number) => {
-  const current = attempts.get(address)
-  attempts.set(address, { count: current && current.resetAt > now ? current.count + 1 : 1, resetAt: now + WINDOW_MS })
-}
+const limiter = addressLimiter({ windowMs: 10 * 60_000, max: 10 })
 
 export const POST = async (req: Request): Promise<Response> => {
   const address = clientAddress(req.headers)
-  const now = Date.now()
-  if (rateLimited(address, now)) {
+  if (limiter.hit(address)) {
     return fail('rate_limited', 'Too many pairing requests from this address. Try again later.', {
-      retryAfter: Math.ceil(WINDOW_MS / 1000),
+      retryAfter: limiter.retryAfterSeconds,
     })
   }
-  recordAttempt(address, now)
 
   const raw = await req.json().catch(() => ({}))
   const parsed = bodySchema.safeParse(raw)

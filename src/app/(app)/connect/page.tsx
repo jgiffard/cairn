@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { currentUser } from '@/lib/data'
+import { loginRedirectTarget } from '@/lib/auth/login-redirect-server'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { ConnectCodeForm } from './connect-code-form'
 
@@ -11,7 +12,7 @@ export const metadata: Metadata = { title: 'Connect a device' }
 /** The index a person lands on if they typed `/connect` rather than following a link with the code already in it. */
 const ConnectIndexPage = async () => {
   const user = await currentUser()
-  if (!user) redirect('/login')
+  if (!user) redirect(await loginRedirectTarget())
 
   return (
     <div className="flex h-dvh flex-col">

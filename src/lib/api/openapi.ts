@@ -1317,7 +1317,11 @@ export const openapiSpec = () => ({
         requestBody: body({
           type: 'object',
           properties: {
-            host: { type: 'string', minLength: 1, maxLength: 100 },
+            host: {
+              type: 'string',
+              pattern: '^[A-Za-z0-9._-]{1,100}$',
+              description: 'The machine\'s hostname. Shown on the approval card as reported, and in each key\'s name.',
+            },
             runtimes: {
               type: 'array',
               minItems: 1,
@@ -1355,7 +1359,7 @@ export const openapiSpec = () => ({
         security: [],
         requestBody: body({
           type: 'object',
-          properties: { deviceCode: { type: 'string', minLength: 1, maxLength: 200 } },
+          properties: { deviceCode: { type: 'string', pattern: '^[A-Za-z0-9_-]{43}$' } },
           required: ['deviceCode'],
         }),
         responses: {
@@ -1364,7 +1368,16 @@ export const openapiSpec = () => ({
             properties: {
               status: { type: 'string', enum: ['pending', 'denied', 'expired', 'approved'] },
               slowDown: { type: 'boolean', description: 'Polled faster than `interval`. Only ever true alongside `pending`.' },
-              user: { ...person, description: 'Present only when `status` is `approved`: the keys\' new owner.' },
+              user: {
+                type: 'object',
+                description: 'Present only when `status` is `approved`: the keys\' new owner.',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  email: { type: 'string', format: 'email' },
+                  name: { type: 'string' },
+                },
+                required: ['id', 'email', 'name'],
+              },
               keys: {
                 type: 'array',
                 description: 'Present only when `status` is `approved`. Shown once; never recoverable after this response.',
@@ -1388,7 +1401,9 @@ export const openapiSpec = () => ({
         description:
           'Mints nothing by itself — keys are minted the moment the CLI\'s next poll redeems the ' +
           'approval, for the approving user only. `runtimes` must be a non-empty subset of what was ' +
-          'requested. An agent API key gets 403: this has to be a person, at a keyboard, in a browser.',
+          'requested. An agent API key gets 403: this has to be a person, at a keyboard, in a browser. ' +
+          'So does a member approving `maintenance`: that key releases anyone\'s claims, so only an ' +
+          'administrator can approve it, and the role is checked again when the key is minted.',
         requestBody: body({
           type: 'object',
           properties: {

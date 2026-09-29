@@ -42,6 +42,7 @@ describe('POST /api/v1/connect/{code}/approve', () => {
     expect(mocks.approveConnectRequest).toHaveBeenCalledWith('BCDF-2345', {
       runtimes: ['claude-code'],
       approvedBy: 'user-1',
+      approverRole: 'member',
     })
   })
 

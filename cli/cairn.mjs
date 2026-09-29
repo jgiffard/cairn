@@ -17,6 +17,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import {
   appendFileSync,
   closeSync,
+  chmodSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -2446,10 +2447,9 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    one instance; names the new one
     cairn setup --runtimes claude-code,codex,openclaw   default: detected
     cairn setup --no-skill | --no-hooks | --no-jobs     skip one step
-    cairn setup --maintenance      also install reconcile + vitals
-                                   (needs a maintenance key: paired too)
+    cairn setup --maintenance      also install reconcile + vitals; their key
+                                   is paired on its own and needs an admin
     cairn setup --dry-run          print the plan, change nothing
-    cairn setup --yes              no prompts (implied off a TTY)
 
   output
     --json | --pretty              default is TSV: count line, header, rows
@@ -2574,6 +2574,9 @@ const addInstance = async ({ name, url, makeDefault = false, adopt = false, uncl
     }
     // Under the queue's own lock, so a write being queued right now lands
     // either before the move or in the next process's instance directory.
+    // Appended rather than renamed onto a file already there: an adoption
+    // interrupted halfway is finished by running it again, and a rename
+    // would replace the queued writes it had already moved.
     await withOutboxLock(() => {
       for (const file of readdirSync(CAIRN_DIR)) {
         if (file !== 'outbox.jsonl' && !file.startsWith(OUTBOX_PREFIX)) continue
@@ -2636,11 +2639,26 @@ const detectSetupRuntimes = () => {
   const found = []
   if (existsSync(SETUP_RUNTIME_DIRS['claude-code'])) found.push('claude-code')
   if (existsSync(SETUP_RUNTIME_DIRS.codex)) found.push('codex')
-  // The gateway's config, not the binary: `openclaw` on PATH says it is
-  // installed, not that this account runs it — and a key minted for an
-  // OpenClaw nobody runs here is a live credential with no reader.
-  if (existsSync(join(HOME, '.openclaw', 'openclaw.json'))) found.push('openclaw')
+  // A gateway, not the binary and not any config: `openclaw` on PATH says it
+  // is installed, and a client config (only `gateway.auth`, to reach someone
+  // else's gateway) says this account does not run one. Either way the hook is
+  // never installed here, and a key minted for it is a live credential with no
+  // reader. The same test as `openclawRunsGateway` in scripts/install-hooks.mjs.
+  if (openclawRunsGateway()) found.push('openclaw')
   return found
+}
+
+const openclawRunsGateway = () => {
+  const path = process.env.OPENCLAW_CONFIG_PATH?.trim() || join(HOME, '.openclaw', 'openclaw.json')
+  if (!existsSync(path)) return false
+  let config
+  try {
+    config = JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return true // JSON5 this cannot parse: the benefit of the doubt, as the hook installer gives it
+  }
+  const gateway = config?.gateway ?? {}
+  return Boolean(gateway.mode || gateway.port || config?.agents || config?.channels)
 }
 
 /** Rewrite or append `KEY=value` lines in an env file, leaving everything else untouched. */
@@ -2662,6 +2680,19 @@ const setEnvKeys = (path, updates) => {
     if (!written.has(key)) rewritten.push(`${key}=${value}`)
   }
   writeFileSync(path, `${rewritten.join('\n')}\n`, { mode: 0o600 })
+  // `mode` only applies when a file is created: an env file that already
+  // existed with looser permissions would keep them, keys and all.
+  chmodSync(path, 0o600)
+  chmodSync(dirname(path), 0o700)
+}
+
+const sameWebOrigin = (candidate, baseUrl) => {
+  try {
+    const url = new URL(candidate)
+    return ['http:', 'https:'].includes(url.protocol) && url.origin === new URL(baseUrl).origin
+  } catch {
+    return false
+  }
 }
 
 /** `open` on macOS, `xdg-open` on Linux. Best effort: a failure never blocks pairing. */
@@ -2684,7 +2715,13 @@ const pairDevice = async ({ baseUrl, runtimes, write }) => {
     connectRes = await fetch(`${baseUrl}/api/v1/connect`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ host: hostname(), runtimes, cliVersion: VERSION }),
+      // The server takes a hostname's characters and no others: it goes on the
+      // approval card and into every key's name.
+      body: JSON.stringify({
+        host: hostname().replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 100) || 'unknown-host',
+        runtimes,
+        cliVersion: VERSION,
+      }),
     })
   } catch (error) {
     throw new Error(`cannot reach ${baseUrl}: ${error.message}`)
@@ -2698,7 +2735,9 @@ const pairDevice = async ({ baseUrl, runtimes, write }) => {
   write(`Open this link to connect this machine:\n  ${verificationUrl}${userCode ? ` (code ${userCode})` : ''}\n`)
   // Best effort, and only where there is plausibly someone at a screen to
   // hand a tab to — a scheduled or piped run gets the printed link instead.
-  if (process.stderr.isTTY) openBrowser(verificationUrl)
+  // Only a web page on the instance itself: `open` runs whatever it is given,
+  // and a server (or anyone between it and an http:// --url) chooses this.
+  if (process.stderr.isTTY && sameWebOrigin(verificationUrl, baseUrl)) openBrowser(verificationUrl)
   write('waiting for approval… ')
   const deadline = Date.now() + expiresIn * 1000
   let wait = interval
@@ -4337,17 +4376,34 @@ const commands = {
     if (missingRuntimes.length && dry) {
       line(`! keys      ${missingRuntimes.join(', ')} would be paired (--dry-run: skipped)`)
     } else if (missingRuntimes.length) {
-      const result = await pairDevice({ baseUrl: url, runtimes: missingRuntimes, write: say })
-      if (result.fallback) {
-        line('! this server predates pairing (404 on /api/v1/connect).')
-        line(`   ask an admin for keys on ${url}/users and put them in ${tilde(envPath)} as:`)
-        for (const runtime of missingRuntimes) line(`     ${keyNameFor(runtime)}=…`)
-      } else if (result.denied) {
-        die('cairn setup: pairing was denied')
-      } else if (result.expired) {
-        die('cairn setup: pairing expired before it was approved; run `cairn setup` again')
-      } else {
-        issuedKeys = result.keys ?? []
+      // A maintenance key needs an administrator's approval (it releases anyone's
+      // claims), so it is asked for on its own: a member approving their own
+      // agents must not have that request fail for the sake of one they cannot
+      // grant.
+      const privileged = missingRuntimes.filter((runtime) => runtime === 'maintenance')
+      const ordinary = missingRuntimes.filter((runtime) => runtime !== 'maintenance')
+      for (const group of [ordinary, privileged]) {
+        if (!group.length) continue
+        if (group === privileged) line('  the maintenance key needs an administrator to approve it')
+        let result
+        try {
+          result = await pairDevice({ baseUrl: url, runtimes: group, write: say })
+        } catch (error) {
+          die(`cairn setup: ${error.message}`)
+        }
+        if (result.fallback) {
+          line('! keys      this server predates pairing (404 on /api/v1/connect);')
+          line(`            ask an admin for keys on ${url}/users and put them in ${tilde(envPath)} as:`)
+          for (const runtime of missingRuntimes) line(`              ${keyNameFor(runtime)}=…`)
+          break
+        }
+        if (group === privileged && (result.denied || result.expired)) {
+          line('! keys      maintenance not issued — it takes an administrator\'s approval')
+          continue
+        }
+        if (result.denied) die('cairn setup: pairing was denied')
+        if (result.expired) die('cairn setup: pairing expired before it was approved; run `cairn setup` again')
+        issuedKeys = [...issuedKeys, ...(result.keys ?? [])]
       }
     }
     if (issuedKeys.length) {
@@ -4439,7 +4495,9 @@ const commands = {
         if (!skillSourceBuf && skillTargets.length) {
           line(`! skill     ${skillSource} not found in the release — skipped`)
         } else if (dry) {
-          for (const target of skillTargets) line(`! skill     would write ${tilde(target)}`)
+          const changed = skillTargets.filter((t) => !(existsSync(t) && readFileSync(t).equals(skillSourceBuf)))
+          if (changed.length) line(`! skill     would write ${changed.map((t) => tilde(dirname(t))).join(', ')}`)
+          else if (skillTargets.length) line(`– skill     ${skillTargets.map((t) => tilde(dirname(t))).join(', ')} — unchanged`)
         } else {
           const written = []
           for (const target of skillTargets) {
@@ -4458,7 +4516,7 @@ const commands = {
         line('– hooks     skipped (--no-hooks)')
       } else {
         const result = spawnSync(process.execPath, [join(releaseDir, 'scripts', 'install-hooks.mjs'), ...(dry ? ['--dry-run'] : [])], { encoding: 'utf8' })
-        line(`${dry ? '!' : '✓'} hooks`)
+        line(`${dry ? '!' : '✓'} hooks     ${dry ? 'would install:' : 'installed:'}`)
         for (const l of `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n')) if (l.trim()) line(`   ${l}`)
       }
 
@@ -4472,7 +4530,7 @@ const commands = {
           [join(releaseDir, 'scripts', 'install-cron.mjs'), ...(dry ? [] : ['--install']), '--only', jobs.join(',')],
           { encoding: 'utf8' },
         )
-        line(`${dry ? '!' : '✓'} jobs (${jobs.join(', ')})`)
+        line(`${dry ? '!' : '✓'} jobs      ${jobs.join(', ')}${dry ? ' (plan):' : ':'}`)
         for (const l of `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n')) if (l.trim()) line(`   ${l}`)
       }
     }

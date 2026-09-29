@@ -25,7 +25,7 @@ describe('POST /api/v1/connect/poll', () => {
 
   it('needs no authentication, and always answers 200 with success:true for a valid body', async () => {
     mocks.pollConnectRequest.mockResolvedValue({ status: 'pending' })
-    const response = await post({ deviceCode: 'device-secret' })
+    const response = await post({ deviceCode: 'A'.repeat(43) })
     expect(response.status).toBe(200)
     const body = await response.json()
     expect(body).toEqual({ success: true, data: { status: 'pending' } })
@@ -37,7 +37,7 @@ describe('POST /api/v1/connect/poll', () => {
       user: { id: 'user-1', email: 'cal@example.test', name: 'Cal' },
       keys: [{ agentName: 'claude-code', key: 'sk_live_x' }],
     })
-    const response = await post({ deviceCode: 'device-secret' })
+    const response = await post({ deviceCode: 'A'.repeat(43) })
     const body = await response.json()
     expect(body.data.keys).toEqual([{ agentName: 'claude-code', key: 'sk_live_x' }])
   })

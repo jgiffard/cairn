@@ -36,7 +36,16 @@ out under **Breaking** with what to do about it.
     that person's own agents, each named `<runtime> on <host>`.
   - Device codes are stored hashed and expire in ten minutes. Approval takes a signed-in human
     (an agent key gets 403) and every state change is one conditional `UPDATE`.
-  - Admins still manage everyone else's keys. Migration 068 adds `connect_requests`.
+  - Admins still manage everyone else's keys. A `maintenance` key releases anyone's claims, so
+    only an administrator can approve one, and the role is checked again at minting.
+    `cairn setup --maintenance` pairs it on its own, so a member's own keys never wait on it.
+  - Against device-code phishing, the approval card says to approve only a `cairn setup` you
+    just ran yourself, and flags a request from a different network address than yours. The
+    host is shown "as reported" and restricted to hostname characters.
+  - Both unauthenticated endpoints are rate-limited per address. A poll reads without a
+    transaction, and only a redemption opens one. Consumed requests are kept 90 days as the
+    record of who approved which host.
+  - Migration 068 adds `connect_requests`.
 
 ### Fixed
 
@@ -44,7 +53,9 @@ out under **Breaking** with what to do about it.
   session cookie through; when the layout then found the session invalid it sent a bare
   `/login`, so signing in landed on `/` instead of, say, a `/connect/<code>` approval. The
   middleware now passes the requested path along and the redirect keeps it.
-- **`/login?redirect=/\host` was an open redirect** — browsers read `/\` as `//`. Refused now.
+- **`/login?redirect=` could leave the site.** `/\host`, and a tab or newline after the first
+  slash (the URL parser drops them), all read as another host. The destination is now parsed
+  the way the browser will parse it and kept only when it stays on this site.
 
 ## [0.10.1] — 2026-09-29
 

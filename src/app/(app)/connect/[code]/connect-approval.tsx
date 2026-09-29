@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CircleAlert, CircleCheck, MonitorSmartphone } from 'lucide-react'
+import { Check, CircleAlert, CircleCheck, MonitorSmartphone, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/control'
 import { mutate } from '@/lib/api/mutate'
 
@@ -17,7 +17,11 @@ export type ConnectView =
       runtimes: string[]
       cliVersion: string | null
       clientAddress: string | null
+      sameAddress: boolean
       expiresAt: string
+      /** Runtimes whose key is a grant over everyone's work, not an identity. */
+      privileged: string[]
+      isAdmin: boolean
     }
 
 const timeLeft = (expiresAt: string): string => {
@@ -103,7 +107,8 @@ const PendingCard = ({
   ownerName: string
   view: Extract<ConnectView, { kind: 'pending' }>
 }) => {
-  const [selected, setSelected] = useState<string[]>(view.runtimes)
+  const locked = (runtime: string) => view.privileged.includes(runtime) && !view.isAdmin
+  const [selected, setSelected] = useState<string[]>(() => view.runtimes.filter((runtime) => !locked(runtime)))
   const [busy, setBusy] = useState<'approve' | 'deny' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<'approved' | 'denied' | null>(null)
@@ -157,7 +162,9 @@ const PendingCard = ({
       <div className="flex flex-col gap-4 px-5 py-4">
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[0.75rem]">
           <dt className="text-fg-subtle">Host</dt>
-          <dd className="text-fg truncate">{view.host}</dd>
+          <dd className="text-fg truncate" title="As the device reported it — not verified">
+            {view.host} <span className="text-fg-subtle">(as reported)</span>
+          </dd>
           <dt className="text-fg-subtle">CLI version</dt>
           <dd className="text-fg truncate">{view.cliVersion ?? 'unknown'}</dd>
           <dt className="text-fg-subtle">Requesting from</dt>
@@ -166,28 +173,52 @@ const PendingCard = ({
           <dd className={expired ? 'text-danger' : 'text-fg'}>{left}</dd>
         </dl>
 
+        <p className="text-fg-muted flex items-start gap-2 text-xs leading-relaxed">
+          <TriangleAlert size={14} className="mt-px shrink-0 text-[var(--priority-high)]" aria-hidden />
+          <span>
+            Approve only if you just ran <code className="font-mono">cairn setup</code> on this machine yourself. Never
+            approve a link someone sent you: the keys would be yours, in their hands.
+            {view.sameAddress ? null : (
+              <strong className="text-fg mt-1 block font-medium">
+                This request came from a different network address than yours.
+              </strong>
+            )}
+          </span>
+        </p>
+
         <div className="flex flex-col gap-1.5">
           <span className="text-fg-muted text-xs font-medium">Runtimes</span>
-          {view.runtimes.map((runtime) => (
-            <button
-              key={runtime}
-              type="button"
-              role="checkbox"
-              aria-checked={selected.includes(runtime)}
-              onClick={() => toggle(runtime)}
-              disabled={expired || busy !== null}
-              className="border-border hover:bg-surface-raised flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors duration-[var(--dur-1)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <input
-                type="checkbox"
-                readOnly
-                tabIndex={-1}
-                checked={selected.includes(runtime)}
-                className="accent-accent size-[0.75rem]"
-              />
-              <span className="text-fg text-[0.8125rem]">{runtime}</span>
-            </button>
-          ))}
+          {view.runtimes.map((runtime) => {
+            const checked = selected.includes(runtime)
+            const privileged = view.privileged.includes(runtime)
+            return (
+              <button
+                key={runtime}
+                type="button"
+                role="checkbox"
+                aria-checked={checked}
+                onClick={() => toggle(runtime)}
+                disabled={expired || busy !== null || locked(runtime)}
+                title={locked(runtime) ? 'Only an administrator can approve this key.' : undefined}
+                className="border-border hover:bg-surface-raised flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors duration-[var(--dur-1)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span
+                  aria-hidden
+                  className={`grid size-[0.75rem] shrink-0 place-items-center rounded-[3px] border ${
+                    checked ? 'border-accent bg-accent' : 'border-border-strong'
+                  }`}
+                >
+                  {checked ? <Check size={9} className="text-white" strokeWidth={3} /> : null}
+                </span>
+                <span className="text-fg text-[0.8125rem]">{runtime}</span>
+                {privileged ? (
+                  <span className="text-fg-subtle ml-auto text-[0.6875rem]">
+                    {view.isAdmin ? 'acts on everyone’s claims' : 'administrators only'}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
         </div>
 
         {error ? (

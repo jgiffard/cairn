@@ -8,9 +8,8 @@ describe('login redirects', () => {
   })
 
   it('refuses anything a browser would read as another host', () => {
-    for (const hostile of ['//evil.test', '/\\evil.test', 'https://evil.test', 'evil.test']) {
-      expect(safeRedirect(hostile)).toBe('/')
-    }
+    const hostile = ['//evil.test', '/\\evil.test', '/\t/evil.test', '/\n/evil.test', '/\r\\evil.test', 'https://evil.test', 'evil.test']
+    for (const value of hostile) expect(safeRedirect(value)).toBe('/')
   })
 
   it('sends a bare /login when there is nowhere to return to', () => {

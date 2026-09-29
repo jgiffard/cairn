@@ -39,12 +39,17 @@ type ConnectState = {
   keys?: { agentName: string; key: string }[]
   user?: { name?: string; email?: string }
   no404?: boolean
+  /** Poll answers `denied` for a pairing that asked for any of these. */
+  denyRuntimes?: string[]
+  /** Every POST /connect body the CLI sent, in order. */
+  requests?: { runtimes: string[]; host: string }[]
 }
 
 /** A fake Cairn server: health, people (key validity), connect, connect/poll. */
 const serve = (state: ConnectState = {}) =>
   new Promise<string>((resolve) => {
     let polls = 0
+    const asked = new Map<string, string[]>()
     const server = createServer((req, res) => {
       let raw = ''
       req.on('data', (c) => { raw += c })
@@ -63,8 +68,12 @@ const serve = (state: ConnectState = {}) =>
             res.writeHead(404, { 'content-type': 'application/json' })
             return res.end(JSON.stringify({ success: false, error: 'not found' }))
           }
+          const body = JSON.parse(raw || '{}')
+          state.requests?.push(body)
+          const deviceCode = `device-${asked.size + 1}`
+          asked.set(deviceCode, body.runtimes ?? [])
           return json({
-            deviceCode: 'device-1',
+            deviceCode,
             userCode: 'AB12-CD34',
             verificationUrl: 'http://127.0.0.1/connect/AB12-CD34',
             expiresIn: state.expiresIn ?? 60,
@@ -73,6 +82,8 @@ const serve = (state: ConnectState = {}) =>
         }
         if (req.url === '/api/v1/connect/poll') {
           polls += 1
+          const runtimes = asked.get(JSON.parse(raw || '{}').deviceCode) ?? []
+          if (state.denyRuntimes?.some((r) => runtimes.includes(r))) return json({ status: 'denied' })
           if (state.status === 'pending' && polls <= (state.pendingCount ?? 1)) return json({ status: 'pending' })
           if (state.status === 'denied') return json({ status: 'denied' })
           if (state.status === 'expired') return json({ status: 'expired' })
@@ -121,6 +132,21 @@ describe('cairn setup — dry run', () => {
     expect(stdout).toContain('would be paired (--dry-run: skipped)')
     expect(existsSync(join(HOME, '.cairn', 'env'))).toBe(false)
     expect(existsSync(join(HOME, '.local', 'bin', 'cairn'))).toBe(false)
+  })
+
+  it('offers OpenClaw only where this account runs its gateway', async () => {
+    const base = await serve()
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const plan = async (config: unknown) => {
+      const HOME = await home()
+      await mkdir(join(HOME, '.claude'), { recursive: true })
+      await mkdir(join(HOME, '.openclaw'), { recursive: true })
+      await writeFile(join(HOME, '.openclaw', 'openclaw.json'), JSON.stringify(config))
+      return (await run(['setup', '--url', base, '--dry-run'], HOME)).stdout
+    }
+    // A client config only reaches someone else's gateway.
+    expect(await plan({ gateway: { auth: { token: 'x' } } })).toContain('! keys      claude-code would be paired')
+    expect(await plan({ gateway: { port: 18789 } })).toContain('claude-code, openclaw would be paired')
   })
 
   it('stops with a clear error against an unreachable url', async () => {
@@ -189,6 +215,40 @@ describe('cairn setup — pairing', () => {
     expect(stdout).toContain('CAIRN_API_KEY_CLAUDE_CODE=')
     // It continues with the rest of setup rather than stopping dead.
     expect(existsSync(join(HOME, '.local', 'bin', 'cairn'))).toBe(true)
+  })
+
+  it('tightens an env file that already existed with looser permissions', async () => {
+    const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
+    const HOME = await home()
+    const { mkdir, writeFile, chmod } = await import('node:fs/promises')
+    await mkdir(join(HOME, '.cairn'), { recursive: true })
+    const envPath = join(HOME, '.cairn', 'env')
+    await writeFile(envPath, `CAIRN_BASE_URL=${base}\n`)
+    await chmod(envPath, 0o644)
+    const { code } = await run(['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'], HOME)
+    expect(code).toBe(0)
+    expect((await stat(envPath)).mode & 0o777).toBe(0o600)
+    expect((await stat(join(HOME, '.cairn'))).mode & 0o777).toBe(0o700)
+  })
+
+  it('pairs a maintenance key on its own, so a member still gets their agents\' keys', async () => {
+    const requests: { runtimes: string[]; host: string }[] = []
+    const base = await serve({
+      status: 'approved',
+      keys: [{ agentName: 'claude-code', key: 'sk_member' }],
+      denyRuntimes: ['maintenance'],
+      requests,
+    })
+    const HOME = await home()
+    const { code, stdout } = await run(
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--maintenance', '--no-hooks', '--no-jobs'],
+      HOME,
+    )
+    expect(code).toBe(0)
+    expect(requests.map((r) => r.runtimes)).toEqual([['claude-code'], ['maintenance']])
+    expect(requests[0]!.host).toMatch(/^[A-Za-z0-9._-]+$/)
+    expect(stdout).toContain('maintenance not issued')
+    expect(await readFile(join(HOME, '.cairn', 'env'), 'utf8')).toContain('CAIRN_API_KEY_CLAUDE_CODE=sk_member')
   })
 
   it('replaces a stale key in place rather than duplicating the line', async () => {

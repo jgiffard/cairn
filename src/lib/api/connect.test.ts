@@ -143,7 +143,7 @@ describe('approveConnectRequest', () => {
       .mockResolvedValueOnce({ rows: [pendingRow] }) // find
       .mockResolvedValueOnce({ rows: [{ id: 'req-1' }] }) // conditional update
 
-    await approveConnectRequest('BCDF-2345', { runtimes: ['claude-code'], approvedBy: 'user-1' })
+    await approveConnectRequest('BCDF-2345', { runtimes: ['claude-code'], approvedBy: 'user-1', approverRole: 'member' })
 
     const update = mocks.query.mock.calls[1]!
     expect(String(update[0])).toContain(`status = 'approved'`)
@@ -151,11 +151,29 @@ describe('approveConnectRequest', () => {
     expect(update[1]).toEqual(['req-1', 'user-1', ['claude-code']])
   })
 
+  it('refuses a maintenance key to a member — it acts on everyone\'s work', async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [{ ...pendingRow, runtimes: ['claude-code', 'maintenance'] }] })
+
+    await expect(
+      approveConnectRequest('BCDF-2345', { runtimes: ['maintenance'], approvedBy: 'user-1', approverRole: 'member' }),
+    ).rejects.toMatchObject({ code: 'forbidden_runtime' })
+    expect(mocks.query).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets an administrator approve a maintenance key', async () => {
+    mocks.query
+      .mockResolvedValueOnce({ rows: [{ ...pendingRow, runtimes: ['maintenance'] }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'req-1' }] })
+
+    await approveConnectRequest('BCDF-2345', { runtimes: ['maintenance'], approvedBy: 'user-1', approverRole: 'admin' })
+    expect(mocks.query.mock.calls[1]![1]).toEqual(['req-1', 'user-1', ['maintenance']])
+  })
+
   it('refuses a runtime that was not requested, without writing anything', async () => {
     mocks.query.mockResolvedValueOnce({ rows: [pendingRow] })
 
     await expect(
-      approveConnectRequest('BCDF-2345', { runtimes: ['openclaw'], approvedBy: 'user-1' }),
+      approveConnectRequest('BCDF-2345', { runtimes: ['openclaw'], approvedBy: 'user-1', approverRole: 'member' }),
     ).rejects.toMatchObject({ code: 'invalid_runtimes' })
     expect(mocks.query).toHaveBeenCalledTimes(1)
   })
@@ -163,14 +181,14 @@ describe('approveConnectRequest', () => {
   it('refuses an empty selection', async () => {
     mocks.query.mockResolvedValueOnce({ rows: [pendingRow] })
     await expect(
-      approveConnectRequest('BCDF-2345', { runtimes: [], approvedBy: 'user-1' }),
+      approveConnectRequest('BCDF-2345', { runtimes: [], approvedBy: 'user-1', approverRole: 'member' }),
     ).rejects.toMatchObject({ code: 'invalid_runtimes' })
   })
 
   it('reports not_found for an unknown code', async () => {
     mocks.query.mockResolvedValueOnce({ rows: [] })
     await expect(
-      approveConnectRequest('BCDF-2345', { runtimes: ['claude-code'], approvedBy: 'user-1' }),
+      approveConnectRequest('BCDF-2345', { runtimes: ['claude-code'], approvedBy: 'user-1', approverRole: 'member' }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
@@ -179,7 +197,7 @@ describe('approveConnectRequest', () => {
       .mockResolvedValueOnce({ rows: [pendingRow] })
       .mockResolvedValueOnce({ rows: [] }) // someone else denied/expired it first
     await expect(
-      approveConnectRequest('BCDF-2345', { runtimes: ['claude-code'], approvedBy: 'user-1' }),
+      approveConnectRequest('BCDF-2345', { runtimes: ['claude-code'], approvedBy: 'user-1', approverRole: 'member' }),
     ).rejects.toMatchObject({ code: 'not_pending' })
   })
 })

@@ -10,53 +10,59 @@
 # for it to drift out of step with the CLI it is supposed to install.
 set -eu
 
-REPO="montytorr/cairn"
-BIN_DIR="$HOME/.local/bin"
-BIN="$BIN_DIR/cairn"
+# Everything in one function, called on the last line: a download cut off
+# halfway defines a function it never calls, instead of running half a script.
+main() {
+  REPO="montytorr/cairn"
+  BIN_DIR="$HOME/.local/bin"
+  BIN="$BIN_DIR/cairn"
 
-log() { printf '%s\n' "$*" >&2; }
-die() { log "install.sh: $*"; exit 1; }
+  log() { printf '%s\n' "$*" >&2; }
+  die() { log "install.sh: $*"; exit 1; }
 
-command -v node >/dev/null 2>&1 || die "node is not on PATH — install Node 22 or newer first"
+  command -v node >/dev/null 2>&1 || die "node is not on PATH — install Node 22 or newer first"
 
-# node --version prints "vX.Y.Z"; strip the leading v and compare the major.
-node_major=$(node --version | sed 's/^v//' | cut -d. -f1)
-case "$node_major" in
-  ''|*[!0-9]*) die "could not read node's version from 'node --version'" ;;
-esac
-if [ "$node_major" -lt 22 ]; then
-  die "node $(node --version) is too old — cairn needs Node 22 or newer"
-fi
+  # node --version prints "vX.Y.Z"; strip the leading v and compare the major.
+  node_major=$(node --version | sed 's/^v//' | cut -d. -f1)
+  case "$node_major" in
+    ''|*[!0-9]*) die "could not read node's version from 'node --version'" ;;
+  esac
+  if [ "$node_major" -lt 22 ]; then
+    die "node $(node --version) is too old — cairn needs Node 22 or newer"
+  fi
 
-# The latest release's tag, or main if the API is unreachable (rate limited,
-# offline mirror, a fork with no releases yet) -- a fetch from main is a
-# working install, just not a pinned one, and that beats refusing outright.
-tag=""
-if command -v curl >/dev/null 2>&1; then
-  tag=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
-    | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)
-fi
-ref="${tag:-main}"
-[ -n "$tag" ] || log "could not resolve the latest release; installing cli/cairn.mjs from $ref instead"
+  # The latest release's tag, or main if the API is unreachable (rate limited,
+  # offline mirror, a fork with no releases yet) -- a fetch from main is a
+  # working install, just not a pinned one, and that beats refusing outright.
+  tag=""
+  if command -v curl >/dev/null 2>&1; then
+    tag=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+      | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)
+  fi
+  ref="${tag:-main}"
+  [ -n "$tag" ] || log "could not resolve the latest release; installing cli/cairn.mjs from $ref instead"
 
-url="https://raw.githubusercontent.com/$REPO/$ref/cli/cairn.mjs"
+  url="https://raw.githubusercontent.com/$REPO/$ref/cli/cairn.mjs"
 
-mkdir -p "$BIN_DIR"
-tmp="$BIN.download"
-if command -v curl >/dev/null 2>&1; then
-  curl -fsSL "$url" -o "$tmp" || die "could not download $url"
-elif command -v wget >/dev/null 2>&1; then
-  wget -qO "$tmp" "$url" || die "could not download $url"
-else
-  die "need curl or wget to download cairn"
-fi
-chmod +x "$tmp"
-mv "$tmp" "$BIN"
+  mkdir -p "$BIN_DIR"
+  tmp="$BIN.download"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" -o "$tmp" || die "could not download $url"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$tmp" "$url" || die "could not download $url"
+  else
+    die "need curl or wget to download cairn"
+  fi
+  chmod +x "$tmp"
+  mv "$tmp" "$BIN"
 
-log "installed $BIN ($ref)"
-case ":$PATH:" in
-  *":$BIN_DIR:"*) ;;
-  *) log "note: $BIN_DIR is not on PATH — add: export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
-esac
+  log "installed $BIN ($ref)"
+  case ":$PATH:" in
+    *":$BIN_DIR:"*) ;;
+    *) log "note: $BIN_DIR is not on PATH — add: export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+  esac
 
-exec "$BIN" setup "$@"
+  exec "$BIN" setup "$@"
+}
+
+main "$@"

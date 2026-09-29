@@ -7,9 +7,22 @@
  */
 export const REQUESTED_PATH_HEADER = 'x-cairn-path'
 
-/** A same-site path, or `/`. `/\host` is refused too: browsers read it as `//host`. */
-export const safeRedirect = (value: string | null | undefined): string =>
-  value && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\') ? value : '/'
+const SAME_SITE = 'http://cairn.invalid'
+
+/**
+ * A same-site path, or `/`. Parsed the way the browser will parse it, not
+ * matched by prefix: `//host`, `/\host` and `/<tab>/host` (the URL parser drops
+ * tabs and newlines) all start with a slash and all leave the site.
+ */
+export const safeRedirect = (value: string | null | undefined): string => {
+  if (!value || !value.startsWith('/')) return '/'
+  try {
+    const url = new URL(value, SAME_SITE)
+    return url.origin === SAME_SITE ? `${url.pathname}${url.search}${url.hash}` : '/'
+  } catch {
+    return '/'
+  }
+}
 
 export const loginUrlFor = (path: string | null | undefined): string => {
   const target = safeRedirect(path)
