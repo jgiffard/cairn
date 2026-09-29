@@ -7,10 +7,10 @@ import { fail } from './response'
  * has to be that person at a keyboard — an agent key is never the right
  * caller here, even one belonging to an administrator.
  */
-export const requireHumanActor = (actor: Actor): Response | null =>
-  actor.actorType === 'human'
-    ? null
-    : fail('forbidden', 'Only a signed-in person, in a browser, can approve or deny a pairing request.')
+export const requireHumanActor = (
+  actor: Actor,
+  message = 'Only a signed-in person, in a browser, can approve or deny a pairing request.',
+): Response | null => (actor.actorType === 'human' ? null : fail('forbidden', message))
 
 export const connectFailure = (error: unknown): Response => {
   if (error instanceof ConnectError) {

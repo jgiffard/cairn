@@ -317,7 +317,21 @@ export const createUserKey = async (
   client?: PoolClient,
 ) => (client ? createKeyOn(client, userId, input) : transaction((tx) => createKeyOn(tx, userId, input)))
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Revokes one active key, scoped to its owner: a key id that belongs to
+ * someone else reads exactly like one that never existed. Revocation is the
+ * `revoked_at` stamp alone — `authenticate` checks it on every request, with
+ * no cache in between, so the key stops working on its very next call.
+ *
+ * Shared by the administrator route and the self-service one (CAIRN-315), so
+ * the two can never disagree about what revoking means.
+ */
 export const revokeUserKey = async (userId: string, keyId: string) => {
+  // A malformed id would otherwise reach Postgres as a uuid cast error — a
+  // 500 for what is plainly "no such key".
+  if (!UUID.test(keyId)) throw new UserAdminError('not_found', 'No such active key.')
   const result = await pool().query(
     `update api_keys set revoked_at = now()
       where id = $1 and user_id = $2 and revoked_at is null

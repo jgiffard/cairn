@@ -160,12 +160,72 @@ describe('cairn setup — dry run', () => {
   })
 })
 
+/**
+ * CAIRN-316: OpenClaw has no session-end event, so `openclaw-sessions`
+ * (scripts/install-cron.mjs) is the only thing that ever records its
+ * transcripts — `cairn setup` installs it for you wherever it can work out
+ * the sessions directory. Dry-run only here: --install would run real
+ * launchctl, which this suite must never do.
+ */
+describe('cairn setup — openclaw-sessions job', () => {
+  it('includes openclaw-sessions with the derived directory when it can find one', async () => {
+    const base = await serve()
+    const HOME = await home()
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const sessions = join(HOME, '.openclaw', 'agents', 'main', 'agent', 'codex-home', 'sessions')
+    await mkdir(sessions, { recursive: true })
+    await mkdir(join(HOME, '.cairn', 'hooks'), { recursive: true })
+    await writeFile(join(HOME, '.cairn', 'hooks', 'cairn-session-end.mjs'), '// stub\n')
+
+    const { code, stdout } = await run(
+      ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
+      HOME,
+    )
+    expect(code).toBe(0)
+    expect(stdout).toContain('jobs      agent-files, openclaw-sessions (plan)')
+    expect(stdout).toContain(sessions)
+  })
+
+  it('skips openclaw-sessions with a clear line when no sessions directory can be found', async () => {
+    const base = await serve()
+    const HOME = await home()
+    const { code, stdout } = await run(
+      ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
+      HOME,
+    )
+    expect(code).toBe(0)
+    expect(stdout).toContain('! jobs      openclaw-sessions skipped')
+    expect(stdout).toContain('set CAIRN_OPENCLAW_SESSIONS=<dir> and re-run')
+    expect(stdout).toContain('CAIRN_OPENCLAW_SESSIONS=')
+    expect(stdout).not.toContain('agent-files, openclaw-sessions')
+  })
+
+  it('honours an already-set CAIRN_OPENCLAW_SESSIONS instead of deriving one', async () => {
+    const base = await serve()
+    const HOME = await home()
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const custom = join(HOME, 'custom-sessions')
+    await mkdir(custom, { recursive: true })
+    await mkdir(join(HOME, '.cairn', 'hooks'), { recursive: true })
+    await writeFile(join(HOME, '.cairn', 'hooks', 'cairn-session-end.mjs'), '// stub\n')
+
+    const { code, stdout } = await run(
+      ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
+      HOME,
+      { CAIRN_OPENCLAW_SESSIONS: custom },
+    )
+    expect(code).toBe(0)
+    expect(stdout).toContain('jobs      agent-files, openclaw-sessions (plan)')
+    expect(stdout).toContain(custom)
+  })
+})
+
 describe('cairn setup — pairing', () => {
   it('pairs, prints who approved it, and writes the key at mode 600', async () => {
     const base = await serve({ status: 'pending', pendingCount: 1, keys: [{ agentName: 'claude-code', key: 'sk_new' }], user: { name: 'Julien' } })
     const HOME = await home()
     const { code, stdout } = await run(
-      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', '--yes'],
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'],
       HOME,
     )
     expect(code).toBe(0)
@@ -184,7 +244,7 @@ describe('cairn setup — pairing', () => {
     const base = await serve({ status: 'denied' })
     const HOME = await home()
     const { code, stdout, stderr } = await run(
-      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', '--yes'],
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'],
       HOME,
     )
     expect(code).not.toBe(0)
@@ -195,7 +255,7 @@ describe('cairn setup — pairing', () => {
     const base = await serve({ status: 'expired', expiresIn: 0 })
     const HOME = await home()
     const { code, stdout, stderr } = await run(
-      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', '--yes'],
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'],
       HOME,
     )
     expect(code).not.toBe(0)
@@ -206,7 +266,7 @@ describe('cairn setup — pairing', () => {
     const base = await serve({ no404: true })
     const HOME = await home()
     const { code, stdout } = await run(
-      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', '--yes'],
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'],
       HOME,
     )
     expect(code).toBe(0)
@@ -262,7 +322,7 @@ describe('cairn setup — pairing', () => {
       { mode: 0o600 },
     )
     const { code } = await run(
-      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', '--yes'],
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'],
       HOME,
     )
     expect(code).toBe(0)
@@ -284,7 +344,7 @@ describe('cairn setup — pairing', () => {
       { mode: 0o600 },
     )
     const { code, stdout } = await run(
-      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', '--yes'],
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'],
       HOME,
     )
     expect(code).toBe(0)
@@ -297,12 +357,12 @@ describe('cairn setup — idempotent re-run', () => {
   it('a second run keeps the key and reports the cli/skill as unchanged', async () => {
     const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_valid' }] })
     const HOME = await home()
-    const first = await run(['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', '--yes'], HOME)
+    const first = await run(['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'], HOME)
     expect(first.code).toBe(0)
 
     // The fake server's /people only accepts sk_valid, so the key just
     // written passes the second run's validity check.
-    const second = await run(['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', '--yes'], HOME)
+    const second = await run(['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'], HOME)
     expect(second.code).toBe(0)
     expect(second.stdout).toContain('claude-code already set, and still work')
     expect(second.stdout).toContain('cli') // unchanged line still names the step
@@ -369,7 +429,7 @@ describe('cairn setup — multi-instance naming', () => {
 
     const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
     const { code, stdout } = await run(
-      ['setup', '--url', base, '--name', 'work', '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', '--yes'],
+      ['setup', '--url', base, '--name', 'work', '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'],
       HOME,
     )
     expect(code).toBe(0)
@@ -388,7 +448,7 @@ describe('cairn setup — CAIRN_SETUP_SOURCE', () => {
     const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
     const HOME = await home()
     const { code, stdout } = await run(
-      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', '--yes'],
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'],
       HOME,
     )
     expect(code).toBe(0)

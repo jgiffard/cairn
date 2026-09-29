@@ -269,7 +269,14 @@ const instancesWithKey = (key, instances) =>
     }
   })
 
-const hasStaleProjectKeys = (instances) => Object.keys(instances).some((name) => {
+/**
+ * Whether ONE instance's own project-key cache is too old, missing or
+ * unreadable to answer for it — never a statement about any other instance.
+ * Missing or unreadable is treated as stale rather than "no projects": an
+ * instance that has never been reached, or answered with something this
+ * could not parse, has told us nothing about what it owns.
+ */
+const isStaleInstance = (name) => {
   const path = join(instanceDir(name), PROJECT_KEYS_FILE)
   try {
     const cached = JSON.parse(readFileSync(path, 'utf8'))
@@ -278,11 +285,9 @@ const hasStaleProjectKeys = (instances) => Object.keys(instances).some((name) =>
     const age = Number.isFinite(at) ? Date.now() - at : Date.now() - statSync(path).mtimeMs
     return age >= PROJECT_KEYS_TTL_MS
   } catch {
-    // Missing or unreadable is unknown ownership, never evidence that this
-    // instance does not own a project key.
     return true
   }
-})
+}
 
 /** `session end --id` speaks for a session the hook is not running inside. */
 const routeSession = () => {
@@ -345,9 +350,29 @@ const resolveRoute = ({ config, dir, session, ref }) => {
   // of inventing a stale-cache error. A positive owner or default, however,
   // must not become a write target while another instance is unknown.
   // The configured default still handles an unclassified ref when no cache
-  // claims it. A positive owner is not trustworthy while another cache is
-  // unknown: the project may have moved to that instance.
-  if (ref && owners.length > 0 && hasStaleProjectKeys(instances)) {
+  // claims it.
+  //
+  // CAIRN-305 refined this, and CAIRN-316 is why it had to: keys are
+  // PER-INSTANCE, so `owners` above already looked at every instance's
+  // last-known cache, stale or fresh, and only an instance whose cache
+  // actually LISTS this ref's key is in it. Blocking every ref-shaped command
+  // whenever ANY instance was stale — the original rule — refused personal
+  // work on every project a healthy instance plainly owns, for as long as one
+  // unrelated instance was unreachable (an office WAF returning 403 on every
+  // request was enough). What actually has to be refused is narrower: a ref
+  // whose only evidence of ownership is stale, or whose ownership is disputed.
+  // So block only when a stale instance's cache is itself one of `owners`
+  // (its last-known answer said it owns this key, and that answer is now too
+  // old to trust) or when two fresh instances both claim it. An instance that
+  // is stale but never listed this key is not silently trusted to have picked
+  // it up since — that is the one gap left open on purpose: a project CREATED
+  // on that instance after its cache went stale would not show up in `owners`
+  // at all yet, and would route to whichever fresh instance (or default)
+  // otherwise claims the ref, same as an ordinary unknown ref would. That is
+  // strictly the risk this file already accepted for any brand-new project on
+  // a reachable instance before its first key request; it is not new here.
+  const staleOwners = ref ? owners.filter((name) => isStaleInstance(name)) : []
+  if (staleOwners.length > 0) {
     return {
       name: null,
       error: `cairn: project ownership data is stale; refresh it with an explicit --instance, then retry ${ref}`,
@@ -356,7 +381,21 @@ const resolveRoute = ({ config, dir, session, ref }) => {
   if (owners.length > 1) {
     return { name: null, error: `cairn: ${ref} is claimed by multiple Cairn instances (${owners.join(', ')}); use --instance <name>` }
   }
-  if (owners.length === 1) return { name: owners[0], why: `${ref} is a project there` }
+  if (owners.length === 1) {
+    // Every remaining owner is fresh (staleOwners was empty above); an
+    // unrelated instance that could not be checked did not claim this key, so
+    // it is worth a note, never a refusal.
+    const uncheckable = ref
+      ? Object.keys(instances).filter((name) => name !== owners[0] && isStaleInstance(name))
+      : []
+    return {
+      name: owners[0],
+      why: `${ref} is a project there`,
+      ...(uncheckable.length
+        ? { hint: `cairn: ${uncheckable.join(', ')} could not be checked (stale project cache); routing ${ref} to ${owners[0]} on its own record` }
+        : {}),
+    }
+  }
   if (bySession) return { name: bySession, why: 'chosen for this session' }
   if (unclassified.mode === 'default') return { name: unclassified.instance, why: 'default instance' }
   return { name: null, key, repo }
@@ -915,7 +954,7 @@ const KNOWN_FLAGS = new Set([
   'reason', 'remote', 'repo', 'request', 'resolution', 'runtimes', 'scheduled', 'scope',
   'session', 'show-toplevel', 'slug', 'start', 'started', 'status', 'summary',
   'superseded', 'superseded-by', 'sweep', 'task', 'tasks', 'title', 'tool-calls',
-  'type', 'unused', 'url', 'verified', 'version', 'yes',
+  'type', 'unused', 'url', 'verified', 'version',
 ])
 
 for (let i = 0; i < argv.length; i += 1) {
@@ -2670,6 +2709,43 @@ const openclawRunsGateway = () => {
   return Boolean(gateway.mode || gateway.port || config?.agents || config?.channels)
 }
 
+/**
+ * Where OpenClaw keeps the transcripts the `openclaw-sessions` job sweeps.
+ *
+ * Nothing in openclaw.json says this directly: `config.agents` there is
+ * channel and routing configuration, not a filesystem path. What actually
+ * says it is what OpenClaw laid down on disk — each agent gets its own Codex
+ * home under the gateway's own home, at `agents/<agent>/agent/codex-home`,
+ * with sessions under that (confirmed against a live gateway:
+ * `/root/.openclaw/agents/main/agent/codex-home/sessions`). Exactly one agent
+ * with a sessions directory there is unambiguous, and `main` is the answer
+ * for the common single-agent gateway even where others exist but have not
+ * written a session yet. Several agents with sessions and no `main`, or none
+ * at all, is a real "cairn setup cannot know this" — inventing an answer
+ * would point the sweep at the wrong agent's transcripts, or at nothing, and
+ * say nothing about it, so this reports why instead and leaves it to whoever
+ * runs setup to set CAIRN_OPENCLAW_SESSIONS by hand.
+ */
+const openclawSessionsDir = () => {
+  const configPath = process.env.OPENCLAW_CONFIG_PATH?.trim() || join(HOME, '.openclaw', 'openclaw.json')
+  const agentsDir = join(dirname(configPath), 'agents')
+  if (!existsSync(agentsDir)) return { error: `no ${agentsDir} on this machine yet` }
+  let names
+  try {
+    names = readdirSync(agentsDir)
+  } catch (error) {
+    return { error: `could not read ${agentsDir} (${error.message})` }
+  }
+  const withSessions = names
+    .map((name) => join(agentsDir, name, 'agent', 'codex-home', 'sessions'))
+    .filter((dir) => existsSync(dir))
+  if (withSessions.length === 1) return { dir: withSessions[0] }
+  if (withSessions.length === 0) return { error: `no agent under ${agentsDir} has a codex-home/sessions directory yet` }
+  const main = join(agentsDir, 'main', 'agent', 'codex-home', 'sessions')
+  if (withSessions.includes(main)) return { dir: main }
+  return { error: `${withSessions.length} agents under ${agentsDir} each have sessions — ambiguous` }
+}
+
 /** Rewrite or append `KEY=value` lines in an env file, leaving everything else untouched. */
 const setEnvKeys = (path, updates) => {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
@@ -4276,11 +4352,6 @@ const commands = {
    */
   async setup() {
     const dry = Boolean(flags['dry-run'])
-    // Read regardless of branch, so a caller who passes it in a context where
-    // it does not end up mattering (single-instance; nothing missing to pair)
-    // is not told it was ignored.
-    const yes = Boolean(flags.yes) || !process.stdin.isTTY
-    void yes // reserved: no prompt in this flow needs silencing yet
     const explicitName = typeof flags.name === 'string' ? flags.name.trim() : undefined
     const say = (s) => process.stdout.write(s)
     const line = (s) => say(`${s}\n`)
@@ -4550,10 +4621,28 @@ const commands = {
         line('– jobs      skipped (--no-jobs)')
       } else {
         const jobs = ['agent-files', ...(flags.maintenance ? ['reconcile', 'vitals'] : [])]
+        // OpenClaw has no session-end event (docs/openclaw.md): the sweep is
+        // the only thing that ever records its transcripts, so setting it up
+        // is not optional the way the rest of scheduled maintenance is.
+        // CAIRN_OPENCLAW_SESSIONS already in the environment wins outright —
+        // it says the operator already knows better than a directory guess.
+        let jobEnv
+        if (runtimes.includes('openclaw')) {
+          const already = process.env.CAIRN_OPENCLAW_SESSIONS?.trim()
+          const resolved = already ? { dir: already } : openclawSessionsDir()
+          if (resolved.dir) {
+            jobs.push('openclaw-sessions')
+            jobEnv = { ...process.env, CAIRN_OPENCLAW_SESSIONS: resolved.dir }
+          } else {
+            line(`! jobs      openclaw-sessions skipped — ${resolved.error}`)
+            line('            set CAIRN_OPENCLAW_SESSIONS=<dir> and re-run, e.g.:')
+            line(`            CAIRN_OPENCLAW_SESSIONS=/root/.openclaw/agents/main/agent/codex-home/sessions cairn setup --url ${url}`)
+          }
+        }
         const result = spawnSync(
           process.execPath,
           [join(releaseDir, 'scripts', 'install-cron.mjs'), ...(dry ? [] : ['--install']), '--only', jobs.join(',')],
-          { encoding: 'utf8' },
+          { encoding: 'utf8', ...(jobEnv ? { env: jobEnv } : {}) },
         )
         line(`${dry ? '!' : '✓'} jobs      ${jobs.join(', ')}${dry ? ' (plan):' : ':'}`)
         for (const l of `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n')) if (l.trim()) line(`   ${l}`)

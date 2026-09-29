@@ -9,6 +9,34 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **Your agent keys** (CAIRN-315). Anyone could pair keys for their own agents since 0.11.0,
+  but only an administrator could see or revoke them. `/settings/keys`, in the user menu,
+  lists your keys grouped by the host they were paired on, and revokes one or a whole host. A
+  revoked key is refused on its next request. `GET /api/v1/me/keys` and
+  `DELETE /api/v1/me/keys/{keyId}` are for a signed-in person only: an agent key gets 403,
+  and another person's key reads as 404.
+- **`cairn setup` installs OpenClaw's session sweep** (CAIRN-316). OpenClaw has no session-end
+  event, so its sessions are recorded only by the `openclaw-sessions` job. Setup found the
+  gateway and paired its key but never installed the job. It now does, deriving the sessions
+  directory from the gateway's home, or says which variable to set when it cannot.
+
+### Changed
+
+- **`cairn setup --yes` is gone.** It was accepted and did nothing, since setup asks nothing.
+
+### Fixed
+
+- **An unreachable instance blocked every ref on the others.** With one instance out of reach
+  (Dispofi behind an office-only firewall, say), its cached project keys went stale. Every
+  command naming a ref another instance owns was then refused: "project ownership data is
+  stale". Now a ref is refused only when the stale instance's own last-known keys claim it, or
+  when two instances do. A single fresh owner routes, with a note on stderr that the other
+  could not be checked. The remaining risk is a project with the same key created on the
+  unreachable instance since it was last seen, the same risk as any brand-new project.
+- **Revoking a key by a malformed id** answered 500 (a Postgres cast error). It is a 404 now.
+
 ## [0.11.0] — 2026-09-29
 
 ### Added

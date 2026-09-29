@@ -236,7 +236,11 @@ describe('routing a command to its instance', () => {
     expect(where()).toEqual({ personal: 0, work: 0 })
   })
 
-  it('refuses a former owner when another instance has no readable ownership cache', async () => {
+  it('routes to a fresh owner even when an unrelated instance cannot be checked (CAIRN-316)', async () => {
+    // `work` behind a WAF or off the VPN must not block ordinary work a
+    // reachable instance plainly owns — only a ref THAT instance's own
+    // last-known cache actually claims would be a problem, and neither of
+    // these caches for `work` claims WORK-3 (one is absent, one unreadable).
     await configure({ unclassified: { mode: 'default', instance: 'personal' } })
     await writeFile(join(home, '.cairn', 'instances', 'personal', 'project-keys.json'), JSON.stringify({
       at: new Date().toISOString(), keys: ['WORK'],
@@ -246,11 +250,16 @@ describe('routing a command to its instance', () => {
         await writeFile(join(home, '.cairn', 'instances', 'work', 'project-keys.json'), cache)
       }
       const result = await run(home, ['note', 'WORK-3', 'x'])
-      expect(result.code).toBe(10)
-      expect(result.stderr).toContain('project ownership data is stale')
-      expect(where()).toEqual({ personal: 0, work: 0 })
+      expect(result.code).toBe(0)
+      expect(result.stderr).toContain('work could not be checked')
+      expect(where()).toEqual({ personal: 1, work: 0 })
+      seenA.length = 0
     }
   })
+
+  // The ref's own owner being stale (the case just above this section) is
+  // still refused — see 'refuses stale project ownership instead of falling
+  // through to the default', unchanged by CAIRN-316.
 
   it('routes nested task delete by its ref before making either request', async () => {
     await configure({ unclassified: { mode: 'default', instance: 'personal' } })

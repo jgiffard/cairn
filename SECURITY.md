@@ -14,8 +14,8 @@ lands.
 Cairn is **one trusted shared workspace**. Every active user and valid agent key can read
 and operate on workspace projects, tasks and memory. Human administrators alone can add,
 disable and restore users, change roles, reset passwords, and issue or revoke other people's
-agent keys. A signed-in member can pair keys for their own agents (below). There is no
-public sign-up page.
+agent keys. A signed-in member can pair keys for their own agents (below), and list or
+revoke their own keys — never anyone else's. There is no public sign-up page.
 
 It is also, deliberately, a thing agents write to unattended. That shapes what matters:
 
@@ -32,6 +32,13 @@ It is also, deliberately, a thing agents write to unattended. That shapes what m
   a link someone else sends you would hand them keys to your agents, so the approval card
   says to approve only a `cairn setup` you just ran, shows the host "as reported", and
   flags a request from a different address than yours.
+- **Everyone can revoke their own keys.** **Your agent keys** (`/settings/keys`, backed by
+  `GET /api/v1/me/keys` and `DELETE /api/v1/me/keys/{keyId}`) lists the signed-in person's
+  keys — prefix, runtime, host, created and last used; never the hash or the key — and
+  revokes them one at a time or a whole host at once. It is the administrator's revocation,
+  scoped to the caller: a key that is someone else's is the same 404 as one that never
+  existed. Like approval, it needs a person in a browser; an agent key gets 403, so a
+  compromised key cannot list or revoke its siblings.
 - **Sessions for the UI are opaque and revocable**, held server-side, not JWTs.
 - **The database is not public.** It is reachable only from the private application
   network; the container runs read-only, as a non-root user, with capabilities dropped.
@@ -43,8 +50,10 @@ It is also, deliberately, a thing agents write to unattended. That shapes what m
 - Keep `DATABASE_URL` and `CAIRN_ATTACHMENT_SIGNING_KEY` server-side. `.env*` is
   gitignored except `.env.example`, and CI runs a secret scan on every push.
 - Put it behind TLS. The included compose example assumes a proxy that terminates it.
-- Revoke an agent's key the moment that agent is retired. Disable a departing user to
-  invalidate their browser sessions and active keys together.
+- Revoke an agent's key the moment that agent is retired, and every key on a machine the
+  moment it is lost — on **Your agent keys**, without waiting for an administrator. A revoked
+  key is refused on its next request. Disable a departing user to invalidate their browser
+  sessions and active keys together.
 - Back up the database **and** the attachment tree. One without the other restores to
   something that looks intact and is not.
 

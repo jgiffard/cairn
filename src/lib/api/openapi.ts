@@ -164,6 +164,20 @@ const person = {
   required: ['id', 'email', 'name', 'active'],
 }
 
+const ownKey = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    agentName: { type: 'string', example: 'claude-code' },
+    name: { type: 'string', example: 'claude-code on cal-mbp', description: 'Paired keys are `<runtime> on <host>`.' },
+    keyPrefix: { type: 'string', description: 'The first characters, for recognising a key. Never the key.' },
+    createdAt: { type: 'string', format: 'date-time' },
+    lastUsedAt: { type: ['string', 'null'], format: 'date-time' },
+    revokedAt: { type: ['string', 'null'], format: 'date-time' },
+  },
+  required: ['id', 'agentName', 'name', 'keyPrefix', 'createdAt', 'lastUsedAt', 'revokedAt'],
+}
+
 const taskSummary = {
   type: 'object',
   properties: {
@@ -1535,6 +1549,45 @@ export const openapiSpec = () => ({
         { name: 'keyId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
       ],
       delete: { summary: 'Revoke one of a user’s agent keys', responses: { '200': okResponse('Key revoked.'), '403': errorResponse } },
+    },
+    '/me/keys': {
+      get: {
+        summary: 'List your own agent keys (signed-in human browser session only)',
+        description:
+          'Every key you own, active and revoked — the ones `cairn setup` paired (named ' +
+          '`<runtime> on <host>`) and any an administrator issued you. Never the hash or the key ' +
+          'itself: that was shown once, when it was minted. An agent API key gets 403, even an ' +
+          'administrator\'s: a key must not be able to list or revoke its siblings.',
+        responses: {
+          '200': okResponse('Your keys, oldest first.', { type: 'array', items: ownKey }),
+          '401': errorResponse,
+          '403': errorResponse,
+        },
+      },
+    },
+    '/me/keys/{keyId}': {
+      parameters: [{ name: 'keyId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+      delete: {
+        summary: 'Revoke one of your own agent keys (signed-in human browser session only)',
+        description:
+          'The same revocation as `DELETE /users/{id}/keys/{keyId}`: the key is refused on its very ' +
+          'next request. A key that is someone else\'s, already revoked, or does not exist is the ' +
+          'same 404 — this never says whose a key is. An agent API key gets 403.',
+        responses: {
+          '200': okResponse('Key revoked.', {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              agentName: { type: 'string' },
+              revokedAt: { type: 'string', format: 'date-time' },
+            },
+            required: ['id', 'agentName', 'revokedAt'],
+          }),
+          '401': errorResponse,
+          '403': errorResponse,
+          '404': errorResponse,
+        },
+      },
     },
   },
   'x-resolution-kinds': [...RESOLUTION_KINDS],
