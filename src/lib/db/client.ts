@@ -1,4 +1,4 @@
-import { Pool, type PoolClient } from 'pg'
+import { Pool, types, type PoolClient } from 'pg'
 
 type DatabaseError = {
   code: string
@@ -92,6 +92,20 @@ const connectionString = () => {
   return value
 }
 
+/**
+ * A `date` stays the `YYYY-MM-DD` text PostgREST returned. node-postgres builds
+ * a Date at local midnight, which `normalizeDatabaseValue` then turned into an
+ * ISO timestamp: a day early on any host east of UTC, and on every host a value
+ * a date input cannot show, so a due date saved and then appeared blank.
+ */
+const DATE_OID = 1082
+const pgTypes = {
+  getTypeParser: ((oid: number, format?: 'text' | 'binary') =>
+    oid === DATE_OID && format !== 'binary'
+      ? (value: string) => value
+      : types.getTypeParser(oid, format as 'text')) as typeof types.getTypeParser,
+}
+
 export const pool = () => {
   if (!runtime.__cairnPool) {
     runtime.__cairnPool = new Pool({
@@ -101,6 +115,7 @@ export const pool = () => {
       idleTimeoutMillis: 30_000,
       statement_timeout: Number(process.env.DATABASE_STATEMENT_TIMEOUT_MS || 15_000),
       application_name: 'cairn',
+      types: pgTypes,
     })
     runtime.__cairnPool.on('error', (error) => console.error('[db] idle client error', error))
   }
