@@ -12,7 +12,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # Only the commit `main` is on now deploys (CAIRN-318). Each CI run on main
+  # triggers a deploy of its own commit, and two pushes close together can
+  # finish CI out of order: the older one's deploy then ran last and replaced
+  # the newer build (v0.12.0's release commit was overwritten by its merge
+  # commit this way). Runs are serialised by the concurrency group above, so
+  # a superseded commit can simply stand down — the newer commit's own run
+  # deploys it, before or after this one. If GitHub cannot be asked, it
+  # deploys as it always did rather than deploying nothing.
+  gate:
     # Only where the self-hosted runner exists. A mirror of this repository
     # (another organisation's copy, deploying its own way) would otherwise
     # queue this job forever waiting for a runner labelled `cairn`.
@@ -22,6 +30,31 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: [self-hosted, cairn]
+    timeout-minutes: 2
+    outputs:
+      current: ${{ steps.tip.outputs.current }}
+    steps:
+      - id: tip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          tip=$(curl -fsSL --max-time 20 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github.sha" \
+            "https://api.github.com/repos/$REPO/commits/main") || tip="$SHA"
+          if [ "$tip" = "$SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::main is at ${tip:0:7}; ${SHA:0:7} is superseded, and the run for ${tip:0:7} deploys it"
+          fi
+
+  deploy:
+    needs: gate
+    if: needs.gate.outputs.current == 'true'
     # Runs on the box it deploys to, so there is no registry and no secrets
     # in transit — the image is built where it runs.
     runs-on: [self-hosted, cairn]
