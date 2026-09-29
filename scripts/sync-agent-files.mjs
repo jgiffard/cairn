@@ -21,7 +21,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, chownSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -307,6 +307,13 @@ for (const artefact of ARTEFACTS) {
       mkdirSync(dirname(target.path), { recursive: true })
       writeFileSync(target.path, source)
       chmodSync(target.path, artefact.mode)
+      // Run as root, a file this creates in someone's home would be root's,
+      // and that person's own installer could no longer replace it. A file
+      // that existed keeps its owner; a new one takes its directory's.
+      if (!present && process.getuid?.() === 0) {
+        const { uid, gid } = statSync(dirname(target.path))
+        chownSync(target.path, uid, gid)
+      }
       repaired.push(`${artefact.name}: ${target.path} (was ${state})`)
       console.log(`  updated   ${target.path}  ${state} -> ${canonical}`)
     } catch (error) {
