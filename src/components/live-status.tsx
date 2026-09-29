@@ -117,7 +117,12 @@ export const LiveStatusIndicator = () => {
       // to make. It stays reachable on demand instead.
       aria-label={`${look.label}. ${look.title}`}
       title={look.title}
-      className="border-border bg-surface text-fg-subtle raised-sm pointer-events-none fixed top-2.5 right-2.5 z-30 flex items-center gap-1.5 rounded-full border px-2 py-1 text-[0.6875rem]"
+      // Centred on the page header's row, not just near the top: a fixed
+      // height, and a top offset worked out from the bar it sits in — the
+      // header is 2.75rem including its 1px bottom hairline. Padding and line
+      // height used to set the height, which put the pill 2px below the line
+      // every other header item is centred on.
+      className="border-border bg-surface text-fg-subtle raised-sm pointer-events-none fixed top-[calc((2.75rem-1px-1.5rem)/2)] right-2.5 z-30 flex h-6 items-center gap-1.5 rounded-full border px-2 text-[0.6875rem] leading-none"
     >
       <span
         aria-hidden
