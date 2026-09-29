@@ -1,6 +1,7 @@
 import { admin } from '@/lib/db/client'
 import { byTitle } from '@/lib/utils'
 import { sessionUser } from '@/lib/auth/session'
+import { withAssignee, withAssignees, type Person } from '@/lib/api/people'
 import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
 
 export type Task = {
@@ -16,6 +17,9 @@ export type Task = {
   position: number
   actor_type: 'human' | 'agent'
   actor_id: string
+  assignee_user_id: string
+  /** Named live off `assignee_user_id`, not stored — see `withAssignee`. */
+  assignee: Person | null
   claimed_by: string | null
   claimed_at: string | null
   heartbeat_at: string | null
@@ -126,14 +130,14 @@ export const listFormerKeyRecords = async (): Promise<FormerKeyRecord[]> => {
  */
 const LIST_COLUMNS =
   'id, number, title, type, status, priority, labels, due_date, position, ' +
-  'claimed_by, heartbeat_at, blocked_reason, external_ref, updated_at, ' +
+  'assignee_user_id, claimed_by, heartbeat_at, blocked_reason, external_ref, updated_at, ' +
   'resolution_kind, has_resolution, checkpoint_summary, preview:description'
 
 export type TaskListItem = Pick<
   Task,
   | 'id' | 'number' | 'title' | 'type' | 'status' | 'priority' | 'labels'
-  | 'due_date' | 'position' | 'claimed_by' | 'heartbeat_at' | 'blocked_reason'
-  | 'updated_at'
+  | 'due_date' | 'position' | 'assignee_user_id' | 'assignee' | 'claimed_by'
+  | 'heartbeat_at' | 'blocked_reason' | 'updated_at'
 > & {
   preview: string | null
   external_ref: string | null
@@ -232,16 +236,20 @@ export const listTasks = async (
     ),
   ])
 
+  // Rows straight off the wire carry `assignee_user_id` but not the named
+  // `assignee` — that is attached below, in bulk, by `withAssignees`.
+  type RawListItem = Omit<TaskListItem, 'assignee'>
+
   const all = (totals.data ?? []) as { status: string }[]
-  const clip = (t: TaskListItem) => ({
+  const clip = <T extends { preview: string | null }>(t: T): T => ({
     ...t,
     preview: t.preview ? t.preview.slice(0, PREVIEW_CHARS) : null,
   })
 
-  const owned = ((openRows.data ?? []) as unknown as TaskListItem[]).map(clip)
+  const owned = ((openRows.data ?? []) as unknown as RawListItem[]).map(clip)
 
   const guests = (
-    (guestRows.data ?? []) as unknown as (TaskListItem & {
+    (guestRows.data ?? []) as unknown as (RawListItem & {
       project: { key: string } | { key: string }[]
     })[]
   ).map((t) => ({
@@ -250,13 +258,16 @@ export const listTasks = async (
     guest: true,
   }))
 
-  const tasks = [...owned, ...guests]
+  const [tasks, recentlyClosed] = await Promise.all([
+    withAssignees([...owned, ...guests]),
+    withAssignees((((closedRows as { data?: unknown }).data ?? []) as RawListItem[]).map(clip)),
+  ])
 
   return {
     tasks,
     total: all.length + guests.length,
     closedHidden: includeClosed ? 0 : all.filter((t) => closedFilter.includes(t.status)).length,
-    recentlyClosed: (((closedRows as { data?: unknown }).data ?? []) as TaskListItem[]).map(clip),
+    recentlyClosed,
   }
 }
 
@@ -287,7 +298,8 @@ export const getTask = async (
     .eq('projects.key', key.toUpperCase())
     .eq('number', number)
     .maybeSingle()
-  return (data as unknown as (Task & { project: Project })) ?? null
+  if (!data) return null
+  return await withAssignee(data as unknown as Task & { project: Project })
 }
 
 /**

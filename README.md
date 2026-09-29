@@ -18,7 +18,9 @@ and the session written down when it ends.
 
 > **One shared workspace.** Every active user and agent can work across the same projects,
 > tasks and memory. Administrators manage membership, roles and agent keys; owner columns
-> remain attribution metadata rather than visibility boundaries.
+> remain attribution metadata rather than visibility boundaries. Every task is **assigned
+> to a person** — by default the human behind the agent's key that filed it — who owns it,
+> while the agent's claim only says who is executing it right now.
 >
 > Separate data — a personal and a work Cairn, say — means separate instances, and one
 > machine can use several ([below](#several-instances-on-one-machine)).
@@ -73,8 +75,12 @@ status	doing
 priority	medium
 created_at	2026-08-14T14:51:09.223Z
 ref	ACME-57
+assignee	Alice
 claimed_by	claude-code · Alice
 ```
+
+Alice owns it because it was her agent's key that filed it; `--assignee bob@acme.io` would
+have made it Bob's, with Alice's agent still the one on it.
 
 A claim is one conditional UPDATE. If somebody else holds it, `claim` exits **9** and says
 who, rather than guessing:
@@ -240,7 +246,7 @@ problem.
 | Refs | `ACME-42` — project key plus per-project number, stable in a transcript |
 | Types | `feature · bug · improvement · chore · spike · docs` |
 | Statuses | `backlog · todo · doing · in-review · done · cancelled` |
-| Structure | sub-tasks, blocked-by / blocks dependencies with cycle rejection, labels, priorities, due dates |
+| Structure | a human assignee on every task, apart from the agent holding it; sub-tasks, blocked-by / blocks dependencies with cycle rejection, labels, priorities, due dates |
 | Bodies | markdown in a WYSIWYG editor — syntax-highlighted code, GFM tables and task lists; bare refs like `ACME-42` become links |
 | Trails | comments for humans, an append-only work log for agents, file attachments, and a full activity history |
 | Views | list and board per project, a cross-project board at `/board` grouped and swim-laned by status, priority, type, project or agent, bulk edit with shift-click ranges, a cross-project home, a map of the knowledge corpus at `/knowledge/graph`, live updates over SSE |
@@ -375,16 +381,17 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | | |
 |---|---|
 | **Find and read** | |
-| `cairn check "<subject>"` | **Start here.** Prior work across all four stores, with a `~tokens` cost per row |
-| `cairn context [--scope project\|all] [--project K]` | The briefing: what you hold, what is in flight, where the last session here stopped. `--scope project` limits held work, stale claims, and the last session to the resolved project; the default `all` keeps cross-project awareness. An unresolved project is an error in project scope; an unknown explicit key returns 404. |
-| `cairn next` | **What to pick up, and why.** Finishing beats starting, so work you hold ranks above work dropped with a checkpoint, which ranks above anything not begun. Blocked, waiting, or actively held by another agent is never offered |
-| `cairn show <ref>` · `cairn list --project K` · `cairn projects` | Read one, many, or the project index |
+| `cairn check "<subject>" [--assignee me\|<who>]` | **Start here.** Prior work across all four stores, with a `~tokens` cost per row. `--assignee` narrows to that person's tasks |
+| `cairn context [--scope project\|all] [--project K]` | The briefing: what you hold, what is in flight (naming the owner when it is not your human), your human's open work here that nobody is on (five, most urgent first, then a count), where the last session here stopped. `--scope project` limits held work, stale claims, and the last session to the resolved project; the default `all` keeps cross-project awareness. An unresolved project is an error in project scope; an unknown explicit key returns 404. |
+| `cairn next [--assignee me\|<who>]` | **What to pick up, and why.** Finishing beats starting, so work you hold ranks above work dropped with a checkpoint, which ranks above anything not begun. Blocked, waiting, or actively held by another agent is never offered. Within a tier your human's work comes first; someone else's is still offered, with whose it is in the reason |
+| `cairn show <ref>` · `cairn list --project K` · `cairn projects` | Read one, many, or the project index. `list --assignee me\|<who>` is what a person owns; `--mine` is what this agent holds right now |
+| `cairn people` | Who work can be assigned to: name and email |
 | `cairn log <ref>` · `cairn history <ref>` | The work log, and what changed when and by whom |
 | `cairn recall <ref>` | Picking a task up: the decisions, findings and knowledge that bear on it, each with why it was picked. `claim` prints the top of it |
 | **File and change** | |
-| `cairn add "<title>" --project K --body -` | File work; a bug or spike needs a body of 40 characters or more (`--force-empty` when the title really is the whole story). Warns if something similar already exists. From an agent runtime it also claims the task, unless similar open work exists or you already hold a task in that project (it says which); `--no-start` only files it |
+| `cairn add "<title>" --project K --body -` | File work; a bug or spike needs a body of 40 characters or more (`--force-empty` when the title really is the whole story). Warns if something similar already exists. From an agent runtime it also claims the task, unless similar open work exists or you already hold a task in that project (it says which); `--no-start` only files it. Assigned to the human behind your key; `--assignee <email\|name\|id>` gives it to someone else |
 | `cairn add ... --start` | File it and claim it, always — for a person, or to override the agent default's hold-backs |
-| `cairn update <ref> --status S --priority P` | Change fields; `--project` moves it, `--also-project` widens it. `--status in-review` is written but not landed: unmerged, or merged and undeployed |
+| `cairn update <ref> --status S --priority P` | Change fields; `--assignee <who>` reassigns it, `--project` moves it, `--also-project` widens it. `--status in-review` is written but not landed: unmerged, or merged and undeployed |
 | `cairn done <ref> --resolution "…"` | Close. The resolution is required; `--duplicate-of <ref>` closes it as a copy of another. `--kind verified` when you closed it because somebody else's fix was already there — `fixed` would claim their work |
 | `cairn cancel <ref> --resolution "…"` | Drop it, and say why |
 | `cairn children <ref>` · `cairn add … --parent <ref>` | Sub-tasks |
@@ -440,9 +447,9 @@ schemas the routes validate against, so it cannot drift. Browsable at `/api-docs
 /context  /next                 the briefing a session opens with; what to pick up
 /activity                       recent activity across the workspace
 /projects  /projects/{id}       list, create, read, rename, rekey, delete
-/projects/{id}/tasks            list and create within a project
+/projects/{id}/tasks            list and create within a project; ?assignee= / assignee filters and sets the owner
 /projects/{id}/repos            the repositories a project claims
-/tasks/{ref}                    read, update, close, delete
+/tasks/{ref}                    read, update (incl. assignee), close, delete
 /tasks/{ref}/notes  /notes/{id} the work log
 /tasks/{ref}/comments           for the human
 /tasks/{ref}/activity           read history; POST git/run delivery evidence
@@ -459,6 +466,7 @@ schemas the routes validate against, so it cannot drift. Browsable at `/api-docs
 /sessions                       the episodic record
 /reconcile                      release claims that went quiet
 /events                         change stream (SSE)
+/people                         active users, for naming an assignee; open to agents too
 /users  /users/{id}             administrator-only membership, roles, /password and /restore
 /users/{id}/keys  /keys/{keyId} administrator-only agent keys: issue and revoke
 ```
@@ -647,6 +655,10 @@ filed as claude-code. When Claude Code's marker and a Codex marker are both pres
 walks up its parent processes and takes the nearest one named `codex` or `claude`. If `ps`
 cannot answer, the old order stands. Nothing is spawned when the environment is unambiguous.
 
+**A key also names a human: the user it was issued to.** A task an agent files is assigned
+to that person unless `--assignee` names someone else, and `--assignee me` means them. The
+agent label stays on the claim and on the history; the human is who the work belongs to.
+
 The CLI is deliberately dependency-free — Node 22's built-in `fetch` is enough — so it can
 be dropped onto a box and run with no install step.
 
@@ -786,8 +798,8 @@ ran and understood nothing".
 
 Native tool-calling for Claude Code and Codex; OpenClaw reaches it through `mcporter`. The
 server lives in [`mcp/`](./mcp), holds no logic of its own, and
-exposes 21 of the CLI's verbs as typed tools — `context`, `next`, `history` and the session
-verbs stay CLI-only.
+exposes 21 of the CLI's verbs as typed tools — `context`, `next`, `history`, `people` and the
+session verbs stay CLI-only. `cairn_add` and `cairn_list` take an optional `assignee`.
 
 Unlike the CLI it is not dependency-free: it imports the MCP SDK and needs a `node_modules`
 beside it, so it is installed rather than copied.
@@ -877,6 +889,8 @@ cairn note ACME-42 "…" --instance work                                # or CAI
   (`CAIRN_BASE_URL`, then `~/.cairn/env`, then localhost). Interrupted, it finishes on a re-run.
 - `CAIRN_API_KEY` in the environment is refused once instances are configured — it cannot say
   which instance issued it — and so is a `CAIRN_BASE_URL` that disagrees with the chosen one.
+- People are per instance too: `--assignee me` is resolved by the server that answers, as
+  the human behind that instance's key.
 - Without `instances.json` nothing changes.
 
 **Which instance a command goes to**, when it does not say, is decided in this order, and
@@ -1156,7 +1170,7 @@ restarted, and restarting it would interrupt any job in flight.
 
 | | |
 |---|---|
-| the tracker | `projects` (+ `project_repos`, `project_former_keys`), `tasks` (+ `task_projects` for extra projects), `task_notes`, `task_comments`, `task_attachments`, `task_deps`, `task_mentions`, `task_activity_events` |
+| the tracker | `projects` (+ `project_repos`, `project_former_keys`), `tasks` (+ `task_projects` for extra projects; `assignee_user_id` is the owning human, `claimed_by` the agent on it, `actor_id` who filed it), `task_notes`, `task_comments`, `task_attachments`, `task_deps`, `task_mentions`, `task_activity_events` |
 | what we know | `knowledge` + `knowledge_projects` / `knowledge_entities` / `knowledge_files`, and `knowledge_revisions` for every version it replaced |
 | what happened, and where | `sessions`, `file_touches` |
 | groupings | `entities` + `project_entities`, between one project and everything |

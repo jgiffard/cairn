@@ -5,6 +5,7 @@ import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 import { resolveProject } from '@/lib/api/project-keys'
+import { resolveAssignee, withAssignees } from '@/lib/api/people'
 import { createTaskSchema, TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 
 export const dynamic = 'force-dynamic'
@@ -31,6 +32,11 @@ const listQuery = z.object({
     .transform((v) => v === 'true'),
   /** Kept for callers that genuinely want somebody else's holdings. */
   claimed_by: z.string().optional(),
+  /**
+   * Whose tasks: `me`, an email, a display name or a user id. Unlike `mine`,
+   * which is what this agent holds right now, this is what a human owns.
+   */
+  assignee: z.string().trim().min(1).max(320).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 })
@@ -46,7 +52,7 @@ export const GET = route<{ id: string }>({
 
     const parsed = listQuery.safeParse(Object.fromEntries(url.searchParams))
     if (!parsed.success) return fail('validation_failed', 'Bad query parameters.')
-    const { status, type, label, mine, claimed_by, limit, offset } = parsed.data
+    const { status, type, label, mine, claimed_by, assignee, limit, offset } = parsed.data
 
     let query = admin()
       .from('tasks')
@@ -70,6 +76,11 @@ export const GET = route<{ id: string }>({
     if (type) query = query.eq('type', type)
     if (label) query = query.contains('labels', [label])
     if (claimed_by) query = query.eq('claimed_by', claimed_by)
+    if (assignee) {
+      const owner = await resolveAssignee(assignee, actor.userId)
+      if (!owner.ok) return fail(owner.code, owner.error)
+      query = query.eq('assignee_user_id', owner.person.id)
+    }
 
     if (mine) {
       query = query.eq('claimed_by', actor.actorId)
@@ -101,7 +112,7 @@ export const GET = route<{ id: string }>({
       .range(offset, offset + limit - 1)
 
     if (error) return failFromDb(error)
-    return ok({ count, offset, limit, tasks: data, ...(renamed ? { renamed_from: renamed } : {}) })
+    return ok({ count, offset, limit, tasks: await withAssignees(data ?? []), ...(renamed ? { renamed_from: renamed } : {}) })
   },
 })
 
@@ -122,6 +133,9 @@ export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
       parentId = parent.id
     }
 
+    const owner = await resolveAssignee(body.assignee ?? 'me', actor.userId)
+    if (!owner.ok) return fail(owner.code, owner.error)
+
     const { data, error } = await admin()
       .from('tasks')
       .insert({
@@ -136,8 +150,9 @@ export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
         due_date: body.dueDate ?? null,
         actor_type: actor.actorType,
         actor_id: actor.actorId,
+        assignee_user_id: owner.person.id,
       })
-      .select('id, number, title, type, status, priority, labels, created_at')
+      .select('id, number, title, type, status, priority, labels, assignee_user_id, created_at')
       .single()
 
     if (error) return failFromDb(error)
@@ -149,11 +164,11 @@ export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
       actor_type: actor.actorType,
       actor_id: actor.actorId,
       event: 'created',
-      data: { type: body.type, status: body.status, ...(actor.host ? { host: actor.host } : {}) },
+      data: { type: body.type, status: body.status, assignee: owner.person.name, ...(actor.host ? { host: actor.host } : {}) },
     })
 
     return ok(
-      { ...data, ref: `${project.key}-${data.number}`, ...(renamed ? { renamed_from: renamed } : {}) },
+      { ...data, assignee: owner.person, ref: `${project.key}-${data.number}`, ...(renamed ? { renamed_from: renamed } : {}) },
       { status: 201 },
     )
   },

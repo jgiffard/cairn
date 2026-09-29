@@ -80,6 +80,9 @@ export const buildDigest = async (task: Record<string, unknown>) => {
     status: task.status,
     priority: task.priority,
     labels: task.labels,
+    // Whose it is, and who is on it: a human owns the task, an agent holds it.
+    assignee: (task.assignee as { name?: string } | null | undefined)?.name ?? null,
+    createdBy: task.actor_id,
     claimedBy: task.claimed_by,
     // Which SESSION holds it, not just which human. claimedBy is an actorLabel
     // shared by every Claude Code session on a machine, so on its own it

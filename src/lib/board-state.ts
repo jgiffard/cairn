@@ -15,13 +15,18 @@ import type { BoardProject, BoardTask } from '@/lib/board-data'
  * `applySelection` (src/lib/selection.ts) uses for the same reason.
  */
 
-export const GROUP_BY_VALUES = ['status', 'priority', 'type', 'project', 'agent'] as const
+export const GROUP_BY_VALUES = ['status', 'priority', 'type', 'project', 'agent', 'assignee'] as const
 export type GroupBy = (typeof GROUP_BY_VALUES)[number]
 
-export const SWIMLANE_VALUES = ['none', 'project', 'priority', 'agent'] as const
+export const SWIMLANE_VALUES = ['none', 'project', 'priority', 'agent', 'assignee'] as const
 export type Swimlane = (typeof SWIMLANE_VALUES)[number]
 
-/** Column/lane value standing in for "nobody holds this." Never a real agent id. */
+/**
+ * Column/lane value standing in for "nobody holds this." Never a real agent
+ * id. The value is persisted in shared board links, so it stays exactly as
+ * it always has even though the label shown for it is now "Unclaimed" —
+ * `claimed_by`, unlike `assignee_user_id`, is genuinely nullable.
+ */
 export const UNASSIGNED = '__unassigned__'
 
 /** Joins a lane value and a column value into one droppable id. Chosen to be
@@ -36,6 +41,7 @@ export type BoardFilters = {
   priorities: string[]
   labels: string[]
   agents: string[]
+  assignees: string[]
 }
 
 export const DEFAULT_FILTERS: BoardFilters = {
@@ -46,6 +52,7 @@ export const DEFAULT_FILTERS: BoardFilters = {
   priorities: [],
   labels: [],
   agents: [],
+  assignees: [],
 }
 
 export const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
@@ -70,6 +77,7 @@ export const parseFilters = (search: string): BoardFilters => {
     priorities: listParam(params, 'priority'),
     labels: listParam(params, 'label'),
     agents: listParam(params, 'agent'),
+    assignees: listParam(params, 'assignee'),
   }
 }
 
@@ -84,6 +92,7 @@ export const serializeFilters = (filters: BoardFilters): string => {
   if (filters.priorities.length > 0) params.set('priority', filters.priorities.join(','))
   if (filters.labels.length > 0) params.set('label', filters.labels.join(','))
   if (filters.agents.length > 0) params.set('agent', filters.agents.join(','))
+  if (filters.assignees.length > 0) params.set('assignee', filters.assignees.join(','))
   return params.toString()
 }
 
@@ -118,6 +127,7 @@ export const matchesFilters = (task: BoardTask, filters: BoardFilters): boolean 
   if (filters.priorities.length > 0 && !filters.priorities.includes(task.priority)) return false
   if (filters.labels.length > 0 && !filters.labels.some((l) => task.labels.includes(l))) return false
   if (filters.agents.length > 0 && !filters.agents.includes(task.claimed_by ?? UNASSIGNED)) return false
+  if (filters.assignees.length > 0 && !filters.assignees.includes(task.assignee_user_id)) return false
   return true
 }
 
@@ -128,6 +138,7 @@ export const groupValue = (task: BoardTask, groupBy: GroupBy): string => {
   if (groupBy === 'priority') return task.priority
   if (groupBy === 'type') return task.type
   if (groupBy === 'project') return task.project_key
+  if (groupBy === 'assignee') return task.assignee_user_id
   return task.claimed_by ?? UNASSIGNED
 }
 
@@ -140,6 +151,10 @@ export const applyGroupValue = (task: BoardTask, groupBy: GroupBy, value: string
   if (groupBy === 'priority') return { ...task, priority: value as TaskPriority }
   if (groupBy === 'type') return { ...task, type: value as TaskType }
   if (groupBy === 'project') return { ...task, project_key: value }
+  // The name shown on the card is `task.assignee.name`, not this id, and this
+  // function has no people list to resolve it from — so the card keeps
+  // showing the outgoing name until `router.refresh()` brings the real one.
+  if (groupBy === 'assignee') return { ...task, assignee_user_id: value }
   return { ...task, claimed_by: value === UNASSIGNED ? null : value }
 }
 
@@ -154,6 +169,18 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   cancelled: 'Cancelled',
 }
 
+/** Distinct assignees seen across a task set, named off the row's own
+ * `assignee` embed rather than a separate people list — every task carries
+ * one, so the set of columns/lanes needs nothing beyond what is already
+ * loaded. */
+const assigneesOf = (tasks: BoardTask[]): ColumnDef[] => {
+  const names = new Map<string, string>()
+  for (const t of tasks) names.set(t.assignee_user_id, t.assignee?.name ?? t.assignee_user_id)
+  return [...names.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+}
+
 /**
  * Columns are drop targets, so their set is deliberately stable regardless of
  * the active filters — computed from every loaded task, not the filtered
@@ -165,9 +192,10 @@ export const columnsFor = (groupBy: GroupBy, tasks: BoardTask[], projects: Board
   if (groupBy === 'priority') return TASK_PRIORITIES.map((p) => ({ value: p, label: capitalize(p) }))
   if (groupBy === 'type') return TASK_TYPES.map((t) => ({ value: t, label: capitalize(t) }))
   if (groupBy === 'project') return projects.map((p) => ({ value: p.key, label: p.title }))
+  if (groupBy === 'assignee') return assigneesOf(tasks)
 
   const agents = [...new Set(tasks.map((t) => t.claimed_by).filter((a): a is string => Boolean(a)))].sort()
-  return [{ value: UNASSIGNED, label: 'Unassigned' }, ...agents.map((a) => ({ value: a, label: a }))]
+  return [{ value: UNASSIGNED, label: 'Unclaimed' }, ...agents.map((a) => ({ value: a, label: a }))]
 }
 
 /** The task's value along the swimlane dimension. Only meaningful lanes are
@@ -177,6 +205,7 @@ export const laneValueOf = (task: BoardTask, swimlane: Swimlane): string => {
   if (swimlane === 'none') return 'all'
   if (swimlane === 'project') return task.project_key
   if (swimlane === 'priority') return task.priority
+  if (swimlane === 'assignee') return task.assignee_user_id
   return task.claimed_by ?? UNASSIGNED
 }
 
@@ -196,7 +225,8 @@ export const lanesFor = (swimlane: Swimlane, visible: BoardTask[], projects: Boa
   if (swimlane === 'priority') {
     return TASK_PRIORITIES.filter((p) => present.has(p)).map((p) => ({ value: p, label: capitalize(p) }))
   }
+  if (swimlane === 'assignee') return assigneesOf(visible)
   return [...present]
     .sort((a, b) => (a === UNASSIGNED ? -1 : b === UNASSIGNED ? 1 : a.localeCompare(b)))
-    .map((a) => ({ value: a, label: a === UNASSIGNED ? 'Unassigned' : a }))
+    .map((a) => ({ value: a, label: a === UNASSIGNED ? 'Unclaimed' : a }))
 }

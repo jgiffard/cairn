@@ -43,6 +43,15 @@ const describe = (entry: ActivityEntry): React.ReactNode => {
       return <>changed the type to {val(d.to)} <span className="text-fg-subtle">from {val(d.from)}</span></>
     case 'renamed':
       return <>renamed it <span className="text-fg-subtle">from “{val(d.from)}”</span></>
+    case 'assignee_changed':
+      return d.to_name ? (
+        <>
+          assigned this to {String(d.to_name)}
+          {d.from_name ? <span className="text-fg-subtle"> from {String(d.from_name)}</span> : null}
+        </>
+      ) : (
+        <>reassigned this</>
+      )
     case 'labels_changed':
       return <>set the labels to {Array.isArray(d.to) && d.to.length ? d.to.join(', ') : 'none'}</>
     case 'due_date_changed':

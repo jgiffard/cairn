@@ -22,6 +22,7 @@ const GROUP_BY_LABEL: Record<GroupBy, string> = {
   type: 'Type',
   project: 'Project',
   agent: 'Agent',
+  assignee: 'Assignee',
 }
 
 const SWIMLANE_LABEL: Record<Swimlane, string> = {
@@ -29,6 +30,7 @@ const SWIMLANE_LABEL: Record<Swimlane, string> = {
   project: 'Project',
   priority: 'Priority',
   agent: 'Agent',
+  assignee: 'Assignee',
 }
 
 /**
@@ -124,11 +126,13 @@ export const BoardToolbar = ({
   onChange,
   projects,
   agentOptions,
+  assigneeOptions,
 }: {
   filters: BoardFilters
   onChange: (next: BoardFilters) => void
   projects: BoardProject[]
   agentOptions: string[]
+  assigneeOptions: { value: string; label: string }[]
 }) => {
   const [knownLabels, setKnownLabels] = useState<string[]>([])
 
@@ -145,7 +149,7 @@ export const BoardToolbar = ({
   }, [])
 
   const agentFilterOptions = [
-    { value: UNASSIGNED, label: 'Unassigned' },
+    { value: UNASSIGNED, label: 'Unclaimed' },
     ...agentOptions.map((a) => ({ value: a, label: a })),
   ]
 
@@ -214,6 +218,12 @@ export const BoardToolbar = ({
         options={agentFilterOptions}
         selected={filters.agents}
         onChange={(v) => onChange({ ...filters, agents: v })}
+      />
+      <FilterMenu
+        label="Assignee"
+        options={assigneeOptions}
+        selected={filters.assignees}
+        onChange={(v) => onChange({ ...filters, assignees: v })}
       />
     </div>
   )

@@ -73,10 +73,18 @@ const TOOLS = [
       properties: {
         subject: { type: 'string', description: 'What you are about to work on.' },
         project: { type: 'string', description: 'Optional project key, e.g. CAI.' },
+        assignee: {
+          type: 'string',
+          description: 'Only tasks assigned to this person: "me", an email, a name or a user id.',
+        },
       },
       required: ['subject'],
     },
-    run: (a) => ['check', a.subject, ...(a.project ? ['--project', a.project] : [])],
+    run: (a) => [
+      'check', a.subject,
+      ...(a.project ? ['--project', a.project] : []),
+      ...(a.assignee ? ['--assignee', a.assignee] : []),
+    ],
   },
   {
     name: 'cairn_show',
@@ -319,6 +327,10 @@ const TOOLS = [
         project: { type: 'string' },
         status: { type: 'string', enum: ['backlog', 'todo', 'doing', 'in-review', 'done', 'cancelled'] },
         type: { type: 'string', enum: ['feature', 'bug', 'improvement', 'chore', 'spike', 'docs'] },
+        assignee: {
+          type: 'string',
+          description: 'Whose tasks: "me" (the human behind this key), an email, a name or a user id.',
+        },
       },
       required: ['project'],
     },
@@ -326,6 +338,7 @@ const TOOLS = [
       'list', '--project', a.project,
       ...(a.status ? ['--status', a.status] : []),
       ...(a.type ? ['--type', a.type] : []),
+      ...(a.assignee ? ['--assignee', a.assignee] : []),
     ],
   },
   {
@@ -341,6 +354,13 @@ const TOOLS = [
         type: { type: 'string', enum: ['feature', 'bug', 'improvement', 'chore', 'spike', 'docs'] },
         priority: { type: 'string', enum: ['urgent', 'high', 'medium', 'low'] },
         body: { type: 'string', description: 'Markdown description.' },
+        assignee: {
+          type: 'string',
+          description:
+            'The human who owns it: an email, a name or a user id. Omit it and the task is ' +
+            'assigned to the human behind this key. Owning is not claiming: the claim is ' +
+            'which agent is executing it now.',
+        },
       },
       required: ['title', 'project'],
     },
@@ -349,6 +369,7 @@ const TOOLS = [
       ...(a.type ? ['--type', a.type] : []),
       ...(a.priority ? ['--priority', a.priority] : []),
       ...(a.body ? ['--body', a.body] : []),
+      ...(a.assignee ? ['--assignee', a.assignee] : []),
     ],
   },
   {

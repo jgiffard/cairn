@@ -232,6 +232,11 @@ describe('documented invocations stay silent', () => {
     ['check', 'x', '--tasks'],
     ['show', 'CAI-1', '--full'],
     ['projects', '--archived'],
+    ['add', 'A title', '--project', 'CAI', '--assignee', 'bob@acme.io'],
+    ['update', 'CAI-1', '--assignee', 'me'],
+    ['list', 'CAI', '--assignee', 'me'],
+    ['next', '--project', 'CAI', '--assignee', 'me'],
+    ['check', 'x', '--assignee', 'julien@acme.io'],
   ]
 
   it.each(invocations.map((args) => [args.join(' '), args] as const))(

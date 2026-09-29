@@ -898,7 +898,7 @@ const flags = new Proxy(typedFlags, {
  * the help text is in this set. Add to both, or the test says so.
  */
 const KNOWN_FLAGS = new Set([
-  'adopt', 'agent', 'all', 'all-instances', 'allow-dangling', 'also-project', 'archived', 'body',
+  'adopt', 'agent', 'all', 'all-instances', 'allow-dangling', 'also-project', 'archived', 'assignee', 'body',
   'branch', 'completed',
   'confirm', 'cwd', 'dangling', 'default', 'days', 'description', 'dir', 'dry-run',
   'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'file', 'files', 'folder',
@@ -2193,21 +2193,39 @@ const renderContext = (d, { fileOnly = false } = {}) => {
     // which is how ten of them accumulated without anyone noticing.
     const live = d.inFlight.filter((t) => !t.stalled)
     const stalled = d.inFlight.filter((t) => t.stalled)
+    // Named only when it is somebody else's: an agent should not pick up
+    // Julien's dropped work thinking it is its own human's (CAIRN-310).
+    const whose = (t) => (t.assignee ? ` · ${t.assignee}'s` : '')
 
     if (live.length) {
       out.push('', 'In flight here:')
       for (const t of live) {
         const who = t.claimedBy ? `  (${t.claimedBy})` : ''
-        out.push(`  ${t.ref}  ${t.status}  ${truncate(t.title, 52)}${who}`)
+        out.push(`  ${t.ref}  ${t.status}  ${truncate(t.title, 52)}${who}${whose(t)}`)
       }
     }
 
     if (stalled.length) {
       out.push('', 'Started and dropped here -- nobody is on these:')
       for (const t of stalled) {
-        out.push(`  ${t.ref}  ${t.status}  ${truncate(t.title, 44)}  quiet ${t.quietFor}`)
+        out.push(`  ${t.ref}  ${t.status}  ${truncate(t.title, 44)}  quiet ${t.quietFor}${whose(t)}`)
       }
       out.push('  Finish one and close it with a resolution, or move it back to todo.')
+    }
+  }
+
+  // Work that is the reader's human's and that no agent holds: without this
+  // it surfaces only when somebody thinks to ask for it.
+  if (d.unattended?.tasks?.length) {
+    out.push('', 'Assigned to you, nobody on it:')
+    for (const t of d.unattended.tasks) {
+      const pressing = t.priority === 'urgent' || t.priority === 'high' ? `  [${t.priority}]` : ''
+      out.push(`  ${t.ref}  ${t.status}  ${truncate(t.title, 52)}${pressing}`)
+    }
+    if (d.unattended.more > 0) {
+      // `next` rather than `list`: list includes closed work, and the question
+      // this answers is which of them to pick up.
+      out.push(`  +${d.unattended.more} more -- cairn next --assignee me`)
     }
   }
 
@@ -2251,10 +2269,20 @@ const renderContext = (d, { fileOnly = false } = {}) => {
 const BRIEFING_RULES = [
   'Start with: cairn check "<subject>". Claim what you work (agents\' add claims it); one task per sweep.',
   'Dead end: note --kind attempt. Before yielding: checkpoint. Not landed: update --status in-review.',
-  'Close: done --kind fixed|verified|answered.',
+  'Close: done --kind fixed|verified|answered. Filing for someone else: add --assignee.',
 ]
 
 const truncate = (s, n) => (!s ? '' : s.length > n ? `${s.slice(0, n - 1)}…` : s)
+
+/**
+ * A written task as TSV names its assignee in one line, not five: the name is
+ * what a reader checks, and the id and email are in --json.
+ */
+const named = (task) => {
+  if (FORMAT !== 'tsv' || !task?.assignee) return task
+  const { assignee_user_id: _id, assignee, ...rest } = task
+  return { ...rest, assignee: assignee.name }
+}
 
 /**
  * How far to trust a fact, in one word. `stale` is evidence: sessions reworked
@@ -2272,22 +2300,30 @@ const HELP = `cairn — agent-first task tracker and shared memory
   ALWAYS START HERE
     cairn check "<subject>"        what has already been done or debugged
                                    searches tasks, work-log notes, knowledge and
-                                   sessions; --kinds task,note,knowledge,session
+                                   sessions; --kinds task,note,knowledge,session;
+                                   --assignee me|<who>: only that person's tasks
 
   read
-    cairn next [--project K]       what to pick up, and why — ranked, never blocked
-    cairn list [--project K] [--status S] [--type T] [--label L] [--mine]
+    cairn next [--project K] [--assignee me|<who>]
+                                   what to pick up, and why — ranked, never blocked;
+                                   your human's work first, anyone else's says whose
+    cairn list [--project K] [--status S] [--type T] [--label L] [--mine] [--assignee me|<who>]
+                                   --mine: what this agent holds now; --assignee: whose it is
     cairn show <ref>               e.g. CAI-42
     cairn log <ref> [--kind K]     the work log
     cairn projects
+    cairn people                   who work can be assigned to
 
   write
-    cairn add "<title>" --project K [--type bug] [--priority high] [--body -]
+    cairn add "<title>" --project K [--type bug] [--priority high] [--body -] [--assignee <who>]
+                                   assigned to your human (this key's owner) unless --assignee
+                                   names another: email, name or id. The assignee owns the
+                                   work; the claim (held) is which agent is doing it right now
     cairn add ... --start          file it and claim it, when you are starting now
                                    (the default for an agent runtime, unless it
                                    already holds work here or similar open work
                                    exists; --no-start to only file it)
-    cairn update <ref> [--title T] [--status S] [--type T] [--priority P]
+    cairn update <ref> [--title T] [--status S] [--type T] [--priority P] [--assignee <who>]
     cairn update <ref> --also-project HM,AT      work that spans several projects
     cairn update <ref> --project OTHER      moves it; the ref changes
     cairn note <ref> "<text>" [--kind note|finding|decision|attempt|handoff]
@@ -2472,6 +2508,9 @@ const commands = {
     if (flags.type) params.set('type', flags.type)
     if (flags.kinds) params.set('kinds', flags.kinds)
     if (flags.tasks) params.set('tasksOnly', '1')
+    // Whose tasks. Like --type, a statement about tasks, so the answer is
+    // tasks only.
+    if (flags.assignee) params.set('assignee', flags.assignee)
     const data = await request('GET', `/api/v1/search?${params}`)
     // The exact-ref hit, when the ref asked for used a retired key: said before
     // the table, so "AC-113" coming back as HOL-113 is not a mystery.
@@ -2525,6 +2564,9 @@ const commands = {
     // variable and, when it was unset, asked for tasks held by the empty
     // string -- an answer that looked like an answer.
     if (flags.mine) params.set('mine', 'true')
+    // Whose, not who is on it: `me` is the human behind this key, resolved by
+    // the server of whichever instance answers.
+    if (flags.assignee) params.set('assignee', flags.assignee)
     const data = await request('GET', `/api/v1/projects/${project}/tasks?${params}`)
     emit(data, {
       rows: (d) =>
@@ -2533,11 +2575,12 @@ const commands = {
           status: t.status,
           type: t.type,
           priority: t.priority,
+          assignee: t.assignee?.name ?? '',
           held: t.claimed_by ?? '',
           answered: t.resolution ? 'yes' : '',
           title: truncate(t.title, 70),
         })),
-      columns: ['ref', 'status', 'type', 'priority', 'held', 'answered', 'title'],
+      columns: ['ref', 'status', 'type', 'priority', 'assignee', 'held', 'answered', 'title'],
     })
   },
 
@@ -2576,6 +2619,11 @@ const commands = {
       'was',
     ]
     emit(rows, { columns })
+  },
+
+  async people() {
+    const data = await request('GET', '/api/v1/people')
+    emit(data, { rows: (d) => d.map(({ name, email }) => ({ name, email })), columns: ['name', 'email'] })
   },
 
   async add() {
@@ -2679,7 +2727,9 @@ const commands = {
     for (const k of ['type', 'status', 'priority']) if (flags[k]) body[k] = flags[k]
     if (flags.label) body.labels = String(flags.label).split(',')
     if (flags.parent) body.parentRef = flags.parent
-    const created = await request('POST', `/api/v1/projects/${project}/tasks`, body)
+    // Omitted, the server assigns it to the human behind this key.
+    if (flags.assignee) body.assignee = flags.assignee
+    const created = named(await request('POST', `/api/v1/projects/${project}/tasks`, body))
 
     // File-and-work-it-now is the pattern that skips claiming: the agent that
     // files a task and finishes it in the same session never perceives a
@@ -2728,6 +2778,7 @@ const commands = {
     if (flags.kind) body.resolutionKind = flags.kind
     if (flags.parent) body.parentRef = flags.parent
     if (flags['no-parent']) body.parentRef = null
+    if (flags.assignee) body.assignee = flags.assignee
     // Moving renumbers the task, so the response reports the new ref.
     if (flags.project) body.project = flags.project
     // Widening does not: the task keeps its home project and its ref, and only
@@ -2737,7 +2788,7 @@ const commands = {
       body.duplicateOf = flags['duplicate-of']
       body.resolutionKind = 'duplicate'
     }
-    emit(await request('PATCH', `/api/v1/tasks/${ref}`, body))
+    emit(named(await request('PATCH', `/api/v1/tasks/${ref}`, body)))
   },
 
   async done() {
@@ -3679,6 +3730,7 @@ const commands = {
     const params = new URLSearchParams()
     const project = flags.project ?? projectForDir(process.cwd())
     if (project) params.set('project', project)
+    if (flags.assignee) params.set('assignee', flags.assignee)
     const data = await request('GET', `/api/v1/next?${params}`)
 
     if (FORMAT === 'json') return emit(data)
@@ -3690,7 +3742,9 @@ const commands = {
       return
     }
 
-    const line = (t) => `${t.ref}  ${t.title}`
+    // The assignee rides on every line: an agent choosing from "then" should
+    // not have to open a task to learn it is somebody else's.
+    const line = (t) => `${t.ref}  ${t.title}${t.assignee ? `  · ${t.assignee}` : ''}`
     process.stdout.write(
       `${line(data.pick)}\n  ${data.pick.reason}\n  ${data.pick.priority} · ${data.pick.status}` +
         `\n\n  cairn claim ${data.pick.ref}\n` +

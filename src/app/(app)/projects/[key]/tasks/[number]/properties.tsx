@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ChevronsUpDown } from 'lucide-react'
 import { Avatar, LabelPill, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
+import { usePeople } from '@/components/people-context'
 import { ResolutionDialog } from '../../resolution-dialog'
 import { AlsoIn } from './also-in'
 import { DependencyEditor } from './dependency-editor'
@@ -106,6 +107,8 @@ const SelectRow = <T extends string>({
   </div>
 )
 
+type OptimisticValues = Partial<Pick<Task, 'status' | 'priority' | 'type' | 'assignee_user_id' | 'assignee'>>
+
 export const Properties = ({
   task,
   project,
@@ -121,24 +124,25 @@ export const Properties = ({
 }) => {
   const router = useRouter()
   const request = useMutate()
+  const { people } = usePeople()
   const stale = useRenderedClaimStale(task.heartbeat_at)
   const [pendingClose, setPendingClose] = useState<TaskStatus | null>(null)
   // An optimistic overlay, stamped with the version of the task it was applied
   // to. When the refresh lands `updated_at` moves on and the overlay stops
   // matching, so it retires itself without an effect clearing state.
-  const [optimistic, setOptimistic] = useState<{
-    at: string
-    values: Partial<Pick<Task, 'status' | 'priority' | 'type'>>
-  } | null>(null)
+  const [optimistic, setOptimistic] = useState<{ at: string; values: OptimisticValues } | null>(null)
 
   const shown =
     optimistic && optimistic.at === task.updated_at ? { ...task, ...optimistic.values } : task
 
-  const patch = async (body: Record<string, unknown>) => {
+  const patch = async (
+    body: Record<string, unknown>,
+    optimisticValues: OptimisticValues = body as OptimisticValues,
+  ) => {
     // Applied before the request so the icon moves on click. On a loaded host
     // the round trip is over a second, and waiting for it reads as a dropped
     // click.
-    setOptimistic({ at: task.updated_at, values: body as Partial<Task> })
+    setOptimistic({ at: task.updated_at, values: optimisticValues })
     const result = await request(`/api/v1/tasks/${task.id}`, { method: 'PATCH', body })
     // Status asks for a resolution before it gets here, but priority and type
     // had no guard at all: any refusal rolled the dropdown back with nothing
@@ -149,6 +153,11 @@ export const Properties = ({
     }
     router.refresh()
     return true
+  }
+
+  const onAssignee = (userId: string) => {
+    const person = people.find((p) => p.id === userId) ?? null
+    void patch({ assignee: userId }, { assignee_user_id: userId, assignee: person })
   }
 
   const onStatus = (next: TaskStatus) => {
@@ -179,6 +188,43 @@ export const Properties = ({
           icon={<PriorityIcon priority={shown.priority} />}
           onChange={(v: TaskPriority) => void patch({ priority: v })}
         />
+      </Section>
+
+      {/* The human who owns the work, editable — distinct from who is
+          currently holding it below. Every task has one; there is no empty
+          state to draw. */}
+      <Section title="Assignee">
+        <div className={EDITABLE}>
+          <Avatar name={shown.assignee?.name ?? 'Unknown'} size={16} />
+          <span className="text-fg text-[0.8125rem]">
+            {shown.assignee?.name ?? 'Unknown'}
+            {shown.assignee && !shown.assignee.active ? (
+              <span className="text-fg-subtle"> (inactive)</span>
+            ) : null}
+          </span>
+          <Affordance />
+          <select
+            value={shown.assignee_user_id}
+            onChange={(e) => onAssignee(e.target.value)}
+            className="absolute inset-0 cursor-pointer opacity-0"
+            aria-label="Assignee"
+          >
+            {/* The current assignee may have gone inactive since — `listPeople`
+                only offers active users, so their own option is added back in
+                or the select would silently show someone else. */}
+            {shown.assignee && !people.some((p) => p.id === shown.assignee_user_id) && (
+              <option value={shown.assignee_user_id}>{shown.assignee.name} (inactive)</option>
+            )}
+            {people.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      </Section>
+
+      {/* The agent actually holding it right now, which may be nobody even
+          though the task is always assigned to someone. */}
+      <Section title="Held by">
         <div className="flex h-[1.75rem] items-center gap-2">
           {task.claimed_by ? (
             <>
@@ -196,7 +242,7 @@ export const Properties = ({
           ) : (
             <>
               <span className="border-border-strong size-[1rem] rounded-full border border-dashed" />
-              <span className="text-fg-subtle text-[0.8125rem]">Unassigned</span>
+              <span className="text-fg-subtle text-[0.8125rem]">Unclaimed</span>
             </>
           )}
         </div>
@@ -281,6 +327,15 @@ export const Properties = ({
               </div>
             ))}
         </dl>
+      </Section>
+
+      {/* Frozen at creation — unlike the assignee above, this never changes
+          hands and never renames itself when a person does. */}
+      <Section title="Created by" className="hidden lg:flex">
+        <span className="text-fg-muted flex h-[1.75rem] items-center gap-2 text-[0.8125rem]">
+          <Avatar name={task.actor_id} size={16} />
+          <span className="min-w-0 truncate">{task.actor_id}</span>
+        </span>
       </Section>
 
       {task.attempt > 1 && (

@@ -285,3 +285,112 @@ describe('the briefing', () => {
     expect(stdout).not.toContain('Start with')
   })
 })
+
+/**
+ * The assignee is whose the task is; the claim is which agent is on it. The
+ * CLI only carries the word — `me`, an email, a name — and the server resolves
+ * it, so these assert what reached the wire and that the answer names a person
+ * in one line rather than five.
+ */
+describe('the assignee (CAIRN-310)', () => {
+  const alice = { id: 'u-1', email: 'alice@acme.io', name: 'Alice', active: true }
+
+  it('is left to the server when add does not name one, and printed by name', async () => {
+    const seen: Seen[] = []
+    const base = await serve((req) => {
+      if (req.path.startsWith('/api/v1/search')) return { results: [] }
+      return { ...created, assignee_user_id: alice.id, assignee: alice }
+    }, seen)
+    const { code, stdout } = await run(['add', 'Wire the relay', '--project', 'ACME'], base)
+    expect(code).toBe(0)
+    const post = seen.find((s) => s.method === 'POST' && s.path.endsWith('/projects/ACME/tasks'))
+    expect(post?.body).not.toHaveProperty('assignee')
+    expect(stdout).toContain('assignee\tAlice')
+    expect(stdout).not.toContain('assignee.email')
+    expect(stdout).not.toContain('assignee_user_id')
+  })
+
+  it('is sent as given by add, update and list', async () => {
+    const seen: Seen[] = []
+    const base = await serve((req) => {
+      if (req.path.startsWith('/api/v1/search')) return { results: [] }
+      if (req.path.includes('/tasks?')) return { count: 1, tasks: [{ number: 7, status: 'todo', type: 'bug', priority: 'high', title: 'T', claimed_by: 'codex · Bob', assignee: alice, project: { key: 'ACME' } }] }
+      return created
+    }, seen)
+    await run(['add', 'Wire the relay', '--project', 'ACME', '--assignee', 'bob@acme.io'], base)
+    await run(['update', 'ACME-7', '--assignee', 'me'], base)
+    const { stdout } = await run(['list', 'ACME', '--assignee', 'me'], base)
+    expect(seen.find((s) => s.method === 'POST')?.body?.assignee).toBe('bob@acme.io')
+    expect(seen.find((s) => s.method === 'PATCH')?.body?.assignee).toBe('me')
+    expect(seen.some((s) => s.method === 'GET' && s.path.includes('assignee=me'))).toBe(true)
+    const [, header, row] = stdout.trim().split('\n')
+    expect(header).toBe('ref\tstatus\ttype\tpriority\tassignee\theld\tanswered\ttitle')
+    expect(row).toContain('Alice\tcodex · Bob')
+  })
+
+  it('people lists who can be assigned, name and email only', async () => {
+    const base = await serve(() => [alice], [])
+    const { code, stdout } = await run(['people'], base)
+    expect(code).toBe(0)
+    expect(stdout.trim().split('\n')).toEqual(['#1', 'name\temail', 'Alice\talice@acme.io'])
+  })
+
+  it('next sends the filter and names whose each task is', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => ({
+      pick: { ref: 'ACME-7', title: 'Wire the relay', status: 'todo', priority: 'high', assignee: 'Alice', reason: 'queued and ready' },
+      then: [{ ref: 'ACME-9', title: 'Port the parser', assignee: 'Julien', reason: 'queued and ready · assigned to Julien' }],
+      considered: 2,
+      offerable: 2,
+    }), seen)
+    const { code, stdout } = await run(['next', '--project', 'ACME', '--assignee', 'me'], base)
+    expect(code).toBe(0)
+    expect(seen[0]?.path).toContain('assignee=me')
+    expect(stdout).toContain('ACME-7  Wire the relay  · Alice')
+    expect(stdout).toContain('  ACME-9  Port the parser  · Julien')
+  })
+
+  it('check sends the filter', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => ({ count: 0, results: [] }), seen)
+    await run(['check', 'relay', '--assignee', 'julien@acme.io'], base)
+    expect(new URL(seen[0]!.path, base).searchParams.get('assignee')).toBe('julien@acme.io')
+  })
+
+  it('the briefing lists unattended work and names someone elses in-flight work', async () => {
+    const base = await serve(() => ({
+      project: 'ACME',
+      held: [],
+      inFlight: [
+        { ref: 'ACME-3', title: 'Relay retries', status: 'doing', claimedBy: 'codex', quietFor: '5m', stalled: false, assignee: 'Julien' },
+        { ref: 'ACME-4', title: 'Drop the cache', status: 'doing', claimedBy: null, quietFor: '3d', stalled: true },
+      ],
+      unattended: {
+        tasks: [
+          { ref: 'ACME-7', title: 'Wire the relay', status: 'todo', priority: 'urgent' },
+          { ref: 'ACME-8', title: 'Write the runbook', status: 'backlog', priority: 'medium' },
+        ],
+        more: 4,
+      },
+      knowledge: [], staleClaims: [], lastSession: null,
+    }), [])
+    const { stdout } = await run(['context', '--project', 'ACME'], base)
+    expect(stdout).toContain("  ACME-3  doing  Relay retries  (codex) · Julien's")
+    expect(stdout).toContain('  ACME-4  doing  Drop the cache  quiet 3d\n')
+    expect(stdout).toContain(
+      'Assigned to you, nobody on it:\n' +
+        '  ACME-7  todo  Wire the relay  [urgent]\n' +
+        '  ACME-8  backlog  Write the runbook\n' +
+        '  +4 more -- cairn next --assignee me\n',
+    )
+  })
+
+  it('the briefing says nothing about unattended work from a server that does not send it', async () => {
+    const base = await serve(() => ({
+      project: 'ACME', held: [{ ref: 'ACME-7', title: 'Wire the relay', status: 'doing', quiet: false }],
+      inFlight: [], knowledge: [], staleClaims: [], lastSession: null,
+    }), [])
+    const { stdout } = await run(['context', '--project', 'ACME'], base)
+    expect(stdout).not.toContain('Assigned to you')
+  })
+})

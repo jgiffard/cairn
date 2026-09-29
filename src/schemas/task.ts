@@ -62,6 +62,8 @@ export type NoteKind = z.infer<typeof noteKind>
 export const isTerminal = (s: TaskStatus): boolean =>
   (TERMINAL_STATUSES as readonly string[]).includes(s)
 
+const assigneeField = z.string().trim().min(1).max(320)
+
 /**
  * Field definitions WITHOUT defaults.
  *
@@ -102,6 +104,11 @@ export const createTaskSchema = taskFields
     /** File it under an existing task. A ref (`CAI-42`) or uuid. */
     parentRef: z.string().min(2).max(60).optional(),
     /**
+     * The human who owns it: `me`, an email, a display name or a user id.
+     * Omitted, it is the caller's human — for an agent, the owner of its key.
+     */
+    assignee: assigneeField.optional(),
+    /**
      * File a bug or spike with no body on purpose — `cairn add --force-empty`.
      * The escape hatch has to be something the caller says, never a default.
      */
@@ -139,6 +146,8 @@ export const updateTaskSchema = taskFields.partial().extend({
   duplicateOf: z.string().min(2).max(60).nullable().optional(),
   /** Re-parent, or `null` to lift it back to the top level. */
   parentRef: z.string().min(2).max(60).nullable().optional(),
+  /** Reassign: `me`, an email, a display name or a user id. Never cleared. */
+  assignee: assigneeField.optional(),
   /**
    * Move the task to another project, by key or uuid. Per-project numbering
    * means the ref changes, so this is handled apart from the field updates.

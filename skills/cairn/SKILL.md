@@ -8,7 +8,7 @@ description: Shared task tracker and memory for agents. Use BEFORE starting work
 Shared memory for everything worked on here: **tasks** (what needs doing and how it ended),
 **notes** (what was tried, including what failed), **knowledge** (what is now true, outliving
 any task) and **sessions** (recorded for you). `cairn check` searches all four at once.
-Examples use `ACME-42`; refs are your project key plus a number.
+Refs like `ACME-42` are your project key plus a number.
 
 ## The lifecycle — every time you do durable work
 
@@ -18,10 +18,11 @@ config change, a deploy, a migration, an investigation, a delegation. Size is ir
 1. **Check.** `cairn check "<subject>"` before reading deeply, changing anything or
    delegating; `show` the hits that matter. Do not re-debug something already answered.
 2. **Own it.** Reuse an open task, or file one. From an agent runtime `cairn add` **claims
-   by default** (it says so; `--no-start` only files). It holds the claim back, and tells you
-   why, when similar open work exists or you already hold a task in that project. Otherwise
-   `cairn claim <ref>` — it sets `doing` and prints what bears on the task. **Exit 9 means
-   another agent holds it: pick different work**, never force it.
+   by default** (it says so; `--no-start` only files), holding back, saying why, when
+   similar open work exists or you already hold a task there. Otherwise `cairn claim <ref>`
+   — it sets `doing` and prints what bears on the task. **Exit 9 means another agent holds
+   it: pick different work**, never force it. What you file is **your human's** unless
+   `--assignee <who>`.
 3. **Record as it happens.** `cairn note <ref> "…" --kind attempt|finding|decision|handoff`.
    **Dead ends are `--kind attempt`** — "tried X, no change" is the note the next agent
    needs most, because the trying is the expensive part.
@@ -43,8 +44,8 @@ the turn is ending. `release` only when you are handing it back and will not con
 **Sweeping a backlog: one claimed task per sweep.** File one task for the triage, hold that,
 and work the rest without claiming them: `note` what you find on each, `update --status`
 where the state is now clear, close what you can with an honest `--kind`. Claiming thirty
-tasks asserts thirty pieces of in-flight work that nobody is doing. A note never claims, so
-annotating stays annotation; file any new tasks during a sweep with `--no-start`.
+tasks asserts thirty pieces of in-flight work that nobody is doing. File any new tasks
+during a sweep with `--no-start`.
 
 **When not to file.** A tracker that fires on everything costs more than it records.
 - **A task you hold already covers it** — note on it, or `--parent` a genuinely separate piece.
@@ -77,9 +78,9 @@ default searches everything because you do not know which store holds the answer
 pull bodies in bulk — the index exists so you choose what is worth reading.
 
 `recall` starts from the task: resolutions and decision/finding notes on related tasks
-(naming it, named by it, parent, children, blockers, similar closed work) and knowledge on
-its files, each with why it was picked. `claim` prints the top of it — read it; "do not
-read that closure as permission for this" is the line you would not know to look for.
+(linked, parent, children, blockers, similar closed work) and knowledge on its files, each
+with why it was picked. `claim` prints the top of it — read it; "do not read that closure
+as permission for this" is the line you would not know to look for.
 
 ## Evidence, as opposed to narration
 
@@ -98,17 +99,16 @@ is for addressing the human rather than the next agent.
 ## Filing, and the body
 
 ```bash
-cairn add "title" --project ACME --type bug --priority high --body -   # body on stdin
+cairn add "title" --project ACME --type bug --body - --assignee bob@acme.io   # body on stdin
 ```
 
 `--type feature|bug|improvement|chore|spike|docs` · `--priority urgent|high|medium|low`.
 `add` lists similar existing work — read it before continuing.
 
 The title says which task; the body says what it is. **The server refuses a bug or spike
-whose body is under 40 characters**, from the CLI, UI and MCP alike; `--force-empty` is for
-the rare title that is the whole story. What earns its place: what happens versus what you
-expected; how to see it (request, command, log line); what you already ruled out; why it
-matters now. Write it when you file — context is never cheaper. A `chore`/`docs` title is
+whose body is under 40 characters**, from any client; `--force-empty` is for the rare
+title that is the whole story. What earns its place: what happens versus what you expected;
+how to see it (request, command, log line); what you already ruled out; why it matters now. Write it when you file — context is never cheaper. A `chore`/`docs` title is
 often enough; never pad with "n/a".
 
 The API refuses `done`/`cancelled` without a resolution (it suggests one from your last
@@ -163,8 +163,7 @@ evidence of change. Either way: check it, then `verify` or `relearn`. Confirming
 fact is as useful as writing a new one and far faster.
 
 `know --unused|--gaps|--orphans|--dangling` show what is *not* connected. **Scripted reads are not recalls:** pass `--sweep` (or
-`CAIRN_SWEEP=1`) when looping over entries; bursts of ten-plus slugs a minute are tagged as
-sweeps anyway.
+`CAIRN_SWEEP=1`) when looping over entries.
 
 **If this machine also has Trig** (the map of what exists): ask *could a re-scan
 rediscover this?* Yes → `trig learn`; no → `cairn learn`. Unsure → Cairn: Trig ingests
@@ -182,14 +181,16 @@ cairn release ACME-42    # handing it back: a held doing task returns to todo
 - A claim is execution state, independent of status: `doing` and unclaimed is what a human
   working on it looks like. Only claim open work — move settled work back to an open status
   first if it truly needs revision.
+- **A claim is not ownership.** The assignee is the human accountable before and after
+  it. `list --mine` is what you hold; `--assignee me`, what your human owns.
 - **A checkpoint on an unheld open task claims it** (and says so); a note does not. Neither
   steals: a checkpoint on someone else's claim is refused.
 - **After 15 silent minutes** a lease is stale and another agent may take it over.
-- **After 2 hours with no sign of life** the scheduled maintenance sweep (`reconcile`, every
-  30 minutes where installed) releases the claim and leaves a note: `doing` goes back to
-  `todo`, `in-review` keeps its status. Sign of life is a beat, a note, a checkpoint you
-  wrote, an edit, or your own commit/push/run — so evidence keeps a claim alive. Notes and
-  checkpoints survive the release; the checkpoint is where the next agent starts.
+- **After 2 hours with no sign of life** the maintenance sweep (`reconcile`, where
+  installed) releases the claim and leaves a note: `doing` goes back to `todo`, `in-review`
+  keeps its status. Sign of life is a beat, a note, a checkpoint you wrote, an edit, or your
+  own commit/push/run — so evidence keeps a claim alive. Notes and checkpoints survive the
+  release; the checkpoint is where the next agent starts.
 - **At session end the runtime checkpoints tasks the session worked on, never over a
   checkpoint you wrote** unless this very session holds the claim; a checkpoint written
   meanwhile always wins. A held task it did not touch gets a "still held" line only if it

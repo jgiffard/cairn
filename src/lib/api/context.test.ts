@@ -57,6 +57,10 @@ vi.mock('./project-keys', () => ({
 }))
 vi.mock('./knowledge', () => ({ listKnowledge: async () => [] }))
 vi.mock('./staleness', () => ({ stalenessFor: async () => new Map() }))
+vi.mock('./people', () => ({
+  peopleByIds: async (ids: string[]) =>
+    new Map(ids.map((id) => [id, { id, email: `${id}@example.test`, name: id === 'julien' ? 'Julien' : id, active: true }])),
+}))
 
 import { buildContext } from './context'
 
@@ -133,5 +137,79 @@ describe('context project scope', () => {
     await expect(buildContext(actor, { scope: 'project', project: 'TYPO', cwd: '/repo' }))
       .rejects.toThrow('Project not found')
     expect(db.calls).toEqual([])
+  })
+})
+
+/**
+ * Whose work is in the briefing (CAIRN-310).
+ *
+ * A task the caller's human owns and no agent is on surfaced only when
+ * somebody thought to ask for it, and a dropped task in flight gave no hint
+ * that it was somebody else's to finish.
+ */
+describe('context and the assignee', () => {
+  const open = (
+    number: number,
+    over: Partial<{
+      status: string
+      priority: string
+      assignee: string
+      claimedBy: string
+      heartbeat: string
+      updated: string
+      project: string
+    }> = {},
+  ) => {
+    const project = over.project ?? 'MES'
+    return {
+      id: `${project}-${number}`, number, project_id: project, project: { key: project },
+      title: `${project} task ${number}`, status: over.status ?? 'todo', priority: over.priority ?? 'medium',
+      assignee_user_id: over.assignee ?? 'user', claimed_by: over.claimedBy ?? null,
+      claimed_at: over.claimedBy ? '2020-01-01T00:00:00Z' : null, created_at: '2020-01-01T00:00:00Z',
+      heartbeat_at: over.heartbeat ?? null, updated_at: over.updated ?? '2020-01-01T00:00:00Z',
+    }
+  }
+
+  it('lists the callers own open work that nobody is on, most urgent first', async () => {
+    const now = new Date().toISOString()
+    db.tasks = [
+      open(1, { priority: 'low', updated: '2020-01-05T00:00:00Z' }),
+      open(2, { status: 'backlog', priority: 'urgent' }),
+      open(3, { assignee: 'julien' }),
+      open(4, { claimedBy: 'codex', heartbeat: now }),
+      open(5, { claimedBy: 'codex', heartbeat: '2020-01-01T00:00:00Z', updated: '2020-01-02T00:00:00Z' }),
+      open(6, { status: 'doing', updated: now }),
+      open(7, { status: 'in-review' }),
+      open(8, { project: 'CAL' }),
+      open(9, { claimedBy: 'agent', heartbeat: '2020-01-01T00:00:00Z' }),
+    ]
+    const context = await buildContext(actor, { project: 'MES' })
+    // 3 is Julien's, 4 has a live claim, 6 is already in flight, 7 is in
+    // review, 8 is another project and 9 is held by the caller itself.
+    expect(context.unattended.tasks.map((t) => t.ref)).toEqual(['MES-2', 'MES-5', 'MES-1'])
+    expect(context.unattended.tasks[0]).toMatchObject({ status: 'backlog', priority: 'urgent' })
+    expect(context.unattended.more).toBe(0)
+  })
+
+  it('names five and counts the rest', async () => {
+    db.tasks = Array.from({ length: 8 }, (_, i) => open(i + 1, { updated: `2020-01-0${i + 1}T00:00:00Z` }))
+    const context = await buildContext(actor, { project: 'MES' })
+    // Most recently touched first, within a priority.
+    expect(context.unattended.tasks.map((t) => t.ref)).toEqual(['MES-8', 'MES-7', 'MES-6', 'MES-5', 'MES-4'])
+    expect(context.unattended.more).toBe(3)
+  })
+
+  it('says nothing about unattended work with no project to scope it to', async () => {
+    db.tasks = [open(1)]
+    const context = await buildContext(actor, {})
+    expect(context.unattended).toEqual({ tasks: [], more: 0 })
+  })
+
+  it('names the owner of in-flight work only when it is someone elses', async () => {
+    db.tasks = [open(1, { status: 'doing', assignee: 'julien' }), open(2, { status: 'doing' })]
+    const context = await buildContext(actor, { project: 'MES' })
+    const byRef = new Map(context.inFlight.map((t) => [t.ref, t]))
+    expect(byRef.get('MES-1')?.assignee).toBe('Julien')
+    expect(byRef.get('MES-2')).not.toHaveProperty('assignee')
   })
 })

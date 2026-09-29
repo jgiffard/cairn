@@ -81,6 +81,10 @@ cairn release ACME-42      # or: cairn done ACME-42 --resolution "..."
 - `in-review` is for written-but-not-landed: unmerged, or merged and undeployed.
 - `cairn commit|push|run` record what you shipped or ran; they execute nothing.
 - A claim is execution state: a task can be `doing` and unclaimed (a human is on it).
+- **A claim is not ownership.** Every task has a human assignee: by default the human
+  behind your key; `add|update --assignee <email|name>` gives it to someone else. The
+  assignee stays accountable after your claim ends. `--mine` = held by you,
+  `--assignee me` = owned by your human.
 - Exit 9 from `claim` means someone holds it: pick different work. A lease goes stale
   after 15 silent minutes and can be taken over. After two hours with no beat, note,
   checkpoint, edit or commit/push/run, the maintenance sweep releases it (`doing` → `todo`;
@@ -95,6 +99,7 @@ cairn release ACME-42      # or: cairn done ACME-42 --resolution "..."
 - **priority** — `urgent | high | medium | low`
 - **note kind** — `note | finding | decision | attempt | handoff`
 - **resolution kind** — `fixed | verified | answered | wont-fix | duplicate | not-reproducible | superseded`
+- **assignee** — the human who owns it (`cairn people`); **held** — the agent executing it now
 
 Tasks are referred to as `ACME-42` (project key + number). Use that form in prose; it stays
 resolvable in a transcript long after the fact.
@@ -122,7 +127,8 @@ its own — your own checkpoint is the handoff that counts.
 
 **The briefing** is `cairn context` — what you hold, what is in flight around you, where
 the last session in this directory stopped, what is known here. A hook runs it at session
-start. `cairn next` says what to pick up and why. `cairn map <KEY>` tells Cairn which
+start. `cairn next` says what to pick up and why — your human's work first; another
+person's says whose. `cairn map <KEY>` tells Cairn which
 project a checkout is — once per repository; clones and worktrees follow.
 
 ## 8. Before you stop

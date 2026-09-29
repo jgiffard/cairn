@@ -9,6 +9,58 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **Every task has a human assignee** (CAIRN-310). A task recorded who filed it (`actor_id`,
+  a frozen label) and which agent is executing it (`claimed_by`), but never whose it is — and
+  those are three facts: an agent files work for its human, another agent may claim it, and
+  the human stays accountable after the claim ends. `tasks.assignee_user_id` is that human, a
+  real user and never null (migration 067, backfilled from each task's creator, falling back
+  to the project owner; reassignments are an `assignee_changed` activity event).
+  - *Default.* A task is assigned to the human behind the caller — for an agent, the user its
+    key was issued to. `assignee` names someone else: `me`, an email, a display name or a
+    user id; an unknown, ambiguous or inactive user is refused, never guessed.
+  - *API.* `assignee` on `POST /projects/{id}/tasks` and `PATCH /tasks/{ref}`,
+    `?assignee=` on the task list, and `assignee: {id, email, name, active}` on task rows.
+    `show`'s digest carries `assignee` and `createdBy`. `GET /api/v1/people` lists who can be
+    assigned, for any authenticated caller, agents included.
+  - *CLI.* `add --assignee`, `update <ref> --assignee`, `list --assignee me|<who>`, an
+    `assignee` column in `list`, an `assignee` line in what `add` and `update` print, and
+    `cairn people`. `--mine` keeps its meaning — what this agent holds now; `--assignee me`
+    is what your human owns.
+  - *MCP.* `cairn_add` and `cairn_list` take an optional `assignee`.
+  - *UI.* The assignee is shown and editable on a task.
+  - *Guidance.* The skill, `AGENTS.md`, the OpenClaw block and hook, and the session briefing
+    say the rule: assigned to your human unless `--assignee` says otherwise; the assignee owns
+    the work, the claim is only which agent is running it.
+- **Disabling a user hands their open tasks on** (CAIRN-310). A disabled assignee silently
+  orphaned every open task they owned. `DELETE /users/{id}` now refuses a user who is the
+  assignee of open tasks (409, `reason: open_tasks`, with `openTaskCount`) until `reassignTo`
+  names an active user; the tasks move in the same transaction as the disable, each with an
+  `assignee_changed` event carrying `reason: user_deactivated`. On a user already disabled,
+  `reassignTo` hands on the tasks orphaned before this rule. `/users` shows each user's open
+  task count, and disabling someone who owns work asks who takes it over (you, by default).
+- **`cairn next`, `check` and the briefing know whose work it is** (CAIRN-310).
+  - *`next`.* Inside a tier, work assigned to your human ranks before anyone else's — ahead
+    of priority, since an urgent task is urgent for whoever owns it. Someone else's work is
+    still offered, never hidden, and its reason says so (`… · assigned to Julien`). Every pick
+    carries `assignee`, and the CLI prints it on each line. `?assignee=` / `--assignee
+    me|<who>` narrows the ranking to one person.
+  - *`check`.* `--assignee me|<who>` (`?assignee=` on `GET /search`, `assignee` on
+    `cairn_check`) keeps only that person's tasks. Like `--type`, it is a statement about
+    tasks, so the answer is tasks only; it is chosen from the best 200 matches.
+  - *Briefing.* A new "Assigned to you, nobody on it" section: your human's todo, backlog and
+    doing tasks in this project with no live claim, five at most, most urgent first, then
+    `+N more`. "In flight" and "Started and dropped" name the owner (`· Julien's`) when it is
+    not your human, so a dropped task is not picked up as your own by mistake.
+    `GET /context` returns `unattended: {tasks, more}` and `inFlight[].assignee`.
+
+### Changed
+
+- **"Unassigned" is now "Unclaimed"** wherever it meant *no agent holds this* — the board's
+  agent lanes and filter, and a task's claim field. With a real assignee on every task, the
+  old word said the opposite of the truth.
+
 ## [0.9.0] — 2026-09-28
 
 ### Added

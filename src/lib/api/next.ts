@@ -50,6 +50,9 @@ export type Candidate = {
   blockedAt?: string | null
   /** Tasks this one waits on that are not finished. */
   unmetDeps?: number
+  /** The human the task belongs to (CAIRN-310), and their name to show. */
+  assigneeId?: string | null
+  assignee?: string | null
 }
 
 export type Ranked = Candidate & { tier: Tier; reason: string }
@@ -120,6 +123,14 @@ const tierOf = (
   return 'backlog'
 }
 
+/**
+ * Somebody else's, as far as anyone can tell. An unknown on either side is
+ * not someone else's: a caller with no user, or a task nobody has named an
+ * owner for, must rank exactly as it did before assignees existed.
+ */
+const assignedElsewhere = (task: Candidate, myUserId: string | null) =>
+  Boolean(myUserId && task.assigneeId && task.assigneeId !== myUserId)
+
 const REASONS: Record<Tier, string> = {
   holding: 'you are holding this one — finish it or hand it back',
   checkpointed: 'started, then dropped, and whoever left it wrote down where they got to',
@@ -133,6 +144,12 @@ const REASONS: Record<Tier, string> = {
  * Ranked, best first. Anything unworkable is absent rather than ordered last:
  * a list that ends in things you must not pick is a list that has to be read
  * to the bottom to be used safely.
+ *
+ * Another person's task is ranked, not dropped: the workspace is shared and
+ * picking it up can be right. But inside a tier it comes after the caller's
+ * own human's work — ahead of priority, because an urgent task is urgent for
+ * whoever owns it — and it says whose it is, so taking it is a choice rather
+ * than an accident. Tier still wins: finishing beats starting, whoever's it is.
  */
 export const rankNext = (
   tasks: Candidate[],
@@ -140,16 +157,23 @@ export const rankNext = (
     me = null,
     now = Date.now(),
     mySession = null,
-  }: { me?: string | null; now?: number; mySession?: string | null } = {},
+    myUserId = null,
+  }: { me?: string | null; now?: number; mySession?: string | null; myUserId?: string | null } = {},
 ): Ranked[] =>
   tasks
     .flatMap((task) => {
       const tier = tierOf(task, me, now, mySession)
-      return tier ? [{ ...task, tier, reason: REASONS[tier] }] : []
+      if (!tier) return []
+      const reason = assignedElsewhere(task, myUserId)
+        ? `${REASONS[tier]} · assigned to ${task.assignee ?? 'someone else'}`
+        : REASONS[tier]
+      return [{ ...task, tier, reason }]
     })
     .sort((a, b) => {
       const byTier = TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier)
       if (byTier !== 0) return byTier
+      const byOwner = Number(assignedElsewhere(a, myUserId)) - Number(assignedElsewhere(b, myUserId))
+      if (byOwner !== 0) return byOwner
       const byPriority = priorityRank(a.priority) - priorityRank(b.priority)
       if (byPriority !== 0) return byPriority
       // Oldest first within a tier, so nothing rots at the bottom for being

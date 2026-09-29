@@ -81,6 +81,7 @@ export const diffTaskEvents = (
     ['title', 'renamed'],
     ['labels', 'labels_changed'],
     ['due_date', 'due_date_changed'],
+    ['assignee_user_id', 'assignee_changed'],
   ]
 
   for (const [column, event] of FIELDS) {

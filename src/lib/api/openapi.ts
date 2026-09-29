@@ -145,6 +145,17 @@ const okResponse = (description: string, data: Record<string, unknown> = { type:
   content: { 'application/json': { schema: envelope(data) } },
 })
 
+const person = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    email: { type: 'string', format: 'email' },
+    name: { type: 'string', description: 'Display name, or the email when there is none.' },
+    active: { type: 'boolean', description: 'False once the user is removed or suspended.' },
+  },
+  required: ['id', 'email', 'name', 'active'],
+}
+
 const taskSummary = {
   type: 'object',
   properties: {
@@ -156,7 +167,16 @@ const taskSummary = {
     status: { type: 'string', enum: [...TASK_STATUSES] },
     priority: { type: 'string', enum: [...TASK_PRIORITIES] },
     labels: { type: 'array', items: { type: 'string' } },
-    claimed_by: { type: ['string', 'null'] },
+    assignee_user_id: {
+      type: 'string',
+      format: 'uuid',
+      description: 'The human who owns the task. Always set; defaults to the caller\'s user.',
+    },
+    assignee: { ...person, type: ['object', 'null'] },
+    claimed_by: {
+      type: ['string', 'null'],
+      description: 'The agent executing it right now, if any. Not the owner: that is `assignee`.',
+    },
     resolution: { type: ['string', 'null'] },
   },
 }
@@ -415,7 +435,7 @@ export const openapiSpec = () => ({
           'sessions. Returns an index, never bodies. Hits carrying an answer rank first. ' +
           'Matching is keyword-based (Postgres FTS ANDs terms, widening to OR when the ' +
           'precise pass comes back thin), so a paraphrase can still miss. ' +
-          'A `type` or `status` filter is a statement about tasks and narrows to them.',
+          'A `type`, `status` or `assignee` filter is a statement about tasks and narrows to them.',
         parameters: [
           { name: 'q', in: 'query', required: true, schema: { type: 'string' } },
           { name: 'project', in: 'query', schema: { type: 'string' } },
@@ -428,6 +448,10 @@ export const openapiSpec = () => ({
           { name: 'tasksOnly', in: 'query', schema: { type: 'boolean', default: false } },
           { name: 'type', in: 'query', schema: { type: 'string', enum: [...TASK_TYPES] } },
           { name: 'status', in: 'query', schema: { type: 'string', enum: [...TASK_STATUSES] } },
+          { name: 'assignee', in: 'query', schema: { type: 'string' },
+            description:
+              'Only tasks owned by: `me`, an email, a display name or a user id. Chosen from ' +
+              'the best 200 matches, so a subject with more hits than that can miss some.' },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 20, maximum: 100 } },
         ],
         responses: {
@@ -594,6 +618,10 @@ export const openapiSpec = () => ({
           { name: 'type', in: 'query', schema: { type: 'string', enum: [...TASK_TYPES] } },
           { name: 'label', in: 'query', schema: { type: 'string' } },
           { name: 'claimed_by', in: 'query', schema: { type: 'string' } },
+          { name: 'mine', in: 'query', schema: { type: 'boolean' },
+            description: 'Held by the calling agent (and its session, when it sent one).' },
+          { name: 'assignee', in: 'query', schema: { type: 'string' },
+            description: 'Owned by: `me`, an email, a display name or a user id.' },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
           { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 } },
         ],
@@ -601,6 +629,9 @@ export const openapiSpec = () => ({
       },
       post: {
         summary: 'Create a task',
+        description:
+          'Assigned to the caller\'s user unless `assignee` names someone else. An agent\'s ' +
+          'caller is the human who owns its key.',
         requestBody: body(json(createTaskSchema)),
         responses: { '201': okResponse('Created.', taskSummary), '404': errorResponse },
       },
@@ -1068,12 +1099,17 @@ export const openapiSpec = () => ({
           'checkpoint, then dropped without one, then in-review, todo and backlog. ' +
           'Anything blocked, waiting on an unfinished task, or actively held by another ' +
           'agent is absent rather than ranked last. Each pick carries the reason it won. ' +
+          'Inside a tier, work assigned to the caller\'s user ranks before anyone else\'s, ' +
+          'which stays offered but says whose it is in `reason`; every pick carries `assignee` ' +
+          '(a name). ' +
           'A `project` that is a retired key ranks the live project and returns `renamed_from`; ' +
           'one that names no project at all is a 404 rather than "nothing open".',
         parameters: [
           { name: 'project', in: 'query', schema: { type: 'string' } },
           { name: 'limit', in: 'query', schema: { type: 'integer' },
             description: 'How many runners-up to return (default 5).' },
+          { name: 'assignee', in: 'query', schema: { type: 'string' },
+            description: 'Only tasks owned by: `me`, an email, a display name or a user id.' },
         ],
         responses: { '200': okResponse('A pick, the runners-up, and what was considered.') },
       },
@@ -1082,7 +1118,8 @@ export const openapiSpec = () => ({
       get: {
         summary: 'The briefing a session opens with',
         description:
-          'What you are still holding, what is in flight around you, where the last session ' +
+          'What you are still holding, what is in flight around you, your user\'s open work ' +
+          'here that nobody is on, where the last session ' +
           'in this directory stopped, and what is known here. Index only, never bodies. ' +
           'With `file`, it answers the narrower question instead: what is known about that ' +
           'path. Read by a hook that has milliseconds and no way to recover from a failure, ' +
@@ -1116,6 +1153,41 @@ export const openapiSpec = () => ({
                       description: 'Refs from before a rename in the last 30 days, e.g. ["AC-113"] beside HOL-113.',
                     },
                   },
+                },
+              },
+              inFlight: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    ref: { type: 'string' },
+                    assignee: {
+                      type: 'string',
+                      description: 'Whose it is, present only when that is not the caller\'s user.',
+                    },
+                  },
+                },
+              },
+              unattended: {
+                type: 'object',
+                description:
+                  'The caller\'s user\'s todo, backlog and doing tasks in this project with no ' +
+                  'live claim, not already in `held` or `inFlight`. Most urgent first, at most 5; ' +
+                  '`more` counts the rest.',
+                properties: {
+                  tasks: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        ref: { type: 'string' },
+                        title: { type: 'string' },
+                        status: { type: 'string' },
+                        priority: { type: 'string' },
+                      },
+                    },
+                  },
+                  more: { type: 'integer' },
                 },
               },
             },
@@ -1212,6 +1284,13 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('Saved.'), '400': errorResponse, '403': errorResponse },
       },
     },
+    '/people': {
+      get: {
+        summary: 'List the people work can be assigned to',
+        description: 'Active users only. Open to every authenticated caller, agents included.',
+        responses: { '200': okResponse('People.', { type: 'array', items: person }) },
+      },
+    },
     '/users': {
       get: {
         summary: 'List users (administrator browser session only)',
@@ -1249,7 +1328,26 @@ export const openapiSpec = () => ({
       },
       delete: {
         summary: 'Disable a user and revoke sessions and active keys',
-        responses: { '200': okResponse('User disabled.'), '403': errorResponse, '409': errorResponse },
+        description:
+          'A user who is the assignee of open tasks (not done or cancelled) is refused with 409 ' +
+          '`reason: open_tasks` and `openTaskCount` until `reassignTo` names an active user to take them ' +
+          'over; each moved task gets an `assignee_changed` event with `reason: user_deactivated`. ' +
+          'On a user already disabled, `reassignTo` hands on any open tasks they still own. ' +
+          'This route also reads `reassignTo` from a JSON body `{"reassignTo": "<uuid>"}`.',
+        parameters: [
+          {
+            name: 'reassignTo',
+            in: 'query',
+            description: 'The active user, other than this one, who becomes the assignee of their open tasks.',
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          '200': okResponse('User disabled; `reassignedTaskCount` says how many open tasks moved.'),
+          '400': errorResponse,
+          '403': errorResponse,
+          '409': errorResponse,
+        },
       },
     },
     '/users/{id}/restore': {
