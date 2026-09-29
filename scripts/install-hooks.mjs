@@ -200,9 +200,8 @@ const canonicalHermesHooks = (hooks) =>
  * is rewritten in place, progressively richer, and the compaction that finally
  * precedes a real SessionEnd just writes the same row once more.
  *
- * This is also what makes the Codex arrangement below safe, and it has been
- * running that way all along -- Stop fires every turn and has never duplicated
- * a row.
+ * The same upsert is what makes Codex's per-turn checkpoint below safe: Stop
+ * fires every turn and has never duplicated a row.
  */
 const installClaude = () => {
   const path = join(HOME, '.claude', 'settings.json')
@@ -241,9 +240,12 @@ const installClaude = () => {
 
 /**
  * Codex shares Claude Code's wire format exactly, so the same scripts serve it.
- * Two differences that matter: there is no SessionEnd, so the recorder runs on
- * Stop and leans on the API being idempotent; and every handler has to be
- * trusted in config.toml before it runs, which this cannot do for you.
+ * Codex long had no SessionEnd, so the recorder ran on Stop as a session end:
+ * every turn closed the session and checkpointed held tasks (CAIRN-319). Codex
+ * has SessionEnd now (0.155 at least). Stop records a live checkpoint
+ * (`--ongoing`: no end time, held tasks untouched) so a session left open still
+ * shows what it did, and SessionEnd closes it. Every handler has to be trusted
+ * in config.toml before it runs, which this cannot do for you.
  */
 const installCodex = () => {
   const path = join(HOME, '.codex', 'hooks.json')
@@ -269,13 +271,14 @@ const installCodex = () => {
 
   replace('SessionStart', 'startup|resume|clear', mine(`${env} node ${CONTEXT}`, { timeout: 10 }))
   const unwired = strip(config.hooks, 'PreToolUse')
-  replace('Stop', null, mine(`${env} node ${SESSION_END}`, { timeout: 120, async: true }))
+  replace('Stop', null, mine(`${env} node ${SESSION_END} --ongoing`, { timeout: 120, async: true }))
+  replace('SessionEnd', null, mine(`${env} node ${SESSION_END}`, { timeout: 120, async: true }))
 
   // The trust warning is printed only when the file actually moved. Printed
   // every run it is wallpaper, and the one run where it matters reads the same
   // as the twenty where it did not.
   if (writeJson(path, config, before)) {
-    log('  codex: SessionStart, Stop')
+    log('  codex: SessionStart, Stop (live checkpoint), SessionEnd')
     if (unwired) log('  codex: removed the per-Read PreToolUse hook (CCS-40)')
     log('  codex: entries must be trusted on next launch — [hooks.state] in config.toml')
     log('  codex: needs CAIRN_API_KEY_CODEX (`cairn setup` pairs one), or it writes as')
@@ -283,9 +286,9 @@ const installCodex = () => {
   }
 
   // Said, never done. These are somebody else's hooks, and this installer has
-  // no business removing them — but Codex has no SessionEnd, so anything on
-  // Stop runs after EVERY turn, and a session-end script written for Claude
-  // Code that makes a model call becomes one billed call per turn. That is
+  // no business removing them — but anything on Stop runs after EVERY turn,
+  // and a session-end script written for Claude Code that makes a model call
+  // becomes one billed call per turn. That is
   // what Quarry's hook did here after CCS-40 took it out of Claude Code only
   // (CAIRN-290), and nothing said so.
   const foreign = foreignHooks(config.hooks)

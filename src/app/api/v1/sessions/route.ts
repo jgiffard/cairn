@@ -43,20 +43,20 @@ export const GET = route({
 })
 
 /**
- * Idempotent on (platform, externalId). Codex has no session-end event so its
- * writer runs on Stop, which fires every turn; OpenClaw's runs from a
- * reconciler that may sweep a session a hook already recorded. Both must be
- * able to post repeatedly without producing a second row.
+ * Idempotent on (platform, externalId). Codex writes a live checkpoint on Stop,
+ * which fires every turn; OpenClaw's runs from a reconciler that may sweep a
+ * session a hook already recorded. Both must be able to post repeatedly
+ * without producing a second row.
  */
 export const POST = route({
   schema: sessionUpsert,
   handler: async ({ actor, body }) => {
     try {
-      const { session, checkpointed } = await upsertSession(actor, body)
-      return ok({ id: session.id, endedAt: session.ended_at, checkpointed })
+      const { session, checkpointed, redactions } = await upsertSession(actor, body)
+      return ok({ id: session.id, endedAt: session.ended_at, checkpointed, redactions })
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'PZ001') {
-        return fail('conflict', error.message)
+        return fail('session_closed', error.message)
       }
       return fail('validation_failed', error instanceof Error ? error.message : 'Could not record.')
     }

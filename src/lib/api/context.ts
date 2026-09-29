@@ -94,6 +94,8 @@ export type ContextPayload = {
   }
   lastSession: {
     endedAt: string | null
+    /** Still open and written to recently: another session is live here. */
+    ongoing: boolean
     request: string | null
     nextSteps: string | null
     agent: string | null
@@ -155,6 +157,35 @@ type TaskRow = {
 type OwnedRow = TaskRow & { priority: string; assignee_user_id: string | null }
 
 const refOf = (t: TaskRow) => `${t.project.key}-${t.number}`
+
+/**
+ * Wide enough that finished sessions re-posted late (a retried summary bumps
+ * updated_at but not ended_at) cannot crowd out the one that is really latest.
+ */
+const LAST_SESSION_CANDIDATES = 20
+
+/**
+ * An open session nobody has written to for this long is not live: it was
+ * left without a close event (a killed terminal, a crash), and saying another
+ * session is running here would be false.
+ */
+const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000
+
+type SessionActivity = {
+  ended_at: string | null
+  updated_at: string
+  request: string | null
+  next_steps: string | null
+  agent_id: string | null
+}
+
+const lastActive = (s: SessionActivity) => Date.parse(s.ended_at ?? s.updated_at)
+
+export const latestByActivity = <T extends SessionActivity>(rows: T[]): T[] =>
+  [...rows].sort((a, b) => lastActive(b) - lastActive(a))
+
+export const isLive = (s: SessionActivity, now: number) =>
+  s.ended_at === null && now - Date.parse(s.updated_at) < LIVE_WINDOW_MS
 
 const priorityRank = (priority: string) => {
   const index = (TASK_PRIORITIES as readonly string[]).indexOf(priority)
@@ -305,23 +336,30 @@ export const buildContext = async (
   }
 
   // --- where the last session here stopped ------------------------------
+  // The latest by activity, open sessions included (CAIRN-320). Ordered by
+  // ended_at alone, an open session — no end yet — ranked below every finished
+  // one, so the briefing showed an older session instead of the one in
+  // progress. updated_at picks the candidates; a finished row re-posted late
+  // (a retried summary) still ranks by when it ended.
   let lastSession: ContextPayload['lastSession'] = null
   if (input.cwd || project) {
     let query = admin()
       .from('sessions')
-      .select('ended_at, request, next_steps, agent_id, cwd, project_id' +
+      .select('ended_at, updated_at, request, next_steps, agent_id, cwd, project_id' +
         (scopedProject ? ', project:projects!project_id!inner(key)' : ''))
-      .order('ended_at', { ascending: false, nullsFirst: false })
-      .limit(1)
+      .order('updated_at', { ascending: false })
+      .limit(LAST_SESSION_CANDIDATES)
 
     query = input.cwd ? query.eq('cwd', input.cwd) : query
     if (scopedProject) query = query.eq('projects.key', scopedProject)
 
-    const { data, error } = await query.maybeSingle()
+    const { data: rows, error } = await query
     if (error) throw new Error(error.message)
+    const [data] = latestByActivity((rows ?? []) as unknown as SessionActivity[])
     if (data) {
       lastSession = {
-        endedAt: data.ended_at as string | null,
+        endedAt: data.ended_at,
+        ongoing: isLive(data, Date.now()),
         request: data.request as string | null,
         nextSteps: data.next_steps as string | null,
         agent: data.agent_id as string | null,

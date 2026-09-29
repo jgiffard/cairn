@@ -48,8 +48,14 @@ describe('cairn session checkpoint CLI', () => {
  * `cairn context` does — the local map — and sends the checkout's remote so
  * the server can match it when the map has no entry.
  */
+/** Without the markers of whatever runtime is running these tests. */
+const runtimeFree = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
+  Object.fromEntries(
+    Object.entries(env).filter(([name]) => !/^(CLAUDECODE|CLAUDE_CODE_|CODEX_|OPENCLAW_|CAIRN_AGENT|CAIRN_PLATFORM)/.test(name)),
+  ) as NodeJS.ProcessEnv
+
 describe('cairn session end project attribution', () => {
-  const capture = async (setup: (home: string, repo: string) => string[]) => {
+  const capture = async (setup: (home: string, repo: string) => string[], env: Record<string, string> = {}) => {
     const received: { body: Record<string, unknown> }[] = []
     const server = createServer(async (req, res) => {
       const chunks: Buffer[] = []
@@ -69,8 +75,8 @@ describe('cairn session end project attribution', () => {
       const address = server.address()
       if (!address || typeof address === 'string') throw new Error('No test port')
       await exec('node', ['cli/cairn.mjs', 'session', 'end', '--id', 's1', '--json', ...args], {
-        cwd: process.cwd(), env: { ...process.env, HOME: home, CAIRN_API_KEY: 'test-key',
-          CAIRN_BASE_URL: `http://127.0.0.1:${address.port}` },
+        cwd: process.cwd(), env: { ...runtimeFree(process.env), HOME: home, CAIRN_API_KEY: 'test-key',
+          CAIRN_BASE_URL: `http://127.0.0.1:${address.port}`, ...env },
       })
       return received[0]?.body ?? {}
     } finally {
@@ -105,5 +111,22 @@ describe('cairn session end project attribution', () => {
       return ['--cwd', repo, '--project', 'OTHER']
     })
     expect(body.project).toBe('OTHER')
+  })
+
+  /**
+   * CAIRN-321: without --platform every manual `session end` was filed as
+   * `claude`, so a Codex or OpenClaw agent following the skill's handoff wrote
+   * a second row beside its hook's.
+   */
+  it('takes the platform from the runtime it runs in, unless told', async () => {
+    const platform = async (env: Record<string, string>, args: string[] = []) =>
+      (await capture((_home, repo) => ['--cwd', repo, ...args], env)).platformSource
+    expect(await platform({})).toBe('claude')
+    expect(await platform({ CAIRN_AGENT: 'codex' })).toBe('codex')
+    expect(await platform({ CAIRN_AGENT: 'openclaw' })).toBe('openclaw')
+    expect(await platform({ CAIRN_AGENT: 'hermes' })).toBe('other')
+    expect(await platform({ CAIRN_AGENT: 'codex', CAIRN_PLATFORM: 'openclaw' })).toBe('openclaw')
+    expect(await platform({ CAIRN_PLATFORM: 'hermes' })).toBe('other')
+    expect(await platform({ CAIRN_AGENT: 'codex' }, ['--platform', 'claude'])).toBe('claude')
   })
 })

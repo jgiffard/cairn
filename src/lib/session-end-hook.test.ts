@@ -44,14 +44,14 @@ const transcript = (name: string, rows: unknown[]) => {
   return path
 }
 
-const run = (payload: unknown, env: Record<string, string> = {}) =>
+const run = (payload: unknown, env: Record<string, string> = {}, args: string[] = []) =>
   new Promise<number | null>((done) => {
     const childEnv: NodeJS.ProcessEnv = {
       PATH: process.env.PATH ?? '', HOME: dir, OUT: dir,
       CAIRN_CLI: join(dir, 'cairn'), CAIRN_SUMMARY_CLI: join(dir, 'claude'),
       CAIRN_SUMMARY_MIN_INTERVAL_MS: '0', ...env,
     } as unknown as NodeJS.ProcessEnv
-    const child = spawn('node', [HOOK], { env: childEnv, stdio: ['pipe', 'ignore', 'ignore'] })
+    const child = spawn('node', [HOOK, ...args], { env: childEnv, stdio: ['pipe', 'ignore', 'ignore'] })
     child.on('close', done)
     child.stdin.end(JSON.stringify(payload))
   })
@@ -173,6 +173,44 @@ describe('the session-end hook', () => {
     expect(JSON.parse(readFileSync(join(dir, '.cairn', 'unsummarised.json'), 'utf8'))).toEqual({})
   })
 
+  /**
+   * CAIRN-319: Codex's Stop fires every turn. Recorded as a session end, it
+   * closed the session on its first turn and checkpointed every held task each
+   * time the agent handed back.
+   */
+  it('writes a live checkpoint with --ongoing, and its retry stays live', async () => {
+    const path = transcript('live', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    await run({ transcript_path: path, session_id: 'live', cwd: '/work/demo' }, { FAKE_MODE: 'fail' }, ['--ongoing'])
+    expect(lines('cli.jsonl')[0]?.slice(0, 3)).toEqual(['session', 'checkpoint', '--id'])
+
+    const next = transcript('ended', [user('Tidy the README'), edit('/work/demo/README.md')])
+    await run({ transcript_path: next, session_id: 'ended', cwd: '/work/demo' }, { CAIRN_SUMMARY_RETRY_SPACING_MS: '0' })
+    const calls = lines('cli.jsonl')
+    expect(calls.map((a) => [a[1], argValue(a, '--id')])).toEqual([
+      ['checkpoint', 'live'],
+      ['end', 'ended'],
+      ['checkpoint', 'live'],
+    ])
+  })
+
+  it('stops paying for live checkpoints of a session whose row is already closed', async () => {
+    // Refuses checkpoints the way the CLI does for a 409 session_closed.
+    fake('cairn', `const a = process.argv.slice(2); require('fs').appendFileSync(process.env.OUT + '/cli.jsonl', JSON.stringify(a) + '\\n'); process.exit(a[1] === 'checkpoint' ? 11 : 0)`)
+    const path = transcript('closed', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    const turn = () => run({ transcript_path: path, session_id: 'closed', cwd: '/work/demo' }, {}, ['--ongoing'])
+
+    await turn()
+    // A new turn, so a new digest: only the remembered refusal saves the call.
+    transcript('closed', [user('Please fix the login redirect'), edit('/work/demo/a.ts'), user('And the logout'), edit('/work/demo/b.ts')])
+    await turn()
+    expect(lines('cli.jsonl').map((a) => a[1])).toEqual(['checkpoint'])
+    expect(lines('summariser.jsonl')).toHaveLength(1)
+
+    // Its real close still records.
+    await run({ transcript_path: path, session_id: 'closed', cwd: '/work/demo' })
+    expect(lines('cli.jsonl').map((a) => a[1])).toEqual(['checkpoint', 'end'])
+  })
+
   it('does not retry while the summariser is still failing', async () => {
     const a = transcript('a', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
     const b = transcript('b', [user('Please fix the logout redirect'), edit('/work/demo/b.ts')])
@@ -214,6 +252,16 @@ describe('the session-end hook', () => {
       { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: `${SUMMARISER_PROMPT}\n---\nedited src/a.ts` }] } },
     ])
     await run({ transcript_path: path })
+    expect(lines('cli.jsonl')).toEqual([])
+  })
+
+  it('never records a summariser run relayed through OpenClaw\'s conversation wrapper', async () => {
+    const path = transcript('rollout-2026-09-25T09-00-00-77777777-2222-3333-4444-555555555555', [
+      { type: 'session_meta', payload: { id: 'x' } },
+      { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: `[OpenClaw conversation info: sender={"id":"42"}]\n${SUMMARISER_PROMPT}\n---\nedited src/a.ts` }] } },
+      { type: 'response_item', payload: { type: 'function_call', arguments: '{"cmd":"edit src/a.ts"}' } },
+    ])
+    await run({ transcript_path: path }, { CAIRN_PLATFORM: 'openclaw' })
     expect(lines('cli.jsonl')).toEqual([])
   })
 

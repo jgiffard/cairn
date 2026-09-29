@@ -373,6 +373,15 @@ describe('the installer and the per-Read hook CCS-40 removed', () => {
     // Somebody else's hook: warned about, never removed.
     expect(codex.hooks.Stop.flatMap((g: { hooks: unknown[] }) => g.hooks)).toContainEqual(quarry)
     expect(first.stdout).toContain('Stop (runs every turn): node /x/.quarry/hooks/quarry-session-end.mjs')
+    // Stop is a live checkpoint and SessionEnd closes the session: a Stop that
+    // ended it closed every Codex session on its first turn (CAIRN-319).
+    const cairnCommand = (event: string) =>
+      codex.hooks[event]
+        .flatMap((g: { hooks: { command: string }[] }) => g.hooks)
+        .map((h: { command: string }) => h.command)
+        .find((command: string) => command.includes('cairn-session-end.mjs'))
+    expect(cairnCommand('Stop')).toMatch(/cairn-session-end\.mjs --ongoing$/)
+    expect(cairnCommand('SessionEnd')).toMatch(/cairn-session-end\.mjs$/)
     expect(first.stdout).toContain('removed the per-Read PreToolUse hook')
 
     const second = await run('node', ['scripts/install-hooks.mjs'], env)

@@ -273,6 +273,8 @@ describe('cairn_vitals_signals', () => {
       hoursAgo: 1,
       request: 'You are writing one entry in an engineering memory that other agents read months later.',
     })
+    // Another tool's summariser, the same run under another name (CAIRN-321).
+    await session({ platform: 'claude', cwd: MAC_CWD, hoursAgo: 1, request: '  You are writing one entry in a sales memory.' })
 
     const v = await signals()
     expect(v.sessions).toMatchObject({
@@ -280,7 +282,7 @@ describe('cairn_vitals_signals', () => {
       recentSummarised: 1,
       baseline: 2,
       baselineSummarised: 2,
-      summariserRecent: 1,
+      summariserRecent: 2,
     })
     const row = (runtime: string, host: string) =>
       v.runtimes.find((r) => r.runtime === runtime && r.host === host)

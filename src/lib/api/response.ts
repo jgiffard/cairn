@@ -38,6 +38,7 @@ export type ApiError =
   | 'validation_failed'
   | 'conflict'
   | 'already_claimed'
+  | 'session_closed'
   | 'resolution_required'
   | 'secret_detected'
   | 'rate_limited'
@@ -50,6 +51,7 @@ const STATUS: Record<ApiError, number> = {
   validation_failed: 400,
   conflict: 409,
   already_claimed: 409,
+  session_closed: 409,
   resolution_required: 400,
   secret_detected: 400,
   rate_limited: 429,

@@ -55,6 +55,15 @@ if (SUMMARISER_FLAGS.some((name) => process.env[name] === '1')) process.exit(0)
 
 const DRY_RUN = process.argv.includes('--dry-run')
 
+/**
+ * `--ongoing`: the session is still open, so write it as a live checkpoint —
+ * no end time, and held tasks left alone. Codex's Stop fires after every turn,
+ * and running the recorder there as a session END closed the session on its
+ * first turn (a closed session cannot be reopened) and stamped a checkpoint on
+ * every held task each time the agent handed back (CAIRN-319).
+ */
+const ONGOING = process.argv.includes('--ongoing')
+
 const arg = (name) => {
   const index = process.argv.indexOf(name)
   return index === -1 ? null : process.argv[index + 1]
@@ -235,8 +244,11 @@ const parseTranscript = async (path) => {
       const text = humanText(raw)
       // Before any person spoke, not merely first: a SessionStart hook's
       // output can land ahead of the prompt.
-      if (!spoke && SUMMARISER_PROMPT.test(raw)) out.summariser = true
-      if (text || SUMMARISER_PROMPT.test(raw)) spoke = true
+      // Through the wrapper: OpenClaw puts its conversation header in front of
+      // whatever it relays, a summariser prompt included.
+      const summariser = SUMMARISER_PROMPT.test(unwrap(raw))
+      if (!spoke && summariser) out.summariser = true
+      if (text || summariser) spoke = true
       if (text) {
         out.prompts.push(text)
         // Only what the human asked about. Scraping every user turn would pull
@@ -345,8 +357,9 @@ const parseCodexRollout = async (path) => {
       if (p.role === 'user' && text) {
         if (SCHEDULED_PROMPT.test(text)) out.scheduled = true
         const human = humanText(text)
-        if (!spoke && SUMMARISER_PROMPT.test(text)) out.summariser = true
-        if (human || SUMMARISER_PROMPT.test(text)) spoke = true
+        const summariser = SUMMARISER_PROMPT.test(unwrap(text))
+        if (!spoke && summariser) out.summariser = true
+        if (human || summariser) spoke = true
         if (human) {
           out.prompts.push(human)
           for (const m of human.matchAll(TASK_REF)) out.refs.add(m[0])
@@ -639,8 +652,10 @@ in the transcript below.`
  * The summariser is the only part of this that costs money, and Codex calls it
  * on every turn.
  *
- * Codex has no SessionEnd, so `install-hooks.mjs` wires the recorder to Stop,
- * which fires at the end of each assistant turn. `record()` then summarised
+ * Codex had no SessionEnd, so `install-hooks.mjs` wired the recorder to Stop,
+ * which fires at the end of each assistant turn — and still does, as a live
+ * checkpoint (`--ongoing`), beside the SessionEnd that now closes the session
+ * (CAIRN-319). `record()` then summarised
  * unconditionally: a forty-turn session made forty model calls, each with up
  * to 24 KB of transcript, to write and rewrite one row. The row was always
  * right -- `cairn session end` upserts on (platform, id) -- but the calls
@@ -692,6 +707,27 @@ const rememberSummary = (sessionId, digestHash, summary) => {
     // not worth failing a session record over.
   }
 }
+
+/**
+ * A session whose row is already closed refuses every live checkpoint (409,
+ * CLI exit SESSION_CLOSED_EXIT): the old per-turn hook ended it mid-upgrade,
+ * or someone ran `cairn session end` by hand. Checkpointing it again each turn
+ * would pay the summariser for a write that cannot land, so the refusal is
+ * remembered and later live checkpoints of that session stop before either.
+ * Its real close still records — ending an ended session is allowed.
+ */
+const markClosed = (sessionId) => {
+  try {
+    const state = readSummaryState()
+    state[sessionId] = { ...state[sessionId], at: Date.now(), closed: true }
+    mkdirSync(dirname(SUMMARY_STATE), { recursive: true })
+    writeFileSync(SUMMARY_STATE, JSON.stringify(state))
+  } catch {
+    // Unremembered, the next turn pays once more and is refused again.
+  }
+}
+
+const knownClosed = (sessionId) => Boolean(readSummaryState()[sessionId]?.closed)
 
 /**
  * The summary for this digest, from the model or from last time.
@@ -910,6 +946,7 @@ const DEBUG = process.env.CAIRN_HOOK_DEBUG === '1'
 
 /** The CLI's "several instances, and nothing says which" (cli/cairn.mjs). */
 const UNDECIDED_EXIT = 10
+const SESSION_CLOSED_EXIT = 11
 const UNROUTED_DIR = join(homedir(), '.cairn', 'unrouted')
 
 const post = (args) =>
@@ -1025,6 +1062,8 @@ const record = async (payload, opts = {}) => {
   // for, a file touched, or a task worked — one of those has to be true.
   if (t.prompts.length === 0 && t.files.size === 0 && t.refs.size === 0) return
 
+  if (opts.ongoing && knownClosed(sessionId)) return { sessionId }
+
   const cwd = payload.cwd ?? t.cwd
   const platform = opts.platform ?? process.env.CAIRN_PLATFORM ?? 'claude'
   const agent = opts.agent ?? process.env.CAIRN_AGENT
@@ -1039,6 +1078,8 @@ const record = async (payload, opts = {}) => {
       cwd: cwd ?? null,
       platform,
       agent: agent ?? null,
+      // A retry must not end a session that is still open.
+      ongoing: Boolean(opts.ongoing),
       firstAt: e?.firstAt ?? Date.now(),
       lastAt: Date.now(),
       // Only retries count against the limit: Codex fails once per turn
@@ -1056,7 +1097,7 @@ const record = async (payload, opts = {}) => {
 
   const args = [
     'session',
-    'end',
+    opts.ongoing ? 'checkpoint' : 'end',
     '--id',
     sessionId,
     '--platform',
@@ -1092,6 +1133,7 @@ const record = async (payload, opts = {}) => {
 
   const code = await post(args)
   if (code === UNDECIDED_EXIT) park(sessionId, cwd ?? process.cwd(), args, platform, agent)
+  if (code === SESSION_CLOSED_EXIT && opts.ongoing) markClosed(sessionId)
   return { sessionId, failed: Boolean(outcome.error) }
 }
 
@@ -1114,7 +1156,7 @@ const retryUnsummarised = async (currentId) => {
   for (const [id, e] of dueRetries(queue, now, currentId)) {
     const result = await record(
       { transcript_path: e.path, session_id: id, cwd: e.cwd ?? undefined },
-      { platform: e.platform, agent: e.agent ?? undefined, retry: true },
+      { platform: e.platform, agent: e.agent ?? undefined, retry: true, ongoing: Boolean(e.ongoing) },
     ).catch(() => null)
     // Still down: stop paying for timeouts, the next run will try again.
     if (result?.failed) break
@@ -1201,7 +1243,7 @@ const main = async () => {
   const dryIndex = process.argv.indexOf('--dry-run')
   if (DRY_RUN) return record({ transcript_path: process.argv[dryIndex + 1] })
 
-  const result = await record(await readStdin())
+  const result = await record(await readStdin(), { ongoing: ONGOING })
   if (!result?.failed) await retryUnsummarised(result?.sessionId ?? null)
 }
 

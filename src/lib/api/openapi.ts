@@ -40,8 +40,8 @@ const errorResponse = {
             type: 'string',
             enum: [
               'unauthorized', 'forbidden', 'not_found', 'validation_failed',
-              'conflict', 'already_claimed', 'resolution_required',
-              'rate_limited', 'internal_error',
+              'conflict', 'already_claimed', 'session_closed', 'resolution_required',
+              'secret_detected', 'rate_limited', 'internal_error',
             ],
           },
           suggestedResolution: {
@@ -1161,15 +1161,19 @@ export const openapiSpec = () => ({
         summary: 'Checkpoint an ongoing session or record a finished session',
         description:
           'Set `ongoing: true` for an in-progress checkpoint: `ended_at` stays null, ' +
-          'held tasks are not checkpointed, and a closed session cannot be reopened (409). ' +
+          'held tasks are not checkpointed, and a closed session cannot be reopened ' +
+          '(409 `session_closed`). ' +
           'Omit `ongoing` for the existing session-end behavior. Idempotent on ' +
           '(platformSource, externalId), which is a correctness requirement rather than a ' +
-          'nicety: Codex has no session-end event so its writer runs on Stop, which fires ' +
-          'every turn. `checkpointHeld` also checkpoints what this session holds: tasks it ' +
+          'nicety: Codex checkpoints the live session on Stop, which fires every turn. ' +
+          '`checkpointHeld` also checkpoints what this session holds: tasks it ' +
           'worked get the summary, tasks it only held get a "still held" line where they ' +
           'have no checkpoint at all. It never replaces a written checkpoint on a claim it ' +
           'cannot prove is its own, never touches another session\'s claim, and does not ' +
-          'count as activity for `/reconcile`.',
+          'count as activity for `/reconcile`. Secret-shaped strings in `request`, ' +
+          '`learned`, `completed` and `nextSteps` are replaced with `[redacted <rule>]` ' +
+          'rather than refused, and `redactions` lists each by field, rule and line, never ' +
+          'the value.',
         requestBody: body(json(sessionUpsert)),
         responses: { '200': okResponse('Recorded.'), '409': errorResponse },
       },

@@ -39,7 +39,7 @@ describe('session POST ongoing contract', () => {
     mocks.upsert.mockRejectedValueOnce(Object.assign(new Error('Session already ended; cannot checkpoint.'), { code: 'PZ001' }))
     const response = await post({ externalId: 'agent:example', ongoing: true })
     expect(response.status).toBe(409)
-    expect(await response.json()).toMatchObject({ code: 'conflict' })
+    expect(await response.json()).toMatchObject({ code: 'session_closed' })
   })
 
   it('still defaults an omitted ongoing flag to the end path', async () => {
