@@ -4767,6 +4767,10 @@ const commands = {
           if (resolved.dir) {
             jobs.push('openclaw-sessions')
             jobEnv = { ...process.env, CAIRN_OPENCLAW_SESSIONS: resolved.dir }
+            // Said here, not left to the installer's own output: on a first run
+            // the cron backend skips jobs whose scripts the hooks step has not
+            // put in place yet, so its plan alone would never name the directory.
+            line(`${dry ? '!' : '✓'} jobs      openclaw-sessions will sweep ${resolved.dir}`)
           } else {
             line(`! jobs      openclaw-sessions skipped — ${resolved.error}`)
             line('            set CAIRN_OPENCLAW_SESSIONS=<dir> and re-run, e.g.:')
