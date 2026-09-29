@@ -35,7 +35,7 @@ vi.mock('@/lib/api/auth', async (importOriginal) => {
 
 import { pool } from '@/lib/db/client'
 import { authenticate } from '@/lib/api/auth'
-import { createUserKey } from '@/lib/api/users'
+import { createUserKey, listUserKeys } from '@/lib/api/users'
 import { listOwnKeys, revokeOwnKey } from '@/lib/api/own-keys'
 import { GET } from '@/app/api/v1/me/keys/route'
 import { DELETE } from '@/app/api/v1/me/keys/[keyId]/route'
@@ -95,7 +95,7 @@ describe('self-service agent keys', () => {
       id: mine.id,
       agentName: 'claude-code',
       name: 'claude-code on self-keys-laptop',
-      keyPrefix: mine.key_prefix,
+      keyPrefix: mine.keyPrefix,
       createdAt: expect.any(String),
       lastUsedAt: null,
       revokedAt: null,
@@ -104,6 +104,10 @@ describe('self-service agent keys', () => {
     expect(JSON.stringify(body)).not.toContain(mine.key)
     expect(JSON.stringify(body)).not.toMatch(/key_hash|keyHash/)
     expect((body.data as { id: string }[]).map((key) => key.id)).not.toContain(theirs.id)
+  })
+
+  it('gives an administrator exactly the shape the owner sees (CAIRN-317)', async () => {
+    expect(await listUserKeys(memberId)).toEqual(await listOwnKeys(memberId))
   })
 
   it('refuses an agent key, even the caller\'s own', async () => {

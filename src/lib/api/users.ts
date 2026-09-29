@@ -4,6 +4,7 @@ import { pool, transaction } from '@/lib/db/client'
 import type { UserRole } from './actor'
 import type { Actor } from './auth'
 import { generateApiKey } from './keys'
+import { iso, listAgentKeys } from './agent-keys'
 
 export type AdminUser = {
   id: string
@@ -268,12 +269,7 @@ export const listUserKeys = async (userId: string) => {
   await pool().query('select id from app_users where id = $1', [userId]).then((result) => {
     if (!result.rows[0]) throw new UserAdminError('not_found', 'No such user.')
   })
-  const result = await pool().query(
-    `select id, agent_name, name, key_prefix, last_used_at, revoked_at, created_at
-       from api_keys where user_id = $1 order by created_at, id`,
-    [userId],
-  )
-  return result.rows
+  return listAgentKeys(userId)
 }
 
 const createKeyOn = async (client: PoolClient, userId: string, input: { agentName: string; name: string }) => {
@@ -295,7 +291,11 @@ const createKeyOn = async (client: PoolClient, userId: string, input: { agentNam
     throw new UserAdminError('conflict', 'The user became inactive before the key was created.')
   }
   return {
-    ...created,
+    id: created.id as string,
+    agentName: created.agent_name as string,
+    name: created.name as string,
+    keyPrefix: created.key_prefix as string,
+    createdAt: iso(created.created_at)!,
     key: generated.key,
     warning: 'This is the only time the key is shown. Store it now.',
   }
@@ -340,5 +340,5 @@ export const revokeUserKey = async (userId: string, keyId: string) => {
   )
   const key = result.rows[0]
   if (!key) throw new UserAdminError('not_found', 'No such active key.')
-  return key
+  return { id: key.id as string, agentName: key.agent_name as string, revokedAt: iso(key.revoked_at)! }
 }

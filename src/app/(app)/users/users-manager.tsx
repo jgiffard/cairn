@@ -9,15 +9,9 @@ import type { AdminUser } from '@/lib/api/users'
 import { EmptyState } from '@/components/empty-state'
 import { cn } from '@/lib/utils'
 
-export type UserKey = {
-  id: string
-  agent_name: string
-  name: string
-  key_prefix: string
-  last_used_at: string | null
-  revoked_at: string | null
-  created_at: string
-}
+import type { AgentKey } from '@/lib/api/agent-keys'
+
+export type UserKey = AgentKey
 
 const errorMessage = (value: unknown) => value instanceof Error ? value.message : 'Something went wrong.'
 
@@ -146,7 +140,7 @@ export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; cur
   })
 
   const revokeKey = (userId: string, key: UserKey) => {
-    if (!confirm(`Revoke the ${key.agent_name} key? That agent will stop working immediately.`)) return
+    if (!confirm(`Revoke the ${key.agentName} key? That agent will stop working immediately.`)) return
     void run(`keys:${userId}`, async () => {
       const result = await mutate(`/api/v1/users/${userId}/keys/${key.id}`, { method: 'DELETE' })
       if (!result.ok) throw new Error(result.error)
@@ -334,9 +328,9 @@ export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; cur
                               )}
                               {(keys[user.id] ?? []).map((key) => (
                                 <li key={key.id} className="row-hover flex min-h-[2.25rem] flex-wrap items-center gap-2 px-2.5 py-1.5 text-[0.6875rem]">
-                                  <span className={key.revoked_at ? 'line-through text-fg-subtle' : 'text-fg'}>{key.agent_name}</span>
-                                  <code className="text-fg-subtle">{key.key_prefix}…</code>
-                                  {!key.revoked_at && <Button type="button" size="sm" variant="danger" className="ml-auto h-6" onClick={() => revokeKey(user.id, key)}>Revoke</Button>}
+                                  <span className={key.revoked ? 'line-through text-fg-subtle' : 'text-fg'}>{key.agentName}</span>
+                                  <code className="text-fg-subtle">{key.keyPrefix}…</code>
+                                  {!key.revoked && <Button type="button" size="sm" variant="danger" className="ml-auto h-6" onClick={() => revokeKey(user.id, key)}>Revoke</Button>}
                                 </li>
                               ))}
                             </ul>
