@@ -7,7 +7,7 @@
 -- for it throughout. The assignee is that human, a real user rather than a
 -- label, so it can be filtered on, changed, and survive a rename.
 
-alter table tasks add column assignee_user_id uuid references app_users(id);
+alter table tasks add column assignee_user_id uuid;
 
 -- Backfill from the creator. A `created` event has carried the caller's user
 -- since the shared workspace; before it, the column was filled from the project
@@ -45,6 +45,15 @@ create trigger tasks_default_assignee
   for each row execute function tasks_default_assignee();
 
 alter table tasks alter column assignee_user_id set not null;
+
+-- Deferred: deleting a user cascades through their projects to those projects'
+-- tasks, and an immediate check would fire before that cascade had run. At
+-- commit, the only rows left pointing at the user are tasks elsewhere still
+-- assigned to them, and the delete is refused for those — as it should be.
+-- Added last, after the backfill: a deferred check queued by that update would
+-- leave pending trigger events, and Postgres refuses ALTER TABLE while any are.
+alter table tasks add constraint tasks_assignee_user_id_fkey
+  foreign key (assignee_user_id) references app_users(id) deferrable initially deferred;
 
 create index tasks_assignee_idx on tasks(assignee_user_id)
   where status not in ('done', 'cancelled');

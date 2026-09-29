@@ -76,6 +76,12 @@ describe('task assignee', () => {
     expect(named.map((row) => [row.number, row.assignee?.name])).toEqual([[2, 'Other Person']])
   })
 
+  it('refuses to hard-delete a user who still owns work in someone else\'s project', async () => {
+    await expect(pool().query('delete from app_users where id = $1', [otherId])).rejects.toThrow(
+      /tasks_assignee_user_id_fkey/,
+    )
+  })
+
   it('records a reassignment as its own event', async () => {
     await expect(
       pool().query(
