@@ -73,10 +73,18 @@ const TOOLS = [
       properties: {
         subject: { type: 'string', description: 'What you are about to work on.' },
         project: { type: 'string', description: 'Optional project key, e.g. CAI.' },
+        assignee: {
+          type: 'string',
+          description: 'Only tasks assigned to this person: "me", an email, a name or a user id.',
+        },
       },
       required: ['subject'],
     },
-    run: (a) => ['check', a.subject, ...(a.project ? ['--project', a.project] : [])],
+    run: (a) => [
+      'check', a.subject,
+      ...(a.project ? ['--project', a.project] : []),
+      ...(a.assignee ? ['--assignee', a.assignee] : []),
+    ],
   },
   {
     name: 'cairn_show',

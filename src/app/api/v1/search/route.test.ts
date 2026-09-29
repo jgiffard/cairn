@@ -5,7 +5,10 @@ const mocks = vi.hoisted(() => ({
   searchAll: vi.fn(),
   searchTasks: vi.fn(),
   recordSearch: vi.fn(),
+  resolveAssignee: vi.fn(),
 }))
+
+vi.mock('@/lib/api/people', () => ({ resolveAssignee: mocks.resolveAssignee }))
 
 vi.mock('@/lib/api/auth', () => ({ authenticate: mocks.authenticate }))
 
@@ -143,5 +146,46 @@ describe('search records which entries it returned', () => {
 
     expect(payload.data.count).toBe(2)
     expect(recordedRefs()).toHaveLength(payload.data.results.length)
+  })
+})
+
+describe('search by assignee (CAIRN-310)', () => {
+  beforeEach(() => {
+    mocks.authenticate.mockReset().mockResolvedValue(actor)
+    mocks.searchAll.mockReset()
+    mocks.searchTasks.mockReset().mockResolvedValue({ rows: [taskRow(131)], widened: false })
+    mocks.recordSearch.mockReset().mockResolvedValue(undefined)
+    mocks.resolveAssignee.mockReset()
+  })
+
+  it('resolves the person and narrows to their tasks, which selects the task path', async () => {
+    mocks.resolveAssignee.mockResolvedValue({
+      ok: true,
+      person: { id: 'user-julien', email: 'julien@example.test', name: 'Julien', active: true },
+    })
+
+    const response = await search('q=pool+timeouts&assignee=julien')
+
+    expect(response.status).toBe(200)
+    expect(mocks.resolveAssignee).toHaveBeenCalledWith('julien', 'user-1')
+    // An assignee is a statement about tasks, like a type or a status: it is
+    // not silently dropped by the unified path.
+    expect(mocks.searchAll).not.toHaveBeenCalled()
+    expect(mocks.searchTasks).toHaveBeenCalledWith(
+      'user-1',
+      'pool timeouts',
+      expect.objectContaining({ assignee: 'user-julien' }),
+      20,
+    )
+  })
+
+  it('refuses a name that matches nobody rather than reporting the subject as new', async () => {
+    mocks.resolveAssignee.mockResolvedValue({ ok: false, code: 'not_found', error: 'No user julian.' })
+
+    const response = await search('q=pool+timeouts&assignee=julian')
+
+    expect(response.status).toBe(404)
+    expect(mocks.searchTasks).not.toHaveBeenCalled()
+    expect(mocks.searchAll).not.toHaveBeenCalled()
   })
 })

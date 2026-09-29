@@ -381,9 +381,9 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | | |
 |---|---|
 | **Find and read** | |
-| `cairn check "<subject>"` | **Start here.** Prior work across all four stores, with a `~tokens` cost per row |
-| `cairn context [--scope project\|all] [--project K]` | The briefing: what you hold, what is in flight, where the last session here stopped. `--scope project` limits held work, stale claims, and the last session to the resolved project; the default `all` keeps cross-project awareness. An unresolved project is an error in project scope; an unknown explicit key returns 404. |
-| `cairn next` | **What to pick up, and why.** Finishing beats starting, so work you hold ranks above work dropped with a checkpoint, which ranks above anything not begun. Blocked, waiting, or actively held by another agent is never offered |
+| `cairn check "<subject>" [--assignee me\|<who>]` | **Start here.** Prior work across all four stores, with a `~tokens` cost per row. `--assignee` narrows to that person's tasks |
+| `cairn context [--scope project\|all] [--project K]` | The briefing: what you hold, what is in flight (naming the owner when it is not your human), your human's open work here that nobody is on (five, most urgent first, then a count), where the last session here stopped. `--scope project` limits held work, stale claims, and the last session to the resolved project; the default `all` keeps cross-project awareness. An unresolved project is an error in project scope; an unknown explicit key returns 404. |
+| `cairn next [--assignee me\|<who>]` | **What to pick up, and why.** Finishing beats starting, so work you hold ranks above work dropped with a checkpoint, which ranks above anything not begun. Blocked, waiting, or actively held by another agent is never offered. Within a tier your human's work comes first; someone else's is still offered, with whose it is in the reason |
 | `cairn show <ref>` · `cairn list --project K` · `cairn projects` | Read one, many, or the project index. `list --assignee me\|<who>` is what a person owns; `--mine` is what this agent holds right now |
 | `cairn people` | Who work can be assigned to: name and email |
 | `cairn log <ref>` · `cairn history <ref>` | The work log, and what changed when and by whom |

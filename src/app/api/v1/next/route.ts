@@ -4,12 +4,14 @@ import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
 import { rankNext, type Candidate } from '@/lib/api/next'
 import { resolveProject } from '@/lib/api/project-keys'
+import { peopleByIds, resolveAssignee } from '@/lib/api/people'
 
 export const dynamic = 'force-dynamic'
 
 const nextQuery = z.object({
   project: z.string().max(10).optional(),
   limit: z.coerce.number().int().min(1).max(20).optional(),
+  assignee: z.string().trim().min(1).max(320).optional(),
 })
 
 type Row = {
@@ -25,6 +27,7 @@ type Row = {
   checkpoint_summary: string | null
   blocked_at: string | null
   claimed_session: string | null
+  assignee_user_id: string | null
   project: { key: string } | { key: string }[] | null
 }
 
@@ -57,16 +60,22 @@ export const GET = route({
     if (query.project && !resolved) return fail('not_found', `No project ${query.project}.`)
     const projectKey = resolved?.project.key
 
+    // A name that matches nobody is refused, not treated as "nothing open" —
+    // the same reason an unknown project is.
+    const owner = query.assignee ? await resolveAssignee(query.assignee, actor.userId) : null
+    if (owner && !owner.ok) return fail(owner.code, owner.error)
+
     const base = admin()
       .from('tasks')
       .select(
         'id, number, title, status, priority, type, claimed_by, claimed_session, heartbeat_at, updated_at, ' +
-          'checkpoint_summary, blocked_at, project:projects!project_id!inner(key)',
+          'checkpoint_summary, blocked_at, assignee_user_id, project:projects!project_id!inner(key)',
       )
       .not('status', 'in', '("done","cancelled")')
       .neq('projects.status', 'archived')
+    const scoped = projectKey ? base.eq('projects.key', projectKey) : base
 
-    const { data } = await (projectKey ? base.eq('projects.key', projectKey) : base)
+    const { data } = await (owner?.ok ? scoped.eq('assignee_user_id', owner.person.id) : scoped)
       .order('updated_at', { ascending: true })
       .limit(500)
 
@@ -92,6 +101,8 @@ export const GET = route({
       unmet.set(dep.blocked_id, (unmet.get(dep.blocked_id) ?? 0) + 1)
     }
 
+    const people = await peopleByIds(rows.map((row) => row.assignee_user_id ?? ''))
+
     const candidates: Candidate[] = rows.map((row) => ({
       ref: `${keyOf(row.project)}-${row.number}`,
       title: row.title,
@@ -105,9 +116,15 @@ export const GET = route({
       checkpoint: row.checkpoint_summary,
       blockedAt: row.blocked_at,
       unmetDeps: unmet.get(row.id) ?? 0,
+      assigneeId: row.assignee_user_id,
+      assignee: row.assignee_user_id ? (people.get(row.assignee_user_id)?.name ?? null) : null,
     }))
 
-    const ranked = rankNext(candidates, { me: actor.actorId, mySession: actor.sessionId })
+    const ranked = rankNext(candidates, {
+      me: actor.actorId,
+      mySession: actor.sessionId,
+      myUserId: actor.userId,
+    })
     return ok({
       pick: ranked[0] ?? null,
       then: ranked.slice(1, query.limit ?? 5),

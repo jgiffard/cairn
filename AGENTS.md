@@ -127,7 +127,8 @@ its own — your own checkpoint is the handoff that counts.
 
 **The briefing** is `cairn context` — what you hold, what is in flight around you, where
 the last session in this directory stopped, what is known here. A hook runs it at session
-start. `cairn next` says what to pick up and why. `cairn map <KEY>` tells Cairn which
+start. `cairn next` says what to pick up and why — your human's work first; another
+person's says whose. `cairn map <KEY>` tells Cairn which
 project a checkout is — once per repository; clones and worktrees follow.
 
 ## 8. Before you stop
