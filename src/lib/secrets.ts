@@ -100,17 +100,15 @@ export const looksLikePlaceholder = (raw: string): boolean => {
 
 const lineAt = (text: string, index: number) => text.slice(0, index).split('\n').length
 
-export const detectSecret = (text: string): SecretHit | null => {
-  if (!text) return null
+/** Where a secret sits in the text: `start`/`end` bound the value alone, never the key naming it. */
+type SecretSpan = { pattern: string; label: string; index: number; start: number; end: number }
 
-  const hits: (SecretHit & { index: number })[] = []
-  const consider = (pattern: string, label: string, index: number) => {
-    hits.push({ pattern, label, line: lineAt(text, index), index })
-  }
-
+const secretSpans = function* (text: string): Generator<SecretSpan> {
   for (const rule of TOKEN_RULES) {
-    const match = rule.re.exec(text)
-    if (match) consider(rule.pattern, rule.label, match.index)
+    for (const match of text.matchAll(new RegExp(rule.re.source, 'g'))) {
+      const index = match.index ?? 0
+      yield { pattern: rule.pattern, label: rule.label, index, start: index, end: index + match[0].length }
+    }
   }
 
   for (const match of text.matchAll(ASSIGNMENT)) {
@@ -135,23 +133,53 @@ export const detectSecret = (text: string): SecretHit | null => {
     // is hyphenated. A word, or words joined by hyphens, with more on the line.
     const prose = /^[A-Za-z]+(?:-[A-Za-z]+)*$/.test(strip(value)) && /\S/.test(match[3] ?? '')
     if (!prose && !looksLikePlaceholder(value)) {
-      consider('credential_assignment', `a value assigned to "${key}"`, match.index ?? 0)
-      break
+      const index = match.index ?? 0
+      const valueAt = index + match[0].length - (match[2] ?? '').length
+      const core = strip(value)
+      const start = valueAt + Math.max(0, value.indexOf(core))
+      yield { pattern: 'credential_assignment', label: `a value assigned to "${key}"`, index, start, end: start + core.length }
     }
   }
 
   for (const match of text.matchAll(URL_CREDENTIAL)) {
-    const [, user = '', pass = ''] = match
+    const [whole, user = '', pass = ''] = match
     if (pass !== user && !looksLikePlaceholder(pass)) {
-      consider('url_credential', 'a password inside a connection URL', match.index ?? 0)
-      break
+      const index = match.index ?? 0
+      const start = index + whole.indexOf('://') + 3 + user.length + 1
+      yield { pattern: 'url_credential', label: 'a password inside a connection URL', index, start, end: start + pass.length }
     }
   }
+}
 
+export const detectSecret = (text: string): SecretHit | null => {
+  if (!text) return null
   // The earliest in the text, so the line reported is the first to fix.
-  const [first] = hits.sort((a, b) => a.index - b.index)
+  const [first] = [...secretSpans(text)].sort((a, b) => a.index - b.index)
   if (!first) return null
-  return { pattern: first.pattern, label: first.label, line: first.line }
+  return { pattern: first.pattern, label: first.label, line: lineAt(text, first.index) }
+}
+
+/**
+ * Every secret in the text replaced by a marker naming its rule, for writes
+ * that must not be refused. A session is recorded by a hook in the background
+ * from a raw transcript: refusing it would lose the whole record, and nobody
+ * would see why. The key stays (`password: [redacted credential_assignment]`),
+ * so the prose still says what was there.
+ */
+export const redactSecrets = (text: string): { text: string; hits: SecretHit[] } => {
+  if (!text) return { text, hits: [] }
+  const spans = [...secretSpans(text)].sort((a, b) => a.start - b.start)
+  const hits: SecretHit[] = []
+  let out = ''
+  let at = 0
+  for (const span of spans) {
+    // Overlaps (a JWT inside `token=…`) are one secret, already replaced.
+    if (span.start < at) continue
+    out += `${text.slice(at, span.start)}[redacted ${span.pattern}]`
+    at = span.end
+    hits.push({ pattern: span.pattern, label: span.label, line: lineAt(text, span.index) })
+  }
+  return { text: out + text.slice(at), hits }
 }
 
 /**

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   heldByThisSession,
   planAutoCheckpoints,
+  redactSessionProse,
   splitHeldByWorked,
   untouchedCheckpoint,
   workedCheckpoint,
@@ -169,5 +170,33 @@ describe('planAutoCheckpoints', () => {
 
   it('is a no-op when a sweep re-records the same session', () => {
     expect(plan([task(1, 'this', workedCheckpoint('Shipped the fix.'))], 'this', ['BB-1'])).toEqual([])
+  })
+})
+
+describe('session prose and secrets (CAIRN-322)', () => {
+  const token = ['ghp', '_', 'aB3dE5gH7jK9mN1pQ2rS4tU6vW8xY0zaB3dE5'].join('')
+  const base = { externalId: 'x', platformSource: 'claude' as const, ongoing: false, files: [], taskRefs: [], checkpointHeld: true }
+
+  it('redacts the four prose fields instead of refusing the record', () => {
+    const { input, redactions } = redactSessionProse({
+      ...base,
+      request: `use ${token} to push`,
+      learned: 'nothing secret here',
+      completed: 'DB_PASSWORD=hunter2hunter set on the box',
+    })
+    expect(input.request).toBe('use [redacted github_token] to push')
+    expect(input.learned).toBe('nothing secret here')
+    expect(input.completed).toBe('DB_PASSWORD=[redacted credential_assignment] set on the box')
+    expect(input.nextSteps).toBeUndefined()
+    expect(redactions.map((r) => [r.field, r.pattern])).toEqual([
+      ['request', 'github_token'],
+      ['completed', 'credential_assignment'],
+    ])
+    expect(JSON.stringify(redactions)).not.toContain('hunter2')
+  })
+
+  it('leaves everything else as it was', () => {
+    const { input } = redactSessionProse({ ...base, cwd: '/srv/app', files: ['a.ts'] })
+    expect(input).toEqual({ ...base, cwd: '/srv/app', files: ['a.ts'] })
   })
 })

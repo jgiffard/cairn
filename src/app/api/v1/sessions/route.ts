@@ -52,8 +52,8 @@ export const POST = route({
   schema: sessionUpsert,
   handler: async ({ actor, body }) => {
     try {
-      const { session, checkpointed } = await upsertSession(actor, body)
-      return ok({ id: session.id, endedAt: session.ended_at, checkpointed })
+      const { session, checkpointed, redactions } = await upsertSession(actor, body)
+      return ok({ id: session.id, endedAt: session.ended_at, checkpointed, redactions })
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'PZ001') {
         return fail('conflict', error.message)

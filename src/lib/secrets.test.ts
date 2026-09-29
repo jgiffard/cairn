@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectSecret, findSecret, looksLikePlaceholder, secretRefusal } from './secrets'
+import { detectSecret, findSecret, looksLikePlaceholder, redactSecrets, secretRefusal } from './secrets'
 
 // Assembled at runtime so this file does not itself look like it leaks
 // anything to a repository scanner.
@@ -136,5 +136,50 @@ describe('findSecret', () => {
 describe('looksLikePlaceholder', () => {
   it('is false for something that reads as a real value', () => {
     expect(looksLikePlaceholder('hunter2x')).toBe(false)
+  })
+})
+
+describe('redactSecrets', () => {
+  const token = fake('ghp_', 36)
+  const jwt = `${fake('eyJ', 30)}.${fake('eyJ', 40)}.${fake('', 43)}`
+
+  it('replaces every secret with its rule and keeps the prose around it', () => {
+    const text = `Pushed with ${token}.\nDB_PASSWORD=hunter2hunter\nthen psql postgres://app:s3cretPass@db:5432/app`
+    const { text: out, hits } = redactSecrets(text)
+    expect(out).toBe(
+      'Pushed with [redacted github_token].\n' +
+        'DB_PASSWORD=[redacted credential_assignment]\n' +
+        'then psql postgres://app:[redacted url_credential]@db:5432/app',
+    )
+    expect(hits.map((hit) => [hit.pattern, hit.line])).toEqual([
+      ['github_token', 1],
+      ['credential_assignment', 2],
+      ['url_credential', 3],
+    ])
+  })
+
+  it('catches the same rule twice, not only its first match', () => {
+    const other = fake('ghp_', 40)
+    const { text, hits } = redactSecrets(`${token} and ${other}`)
+    expect(text).toBe('[redacted github_token] and [redacted github_token]')
+    expect(hits).toHaveLength(2)
+  })
+
+  it('counts a token inside an assignment once, and keeps the quotes', () => {
+    const { text, hits } = redactSecrets(`"token": "${jwt}"`)
+    expect(text).toBe('"token": "[redacted jwt]"')
+    expect(hits).toHaveLength(1)
+  })
+
+  it('leaves clean text and placeholders untouched, and its own output clean', () => {
+    const clean = 'password: <from the vault>, token: $GITHUB_TOKEN, tokens: 500'
+    expect(redactSecrets(clean)).toEqual({ text: clean, hits: [] })
+    const { text } = redactSecrets(`api_key=${fake('sk-proj-', 48)}`)
+    expect(detectSecret(text)).toBeNull()
+  })
+
+  it('agrees with detectSecret on the first hit', () => {
+    const text = `line one\npassword: hunter2hunter and ${token}`
+    expect(redactSecrets(text).hits[0]).toEqual(detectSecret(text))
   })
 })

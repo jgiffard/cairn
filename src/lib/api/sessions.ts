@@ -7,6 +7,7 @@ import type { SessionUpsert } from '@/schemas/session'
 import { recordFiles } from './files'
 import { normalizeDatabaseValue, pool } from '@/lib/db/client'
 import { AUTO_CHECKPOINT_MARKER, UNTOUCHED_CHECKPOINT_PREFIX, isAutoCheckpoint } from '@/lib/checkpoint-origin'
+import { redactSecrets, type SecretHit } from '@/lib/secrets'
 
 /**
  * Sessions: the episodic record, checkpointed during and written at the end of one.
@@ -294,7 +295,33 @@ const keepRealRefs = async (_userId: string, refs: string[]): Promise<string[]> 
   return [...new Set(kept)].slice(0, 100)
 }
 
-export const upsertSession = async (actor: Actor, input: SessionUpsert) => {
+const PROSE = ['request', 'learned', 'completed', 'nextSteps'] as const
+
+export type SessionRedaction = SecretHit & { field: (typeof PROSE)[number] }
+
+/**
+ * Session prose is written by a model from a raw transcript, so it carries
+ * whatever the transcript did — a token pasted into a prompt, a connection
+ * string in a command's output. It is redacted rather than refused (CAIRN-322):
+ * other writes get a 400 the author can fix, but this one is posted by a hook
+ * nobody watches, and a refusal would drop the whole record without a trace.
+ */
+export const redactSessionProse = (input: SessionUpsert) => {
+  const redactions: SessionRedaction[] = []
+  const prose = Object.fromEntries(
+    PROSE.map((field) => {
+      const value = input[field]
+      if (!value) return [field, value]
+      const { text, hits } = redactSecrets(value)
+      redactions.push(...hits.map((hit) => ({ ...hit, field })))
+      return [field, text]
+    }),
+  ) as Pick<SessionUpsert, (typeof PROSE)[number]>
+  return { input: { ...input, ...prose }, redactions }
+}
+
+export const upsertSession = async (actor: Actor, raw: SessionUpsert) => {
+  const { input, redactions } = redactSessionProse(raw)
   const projectId = await projectIdForSession(actor.userId, input)
   const taskRefs = await keepRealRefs(actor.userId, input.taskRefs)
 
@@ -340,7 +367,7 @@ export const upsertSession = async (actor: Actor, input: SessionUpsert) => {
 
   const checkpointed = !input.ongoing && input.checkpointHeld ? await checkpointHeldTasks(actor, data) : []
 
-  return { session: data, checkpointed }
+  return { session: data, checkpointed, redactions }
 }
 
 /** A total-order cursor; NULL (ongoing) rows precede ended rows. */

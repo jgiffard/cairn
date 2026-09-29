@@ -1169,7 +1169,10 @@ export const openapiSpec = () => ({
           'worked get the summary, tasks it only held get a "still held" line where they ' +
           'have no checkpoint at all. It never replaces a written checkpoint on a claim it ' +
           'cannot prove is its own, never touches another session\'s claim, and does not ' +
-          'count as activity for `/reconcile`.',
+          'count as activity for `/reconcile`. Secret-shaped strings in `request`, ' +
+          '`learned`, `completed` and `nextSteps` are replaced with `[redacted <rule>]` ' +
+          'rather than refused, and `redactions` lists each by field, rule and line, never ' +
+          'the value.',
         requestBody: body(json(sessionUpsert)),
         responses: { '200': okResponse('Recorded.'), '409': errorResponse },
       },
