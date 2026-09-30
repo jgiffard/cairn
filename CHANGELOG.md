@@ -9,6 +9,16 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A machine on several instances at different releases never synced.** With no default
+  instance, 0.14.0's `agent-files` job required every instance to report the same release,
+  so a personal instance on 0.14.0 beside a company one on 0.12.1 refused every run. With a
+  default, it followed that one even when it was the older, putting the CLI behind the newer
+  server. The job now follows the newest release any instance reports, default or not, and
+  leaves out an instance it cannot ask (a company instance behind a VPN, from home). It
+  still writes nothing when no instance answers.
+
 ## [0.14.0] — 2026-09-30
 
 ### Security

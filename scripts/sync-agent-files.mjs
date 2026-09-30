@@ -356,13 +356,11 @@ const envFile = (path) => {
 }
 
 /**
- * Which instance's release this machine follows.
+ * Every instance this machine talks to.
  *
  * One instance: the CAIRN_BASE_URL the CLI itself would use — the environment,
- * then ~/.cairn/env. Several (~/.cairn/instances.json): the default instance,
- * the one an unrouted command goes to. With no default every instance is
- * asked, and they have to agree: there is one CLI and one set of hooks per
- * machine, and picking one of two releases at random is not a pin.
+ * then ~/.cairn/env. Several (~/.cairn/instances.json): all of them, default or
+ * not — see `newest` for why the default does not decide.
  */
 const instances = () => {
   const path = join(home, '.cairn', 'instances.json')
@@ -381,26 +379,65 @@ const instances = () => {
   const all = Object.entries(config?.instances ?? {})
     .filter(([, instance]) => typeof instance?.url === 'string')
     .map(([name, instance]) => ({ name, url: instance.url }))
-  const fallback = config?.unclassified?.mode === 'default' ? config.unclassified.instance : null
-  const chosen = all.filter((instance) => !fallback || instance.name === fallback)
-  return chosen.length ? chosen : refuse('~/.cairn/instances.json names no instance with a url')
+  return all.length ? all : refuse('~/.cairn/instances.json names no instance with a url')
 }
 
-/** What `/api/v1/health` says the instance runs. No key: it is the liveness probe. */
+/**
+ * What `/api/v1/health` says the instance runs, or why it could not say.
+ * No key: it is the liveness probe. Never refuses on its own — one instance
+ * that cannot be asked is not a reason to ignore the others.
+ */
 const releaseOf = async ({ name, url }) => {
   const health = `${url.replace(/\/+$/, '')}/api/v1/health`
   let version
   try {
     const response = await fetchWithRetry(health)
-    if (!response.ok) return refuse(`${health} answered ${response.status}, so ${name}'s release is unknown`)
+    if (!response.ok) return { name, error: `${health} answered ${response.status}` }
     version = (await response.json())?.data?.version
   } catch (error) {
-    return refuse(`could not ask ${health} which release ${name} runs (${error.cause?.code ?? error.message})`)
+    return { name, error: `could not ask ${health} (${error.cause?.code ?? error.message})` }
   }
   if (typeof version !== 'string' || !RELEASE.test(version)) {
-    return refuse(`${health} reports version ${JSON.stringify(version)}, which is not a release number`)
+    return { name, error: `${health} reports version ${JSON.stringify(version)}, which is not a release number` }
   }
-  return version
+  return { name, version }
+}
+
+/** Ordered by major.minor.patch; a pre-release sorts below its release. */
+const compareReleases = (a, b) => {
+  const [coreA, preA] = a.split('-')
+  const [coreB, preB] = b.split('-')
+  const partsA = coreA.split('.').map(Number)
+  const partsB = coreB.split('.').map(Number)
+  for (let i = 0; i < 3; i += 1) if (partsA[i] !== partsB[i]) return partsA[i] - partsB[i]
+  if (!preA || !preB) return (preA ? -1 : 0) - (preB ? -1 : 0)
+  return preA < preB ? -1 : preA > preB ? 1 : 0
+}
+
+/**
+ * The newest release any instance this machine talks to reports.
+ *
+ * There is one CLI and one set of hooks per machine, whatever the number of
+ * instances, so one release has to serve all of them. Requiring them to agree
+ * left a machine on two instances at different releases — a personal one on
+ * 0.14.0 beside a company one on 0.12.1 — refusing every run, forever. Following
+ * the default instead made that choice by accident: a default on the older one
+ * put a CLI behind the newer server, the direction that breaks (a missing
+ * command), rather than ahead of the older one, which the CLI already expects
+ * and says so ("newer than the server"). So: the newest.
+ *
+ * An instance that cannot be asked — a company instance behind a VPN, from
+ * home — is left out rather than failing the run; the run refuses only when no
+ * instance answers. This widens nothing: the version only picks a tag of the
+ * repository above, and only instances this machine was set up for have a say.
+ */
+const newest = (answers) => {
+  const known = answers.filter((a) => a.version)
+  for (const { name, error } of answers.filter((a) => a.error)) console.log(`skipped   ${name}: ${error}`)
+  if (!known.length) {
+    refuse(`no instance said which release it runs (${answers.map((a) => `${a.name}: ${a.error}`).join('; ')})`)
+  }
+  return known.reduce((best, a) => (compareReleases(a.version, best.version) > 0 ? a : best))
 }
 
 /**
@@ -427,17 +464,11 @@ const resolveSource = async () => {
   if (legacy) console.log(`--source ${LEGACY_MAIN} is the pre-#110 default; pinning to the instance's release instead`)
 
   const repo = repoBase()
-  const versions = []
-  for (const instance of instances()) versions.push({ ...instance, version: await releaseOf(instance) })
-  const distinct = [...new Set(versions.map((v) => v.version))]
-  if (distinct.length > 1) {
-    refuse(
-      `this machine's instances run different releases (${versions.map((v) => `${v.name} ${v.version}`).join(', ')}) ` +
-        'and none is the default. Make one the default in ~/.cairn/instances.json, or pass --source.',
-    )
-  }
-  console.log(`release   v${distinct[0]} (${versions.map((v) => v.name).join(', ')})`)
-  return `${repo}/v${distinct[0]}`
+  const answers = await Promise.all(instances().map(releaseOf))
+  const { name, version } = newest(answers)
+  const others = answers.filter((a) => a.version && a.name !== name).map((a) => `${a.name} ${a.version}`)
+  console.log(`release   v${version} (${name}${others.length ? `; also ${others.join(', ')}` : ''})`)
+  return `${repo}/v${version}`
 }
 
 const SOURCE = await resolveSource()
