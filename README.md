@@ -650,7 +650,26 @@ curl -fsSL https://raw.githubusercontent.com/montytorr/cairn/main/install.sh | s
 are kept, files are replaced only where they differ. It detects Claude Code (`~/.claude`),
 Codex (`~/.codex`) and OpenClaw (only where this account's OpenClaw config runs a gateway),
 pairs a key for each one that lacks a working one, and installs the files of the release
-matching its own version.
+matching its own version. Only those runtimes get keys, hooks and skills. Hermes Agent is
+never detected: `hermes` on PATH gets a line saying how to add it
+(`--runtimes claude-code,hermes`), not a hook.
+
+#### What `cairn setup` does
+
+| Step | What it writes | Where | Skip | Undo |
+|---|---|---|---|---|
+| instance, keys | `CAIRN_BASE_URL` and one `CAIRN_API_KEY_<RUNTIME>` per runtime, paired in the browser | `~/.cairn/env` (mode 600), or `~/.cairn/instances/<name>/env` | — | remove the lines; revoke the keys at `<instance>/settings/keys` |
+| release | the release matching the CLI's version (or `CAIRN_SETUP_SOURCE`) | `~/.cairn/releases/<version>` | — | `rm -r` it |
+| cli | `cairn` | `~/.local/bin/cairn` | — | `rm ~/.local/bin/cairn` |
+| skill | the Cairn skill, per runtime set up | `~/.claude/skills/cairn`, `~/.codex/skills/cairn`, `$CLAWD_HOME/skills/cairn` | `--no-skill` | `rm -r` the folder |
+| hooks | tagged hook entries, per runtime set up; the Herdr pane-title plugin when `herdr` is on PATH | `~/.claude/settings.json`, `~/.codex/hooks.json`, OpenClaw's hook link, `hermes config` if named; `~/.cairn/hooks` | `--no-hooks`, `--no-herdr` | delete the entries naming `~/.cairn/hooks`; `herdr plugin unlink cairn.pane-title` |
+| jobs | `agent-files` (below); `reconcile` and `vitals` with `--maintenance`; `openclaw-sessions` with OpenClaw | a LaunchAgent on macOS, root's or your crontab on Linux | `--no-jobs` | `node ~/.cairn/releases/<version>/scripts/install-cron.mjs --remove --only agent-files` |
+
+What it never does: wire a runtime it did not set up (Hermes included), edit Herdr's
+`config.toml`, follow a branch (the job syncs the release your instance runs), or replace the
+job's own scripts from the network. Every line it prints starts with `✓` (done), `–`
+(unchanged or skipped, with the reason and how to change it) or `!` (needs you), and it
+ends with the next step and the undo commands above.
 
 **What the `agent-files` job does, and where from.** It is installed by default (skip it
 with `--no-jobs`) and `cairn setup` says so before installing it. Every 15 minutes and at
@@ -676,10 +695,15 @@ instance behind a VPN, from home) is left out; the run refuses only when none an
 
 ```
 $ cairn setup --url https://cairn.acme.io
+cairn setup: connects this machine to Cairn — keys, the CLI, the skill, the hooks and the agent-files job.
+  (cairn setup --dry-run shows the plan without changing anything.)
 ✓ instance  https://cairn.acme.io -> ~/.cairn/env
 ✓ server    https://cairn.acme.io (0.11.0)
 Open this link to connect this machine:
   https://cairn.acme.io/connect/K7QX-M2RD (code K7QX-M2RD)
+✓ runtimes  claude-code, codex (detected) — only these get keys, hooks and skills
+– hermes    found on PATH, not set up — setup wires only the runtimes it pairs keys for.
+   To add it: cairn setup --url <instance> --runtimes claude-code,codex,hermes
 waiting for approval… ✓ approved by Julien
 ✓ keys      claude-code, codex -> ~/.cairn/env
 ✓ release   v0.11.0 -> ~/.cairn/releases/0.11.0
@@ -691,7 +715,13 @@ waiting for approval… ✓ approved by Julien
      …
 ✓ jobs      agent-files:
      …
-✓ cairn 0.11.0 ↔ server 0.11.0 — restart your agent sessions to load the hooks
+✓ cairn 0.11.0 ↔ server 0.11.0
+
+Next: restart your agent sessions so they load the hooks.
+Re-run `cairn setup` any time: it is the upgrade path, and it changes only what differs.
+To undo:
+  job     node ~/.cairn/releases/0.11.0/scripts/install-cron.mjs --remove --only agent-files
+  …
 ```
 
 The link opens a page on your instance; sign in if asked, and it comes back to the request.
@@ -706,8 +736,8 @@ an administrator can also revoke it on **Users**. Unapproved, the request expire
 |---|---|
 | `--url <instance>` | required the first time, and whenever the machine has several instances; otherwise the configured one |
 | `--name <instance-name>` | names the instance when this `--url` is a second (or later) one on the machine (default: derived from the url, `cairn.acme.io` → `acme`). A first instance needs no name |
-| `--runtimes a,b` | which agent runtimes to pair and install for (default: detected — `~/.claude`, `~/.codex`, and OpenClaw where this account runs its gateway). Named, it also limits the hooks and the job's skill copies to those runtimes: a `~/.codex` that exists is not wired unless `codex` is listed |
-| `--no-skill` / `--no-hooks` / `--no-jobs` | skip that step. Without `--maintenance` the only jobs are `agent-files` and, when OpenClaw is among the runtimes and its sessions directory can be found, `openclaw-sessions` — otherwise it prints which `CAIRN_OPENCLAW_SESSIONS` to set and [the manual command](#scheduled-maintenance--optional) |
+| `--runtimes a,b` | which agent runtimes to pair and install for (default: detected — `~/.claude`, `~/.codex`, and OpenClaw where this account runs its gateway). Detected or named, only these get keys, hooks and the job's skill copies. Hermes Agent is never detected: name it (`--runtimes claude-code,hermes`) to pair its key and wire its `pre_llm_call` hook |
+| `--no-skill` / `--no-hooks` / `--no-jobs` / `--no-herdr` | skip that step (`--no-herdr`: the Herdr pane-title plugin). Without `--maintenance` the only jobs are `agent-files` and, when OpenClaw is among the runtimes and its sessions directory can be found, `openclaw-sessions` — otherwise it prints which `CAIRN_OPENCLAW_SESSIONS` to set and [the manual command](#scheduled-maintenance--optional) |
 | `--maintenance` | also install `reconcile` and `vitals`, and pair a `maintenance` key for them — separately, because only an administrator can approve one: it releases anyone's claims |
 | `--dry-run` | print the plan, change nothing |
 
@@ -801,6 +831,8 @@ cp -r skills/cairn "$CLAWD_HOME"/skills/ # OpenClaw — its own tree, not a dotf
 
 ```bash
 node scripts/install-hooks.mjs        # --dry-run to see what it would write
+# By hand it wires every runtime it finds, Hermes included; `cairn setup` always passes
+# --runtimes, and so can you: node scripts/install-hooks.mjs --runtimes claude-code,codex
 # Hermes only, for an external router instead of the `cairn` on PATH (choosing between
 # several instances is built in; see "Several instances on one machine"):
 CAIRN_HOOK_CLI=/absolute/path/to/cairn-router node scripts/install-hooks.mjs

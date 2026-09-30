@@ -2735,6 +2735,9 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn setup --name <instance>  this machine has (or will have) more than
                                    one instance; names the new one
     cairn setup --runtimes claude-code,codex,openclaw   default: detected
+                                   (~/.claude, ~/.codex, an OpenClaw gateway).
+                                   Only these get keys, hooks and skills; Hermes
+                                   is never detected — add it: --runtimes …,hermes
     cairn setup --no-skill | --no-hooks | --no-jobs     skip one step
                                    (the job syncs the release the instance
                                    reports; CAIRN_SETUP_SOURCE=<checkout> makes
@@ -4635,6 +4638,13 @@ const commands = {
     const say = (s) => process.stdout.write(s)
     const line = (s) => say(`${s}\n`)
 
+    line(
+      dry
+        ? 'cairn setup --dry-run: the plan for connecting this machine to Cairn. Nothing is changed.'
+        : 'cairn setup: connects this machine to Cairn — keys, the CLI, the skill, the hooks and the agent-files job.',
+    )
+    if (!dry) line('  (cairn setup --dry-run shows the plan without changing anything.)')
+
     const assertHttpUrl = (u) => {
       try {
         if (!['http:', 'https:'].includes(new URL(u).protocol)) throw new Error()
@@ -4734,6 +4744,16 @@ const commands = {
     if (flags.maintenance && !runtimes.includes('maintenance')) runtimes.push('maintenance')
     if (!runtimes.length) {
       die('cairn setup found no runtime on this machine (looked for ~/.claude, ~/.codex, openclaw) — pass --runtimes a,b')
+    }
+    // maintenance is a key, not a runtime: it has no hooks and no skill.
+    const hookRuntimes = runtimes.filter((r) => r !== 'maintenance')
+    line(`✓ runtimes  ${runtimes.join(', ')} (${flags.runtimes ? 'from --runtimes' : 'detected'}) — only these get keys, hooks and skills`)
+    // Hermes is wired only on request (CAIRN-330). Its hook used to be written
+    // wherever `hermes` was on PATH, with no key paired for it; a runtime the
+    // person did not choose now gets a sentence, not a hook.
+    if (onSetupPath('hermes') && !runtimes.includes('hermes')) {
+      line('– hermes    found on PATH, not set up — setup wires only the runtimes it pairs keys for.')
+      line(`   To add it: cairn setup --url <instance> --runtimes ${[...runtimes.filter((r) => r !== 'maintenance'), 'hermes'].join(',')}`)
     }
 
     const existingEnv = fileEnv(envPath)
@@ -4862,7 +4882,7 @@ const commands = {
 
       // --- 7. skill ----------------------------------------------------------------
       if (flags['no-skill']) {
-        line('– skill     skipped (--no-skill)')
+        line('– skill     skipped (--no-skill) · re-run without it to install it')
       } else {
         const skillSource = join(releaseDir, 'skills', 'cairn', 'SKILL.md')
         const skillSourceBuf = existsSync(skillSource) ? readFileSync(skillSource) : null
@@ -4895,12 +4915,15 @@ const commands = {
 
       // --- 8. hooks ------------------------------------------------------------------
       if (flags['no-hooks']) {
-        line('– hooks     skipped (--no-hooks)')
+        line('– hooks     skipped (--no-hooks) · re-run without it to wire them')
+      } else if (!hookRuntimes.length) {
+        line('– hooks     none to wire — no agent runtime is set up here (maintenance only)')
       } else {
-        // The runtimes only when they were named: detected ones are what the
-        // installer detects anyway, and naming them would stop it wiring a
-        // runtime setup has no pairing for (Hermes) that it always has.
-        const hookArgs = [...(dry ? ['--dry-run'] : []), ...(flags.runtimes ? ['--runtimes', runtimes.join(',')] : []), ...(flags['no-herdr'] ? ['--no-herdr'] : [])]
+        // Always the runtimes this run set up, never "whatever the installer
+        // finds": left to detect, it wired Hermes wherever `hermes` was on PATH,
+        // a hook in a runtime nobody chose, with no key paired for it
+        // (CAIRN-330; Croft made the same choice in e170fce).
+        const hookArgs = [...(dry ? ['--dry-run'] : []), '--runtimes', hookRuntimes.join(','), ...(flags['no-herdr'] ? ['--no-herdr'] : [])]
         const result = spawnSync(process.execPath, [join(releaseDir, 'scripts', 'install-hooks.mjs'), ...hookArgs], { encoding: 'utf8' })
         line(`${dry ? '!' : '✓'} hooks     ${dry ? 'would install:' : 'installed:'}`)
         for (const l of `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n')) if (l.trim()) line(`   ${l}`)
@@ -4908,7 +4931,7 @@ const commands = {
 
       // --- 9. maintenance jobs ---------------------------------------------------------
       if (flags['no-jobs']) {
-        line('– jobs      skipped (--no-jobs)')
+        line('– jobs      skipped (--no-jobs) · re-run without it to install the agent-files job')
       } else {
         const jobs = ['agent-files', ...(flags.maintenance ? ['reconcile', 'vitals'] : [])]
         // OpenClaw has no session-end event (docs/openclaw.md): the sweep is
@@ -4955,7 +4978,7 @@ const commands = {
             '--only',
             jobs.join(','),
             ...(localSource ? ['--source', localSource] : []),
-            ...(flags.runtimes ? ['--runtimes', runtimes.join(',')] : []),
+            ...(hookRuntimes.length ? ['--runtimes', hookRuntimes.join(',')] : []),
           ],
           { encoding: 'utf8', ...(jobEnv ? { env: jobEnv } : {}) },
         )
@@ -4966,10 +4989,22 @@ const commands = {
 
     // --- 10. verify ------------------------------------------------------------------
     const match = !serverInfo?.version || serverInfo.version === VERSION
-    line(
-      `${match ? '✓' : '!'} cairn ${VERSION} ${match ? '↔' : '≠'} server ${serverInfo?.version ?? '?'}` +
-        ' — restart your agent sessions to load the hooks',
-    )
+    line(`${match ? '✓' : '!'} cairn ${VERSION} ${match ? '↔' : '≠'} server ${serverInfo?.version ?? '?'}`)
+
+    // What a person needs after the last line, said here rather than left to
+    // the README: the next step, that re-running is the upgrade, and how to
+    // take each piece back out — there is no uninstaller, so the steps are it.
+    line('')
+    line(dry ? 'Nothing was changed. Run it again without --dry-run to apply this plan.' : 'Next: restart your agent sessions so they load the hooks.')
+    line('Re-run `cairn setup` any time: it is the upgrade path, and it changes only what differs.')
+    if (!dry) {
+      line('To undo:')
+      line(`  job     node ${tilde(join(releaseDir, 'scripts', 'install-cron.mjs'))} --remove --only agent-files`)
+      line('  hooks   delete the entries naming ~/.cairn/hooks in ~/.claude/settings.json, ~/.codex/hooks.json' +
+        (hookRuntimes.includes('hermes') ? ' and `hermes config get hooks`' : ''))
+      line(`  cli     rm ${tilde(join(HOME, '.local', 'bin', 'cairn'))}   skill: rm -r ~/.claude/skills/cairn ~/.codex/skills/cairn`)
+      line(`  keys    remove them from ${tilde(envPath)}, and revoke them at ${url}/settings/keys`)
+    }
   },
 
   async map() {
