@@ -103,5 +103,6 @@ execFileSync('git', ['tag', '-a', `v${version}`, '--cleanup=verbatim', '-F', '-'
 process.stdout.write(
   `\ncommitted and tagged v${version}. Not pushed — review, then:\n` +
     `  git push origin main && git push origin v${version}\n` +
-    `  git tag -l v${version} --format='%(contents:body)' | gh release create v${version} --title v${version} --notes-file -\n`,
+    `  git tag -l v${version} --format='%(contents:body)' | gh release create v${version} --title v${version} --notes-file -\n` +
+    `Publishing the release moves \`production\` to v${version} (the production workflow), which downstream mirrors follow.\n`,
 )

@@ -1,0 +1,64 @@
+name: production
+
+# `production` is the latest published release, and nothing else: the branch
+# downstream installs follow (Dispofi/cairn's daily sync merges it, and deploys
+# when it moved). `main` keeps deploying tasks.montytorr.com on every merge;
+# a downstream only ever gets what was released.
+#
+# Moved here, never by hand: publishing a release is the one decision, and a
+# branch pushed by hand is a branch that drifts (Dispofi's own `production`
+# sat at v0.9.0 while v0.14.3 ran, one push away from a five-version rollback).
+# Fast-forward only — a release older than what is already there, or off
+# another line, is refused rather than rolled back to.
+#
+# Pushed with a deploy key, not GITHUB_TOKEN: that token may not push a ref
+# whose new commits touch .github/workflows/, and the first push carries all
+# of them. Nothing here deploys our own instance: ci and deploy run for `main`.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to move production to (e.g. v0.14.3)'
+        required: true
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  move:
+    if: github.repository == 'montytorr/cairn' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ssh-key: ${{ secrets.PRODUCTION_DEPLOY_KEY }}
+
+      - name: Fast-forward production to the release
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::$TAG is not a release tag (vX.Y.Z)"; exit 1
+          fi
+          git fetch --force --tags origin
+          TARGET=$(git rev-list -n 1 "refs/tags/$TAG")
+          if git fetch origin production 2>/dev/null; then
+            CURRENT=$(git rev-parse FETCH_HEAD)
+            if [ "$CURRENT" = "$TARGET" ]; then
+              echo "::notice::production is already at $TAG."; exit 0
+            fi
+            if ! git merge-base --is-ancestor "$CURRENT" "$TARGET"; then
+              echo "::error::$TAG does not descend from production ($(git describe --tags --always "$CURRENT")): refusing to move it back or sideways."; exit 1
+            fi
+          fi
+          git push origin "$TARGET:refs/heads/production"
+          echo "::notice::production -> $TAG (${TARGET:0:7})"
