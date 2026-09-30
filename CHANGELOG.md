@@ -9,6 +9,15 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The summariser could answer the transcript instead of summarising it.** The session-end
+  hook sent its instructions and the session digest as one user turn, so a digest whose last
+  prompt asked the agent a question ("do you need to record knowledge after this session?")
+  was sometimes answered in prose, logged as `no JSON in output`, and queued for a retry that
+  failed the same way. The instructions now go in `--system-prompt` and the user turn holds
+  only the digest, fenced in `<transcript>` tags and framed as data, not instructions.
+
 ## [0.13.0] — 2026-09-30
 
 ### Added
