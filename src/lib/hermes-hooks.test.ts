@@ -67,7 +67,7 @@ process.exit(64)
       CAIRN_OPENCLAW_BIN: 'openclaw-not-installed',
     }
 
-    const first = await run('node', ['scripts/install-hooks.mjs'], environment)
+    const first = await run('node', ['scripts/install-hooks.mjs', '--no-herdr'], environment)
     expect(first.code, first.stderr).toBe(0)
     const installed = JSON.parse(await readFile(hooks, 'utf8'))
     expect(installed.pre_tool_call).toEqual([{ command: '/existing/hook', timeout: 5 }])
@@ -77,11 +77,11 @@ process.exit(64)
     expect(installed.pre_llm_call[0].command).toContain('CAIRN_CLI=/trusted/cairn-router')
     expect(installed.pre_llm_call[0].command).toContain('cairn-context.mjs')
 
-    const second = await run('node', ['scripts/install-hooks.mjs'], environment)
+    const second = await run('node', ['scripts/install-hooks.mjs', '--no-herdr'], environment)
     expect(second.code, second.stderr).toBe(0)
     expect((await readFile(commandLog, 'utf8')).trim().split('\n')).toHaveLength(1)
 
-    const rejected = await run('node', ['scripts/install-hooks.mjs'], {
+    const rejected = await run('node', ['scripts/install-hooks.mjs', '--no-herdr'], {
       ...environment,
       CAIRN_HOOK_CLI: 'router; not-a-command',
     })
@@ -89,7 +89,7 @@ process.exit(64)
     expect(rejected.stderr).toContain('must be one safe executable path')
     expect((await readFile(commandLog, 'utf8')).trim().split('\n')).toHaveLength(1)
 
-    const unavailable = await run('node', ['scripts/install-hooks.mjs'], {
+    const unavailable = await run('node', ['scripts/install-hooks.mjs', '--no-herdr'], {
       ...environment,
       FAKE_HERMES_GET_FAILURE: '1',
     })
@@ -99,7 +99,7 @@ process.exit(64)
     // `config set` exits 0 and writes nothing. Trusting the status would report
     // a hook that is not there; reading the config back is what catches it.
     await writeFile(hooks, JSON.stringify({ pre_tool_call: [{ command: '/existing/hook', timeout: 5 }] }))
-    const discarded = await run('node', ['scripts/install-hooks.mjs'], {
+    const discarded = await run('node', ['scripts/install-hooks.mjs', '--no-herdr'], {
       ...environment,
       FAKE_HERMES_SET_DISCARDS: '1',
     })

@@ -11,5 +11,8 @@ export default defineConfig({
     // .tsx too: the icon tests server-render JSX to catch the hoistable
     // `<title>` trap, which is only observable through the renderer.
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // The CLI tests inherit this environment; run from a Herdr pane, they would
+    // label or clear that real pane.
+    env: { HERDR_PANE_ID: '' },
   },
 })

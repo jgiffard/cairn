@@ -823,6 +823,9 @@ OpenClaw discovers hooks only in the current workspace's `hooks/`, `~/.openclaw/
 path, not a hook directory. [`docs/openclaw.md`](./docs/openclaw.md) has the recommended
 `AGENTS.md` block and the rest of the setup.
 
+Where `herdr` is on PATH the installer also links the `cairn.pane-title` plugin, which shows
+each agent pane's claimed task in Herdr (`--no-herdr` skips it); see [`docs/herdr.md`](./docs/herdr.md).
+
 Hermes Agent by Nous Research **v0.21.3 or newer** requires hook consent on first use. The installer
 uses `hermes config get hooks --json` and `hermes config set --force hooks <json>` to preserve existing
 hooks and **never** auto-approves one; unattended environments must explicitly opt in through Hermes's

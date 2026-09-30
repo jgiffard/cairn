@@ -1,0 +1,40 @@
+id = "cairn.pane-title"
+name = "Cairn Pane Title"
+version = "0.1.0"
+min_herdr_version = "0.8.0"
+description = "Labels every agent pane with the Cairn task it holds, else its session title: one line on the pane border, wrapped over two rows in the sidebar."
+platforms = ["macos", "linux"]
+
+# Every hook runs the same full sync: it reads all panes and writes only what
+# changed, so it does not matter which pane an event refers to. A metadata
+# report raises no plugin event, so the Cairn CLI invokes the `sync` action
+# itself after publishing its token.
+
+[[startup]]
+command = ["node", "sync.mjs"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["node", "sync.mjs"]
+
+[[events]]
+on = "pane.agent_detected"
+command = ["node", "sync.mjs"]
+
+[[events]]
+on = "pane.focused"
+command = ["node", "sync.mjs"]
+
+[[events]]
+on = "tab.focused"
+command = ["node", "sync.mjs"]
+
+[[events]]
+on = "pane.created"
+command = ["node", "sync.mjs"]
+
+[[actions]]
+id = "sync"
+title = "Resync all pane titles"
+contexts = ["workspace"]
+command = ["node", "sync.mjs"]

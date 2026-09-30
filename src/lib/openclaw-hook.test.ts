@@ -35,7 +35,7 @@ const temp = async (prefix: string) => {
 
 const run = (args: string[], env: Record<string, string>) =>
   new Promise<{ code: number | null; stdout: string; stderr: string }>((done, fail) => {
-    const child = spawn('node', ['scripts/install-hooks.mjs', ...args], { env: env as NodeJS.ProcessEnv, cwd: REPO })
+    const child = spawn('node', ['scripts/install-hooks.mjs', '--no-herdr', ...args], { env: env as NodeJS.ProcessEnv, cwd: REPO })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (c: Buffer) => { stdout += c.toString() })
