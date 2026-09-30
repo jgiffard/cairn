@@ -9,6 +9,18 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **Herdr shows the task each agent pane holds.** Inside a Herdr pane, `claim`, a claiming
+  `add`, `beat` and `checkpoint` publish `<ref> · <title>` as a `cairn_task` pane token (TTL two hours,
+  the claim's own), and `done`, `cancel`, `release` and `session end` clear it. It is
+  detached and silent, and `CAIRN_HERDR=0` turns it off. The new `cairn.pane-title` plugin
+  (`hooks/herdr/pane-title/`) labels the pane border, the sidebar rows and the focused tab:
+  Cairn task, then session title, then terminal title, then agent name; a tab name you typed
+  is never replaced. `cairn setup` links it when `herdr` is on PATH (`--no-herdr` skips),
+  names a plugin that writes the same rows without removing it, and does not touch
+  `config.toml`. See `docs/herdr.md`.
+
 ### Fixed
 
 - **The summariser could answer the transcript instead of summarising it.** The session-end

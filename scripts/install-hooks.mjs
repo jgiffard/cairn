@@ -19,7 +19,7 @@
  * without touching anyone else's. Every entry it owns is tagged, and tagging
  * is how it knows what is safe to replace.
  *
- * Usage: node scripts/install-hooks.mjs [--dry-run] [--openclaw]
+ * Usage: node scripts/install-hooks.mjs [--dry-run] [--openclaw] [--no-herdr]
  *
  * `cairn setup` runs this for you, alongside pairing keys and copying the
  * skill; run it by hand only to re-wire the hooks on their own.
@@ -28,10 +28,12 @@ import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { PLUGIN_ID, planHerdrPlugin, titleConflicts } from './herdr-plugin.mjs'
 
 const DRY = process.argv.includes('--dry-run')
 /** Link the OpenClaw hook even where this user has no OpenClaw config yet. */
 const FORCE_OPENCLAW = process.argv.includes('--openclaw')
+const NO_HERDR = process.argv.includes('--no-herdr')
 const HOME = homedir()
 const REPO = dirname(import.meta.dirname)
 
@@ -547,6 +549,58 @@ const installOpenclaw = () => {
   openclawTail()
 }
 
+/**
+ * The Herdr sidebar plugin: which Cairn task each agent pane holds, else its
+ * session title. Linked from a stable copy, like the OpenClaw hook, so this
+ * re-run is the upgrade. Never fails the install: it only labels panes.
+ */
+const HERDR_PLUGIN = join(HOME, '.cairn', 'hooks', 'herdr', 'pane-title')
+const HERDR_PLUGIN_FILES = ['herdr-plugin.toml', 'sync.mjs']
+
+const manifestVersion = (dir) => /^version\s*=\s*"([^"]+)"/m.exec(readFileSync(join(dir, 'herdr-plugin.toml'), 'utf8'))?.[1]
+
+const herdrPlugins = () =>
+  JSON.parse(execFileSync('herdr', ['plugin', 'list', '--json'], { encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'] })).result.plugins
+
+const copyHerdrPlugin = () => {
+  mkdirSync(HERDR_PLUGIN, { recursive: true })
+  let changed = false
+  for (const file of HERDR_PLUGIN_FILES) {
+    const source = readFileSync(join(REPO, 'hooks', 'herdr', 'pane-title', file))
+    const target = join(HERDR_PLUGIN, file)
+    if (existsSync(target) && readFileSync(target).equals(source)) continue
+    writeFileSync(target, source)
+    changed = true
+  }
+  return changed
+}
+
+const installHerdr = () => {
+  if (NO_HERDR || !onPath('herdr')) return
+  try {
+    const sourceVersion = manifestVersion(join(REPO, 'hooks', 'herdr', 'pane-title'))
+    const plugins = herdrPlugins()
+    const plan = planHerdrPlugin({ plugins, root: HERDR_PLUGIN, version: sourceVersion })
+    const conflicts = titleConflicts(plugins)
+    if (DRY) {
+      log(`  herdr: ${plan.action === 'link' ? `would link ${PLUGIN_ID} from ${HERDR_PLUGIN}` : `${PLUGIN_ID} ${plan.reason}`}`)
+    } else {
+      const changed = copyHerdrPlugin()
+      if (plan.action === 'link') {
+        execFileSync('herdr', ['plugin', 'link', HERDR_PLUGIN], { encoding: 'utf8', timeout: 20_000, stdio: ['ignore', 'pipe', 'pipe'] })
+        log(`  herdr: ${PLUGIN_ID} linked from ${HERDR_PLUGIN} (${plan.reason})`)
+      } else {
+        log(`  herdr: ${PLUGIN_ID} ${plan.reason}${changed ? ' — scripts updated' : ' — unchanged'}`)
+      }
+    }
+    for (const other of conflicts) {
+      log(`  herdr: ${other.plugin_id} also writes the sidebar title rows and will fight ${PLUGIN_ID} — remove it: herdr plugin ${other.source?.kind === 'local' ? 'unlink' : 'uninstall'} ${other.plugin_id}`)
+    }
+  } catch (error) {
+    console.error(`  herdr: plugin not installed (${String(error.stderr ?? error.message ?? error).trim().split('\n')[0]}) — skipped; \`herdr plugin link ${HERDR_PLUGIN}\` to retry`)
+  }
+}
+
 const version = () => {
   const cli = process.env.CAIRN_HOOK_CLI?.trim() || 'cairn'
   if (!isSafeHookCli(cli)) return 'CAIRN_HOOK_CLI must be one safe executable path'
@@ -564,3 +618,4 @@ installClaude()
 installCodex()
 installHermes()
 installOpenclaw()
+installHerdr()

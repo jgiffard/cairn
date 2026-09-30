@@ -12,7 +12,7 @@
  * row so the model can decline to open something.
  */
 
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import {
   appendFileSync,
@@ -1085,7 +1085,7 @@ const KNOWN_FLAGS = new Set([
   'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'file', 'files', 'folder',
   'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'history', 'hours', 'id', 'instance',
   'json', 'key', 'kind', 'kinds', 'label', 'learned', 'limit', 'maintenance', 'max-parents',
-  'message', 'mine', 'name', 'next', 'no-checkpoint', 'no-hooks', 'no-jobs', 'no-parent',
+  'message', 'mine', 'name', 'next', 'no-checkpoint', 'no-herdr', 'no-hooks', 'no-jobs', 'no-parent',
   'no-skill', 'no-start', 'notify', 'older',
   'orphans', 'output', 'parent', 'platform', 'pretty', 'priority', 'project',
   'reason', 'remote', 'repo', 'request', 'resolution', 'runtimes', 'scheduled', 'scope',
@@ -1964,6 +1964,9 @@ const request = async (method, path, body, { soft = false } = {}) => {
   if (method !== 'GET') {
     rememberWrite(method, path, payload.data)
     updateRememberedOwnership(path, payload.data)
+    // A replayed write is history: labelling from it would put an older task
+    // back on the pane over the one the live command just showed.
+    if (!FLUSHING) herdrPublish(method, path, payload.data)
     // The server just answered, so anything put aside while it was down can go
     // now. No cron and nothing to remember to run: the next write drains it.
     if (!FLUSHING && hasReplayableOutbox()) {
@@ -2232,6 +2235,104 @@ const rememberWrite = (method, path, data) => {
   } catch {
     // A breadcrumb is a convenience for the hook. Never fail a write over one.
   }
+}
+
+/**
+ * The task a pane's agent holds, shown in Herdr's sidebar.
+ *
+ * Herdr sets HERDR_PANE_ID in every pane it runs, so a claim made here knows
+ * which pane to label. The token is display-only, and a crash that skips the
+ * clear is covered by its TTL: the lease the maintenance sweep reclaims after.
+ * Fire and forget: no herdr binary, no pane, a slow socket, all are normal and
+ * none may touch the command's output, exit code or latency.
+ * `CAIRN_HERDR=0` opts out.
+ */
+const HERDR_TOKEN = 'cairn_task'
+const HERDR_TOKEN_TTL_MS = 2 * 60 * 60 * 1000
+const HERDR_TOKEN_MAX = 120
+
+const herdrPane = () => {
+  const pane = (process.env.HERDR_PANE_ID || '').trim()
+  return pane && process.env.CAIRN_HERDR !== '0' && /^[\w:.-]+$/.test(pane) ? pane : null
+}
+
+const herdrTokenText = (ref, title) => {
+  const text = `${ref} · ${String(title ?? '').replace(/\s+/g, ' ').trim()}`.replace(/ · $/, '')
+  return text.length > HERDR_TOKEN_MAX ? `${text.slice(0, HERDR_TOKEN_MAX - 1)}…` : text
+}
+
+/**
+ * The deadline lives in the child, not here. The CLI exits within milliseconds
+ * of a claim, and a timer of its own dies with it: an unref'd kill timer never
+ * fired, so a hung herdr (a wedged socket) left one sh + herdr pair behind per
+ * claim, beat and checkpoint. spawn's `timeout` option would instead hold the
+ * CLI open for its full length. So sh brings its own watchdog; detached makes
+ * sh a group leader, and `kill 0` takes the whole group, hung herdr included.
+ * `sleep` and `kill` are POSIX; `timeout` is not on a stock Mac.
+ */
+const HERDR_DEADLINE_S = 5
+
+const herdrReport = (pane, args) => {
+  try {
+    // Herdr raises no plugin event for a metadata report, so the plugin is asked to resync
+    // once the token has landed; arguments go through "$@", never through the script text.
+    const script =
+      `( sleep ${HERDR_DEADLINE_S}; kill -s KILL 0 ) & watchdog=$!; ` +
+      'herdr pane report-metadata "$@" && herdr plugin action invoke sync --plugin cairn.pane-title; ' +
+      'kill $watchdog 2>/dev/null'
+    const child = spawn('sh', ['-c', script, 'sh', pane, '--source', 'cairn', ...args], {
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.on('error', () => {})
+    child.unref()
+  } catch { /* display only */ }
+}
+
+/** What this pane shows is remembered, so a beat can refresh it and a release clear only its own. */
+const herdrShownPath = (pane) => join(CAIRN_DIR, 'herdr', `pane-${pane.replace(/[^\w.-]/g, '_')}.json`)
+
+const herdrPublish = (method, path, data) => {
+  const pane = herdrPane()
+  if (!pane) return
+  try {
+    const tail = /^\/api\/v1\/tasks\/[^/?]+(?:\/([a-z-]+))?$/.exec(path.split('?')[0])?.[1]
+    const ref = refOfWrite(path, data)
+    const shown = herdrShownPath(pane)
+    if (!ref) return
+    const closing = method === 'PATCH' && !tail && ['done', 'cancelled'].includes(data?.status)
+    if (tail === 'release' || closing) return herdrClear(pane, shown, ref)
+    if (method !== 'POST' || (tail !== 'claim' && tail !== 'beat' && tail !== 'checkpoint')) return
+    let text
+    if (tail === 'claim') {
+      if (!data?.title) return
+      text = herdrTokenText(ref, data.title)
+    } else {
+      const last = JSON.parse(readFileSync(shown, 'utf8'))
+      if (last.ref !== ref) return
+      text = last.text
+    }
+    mkdirSync(dirname(shown), { recursive: true })
+    writeFileSync(shown, JSON.stringify({ ref, text }))
+    herdrReport(pane, ['--token', `${HERDR_TOKEN}=${text}`, '--ttl-ms', String(HERDR_TOKEN_TTL_MS)])
+  } catch { /* display only */ }
+}
+
+const herdrClearPane = () => {
+  const pane = herdrPane()
+  if (pane) herdrClear(pane, herdrShownPath(pane), null)
+}
+
+/** A null ref clears whatever is shown; a ref clears only that task's own label. */
+const herdrClear = (pane, shown, ref) => {
+  try {
+    if (ref) {
+      const last = existsSync(shown) ? JSON.parse(readFileSync(shown, 'utf8')) : null
+      if (last && last.ref !== ref) return
+    }
+    rmSync(shown, { force: true })
+  } catch { /* display only */ }
+  herdrReport(pane, ['--clear-token', HERDR_TOKEN])
 }
 
 /** HOL-113 from a full task row or a digest, whichever this is. */
@@ -2635,6 +2736,8 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    one instance; names the new one
     cairn setup --runtimes claude-code,codex,openclaw   default: detected
     cairn setup --no-skill | --no-hooks | --no-jobs     skip one step
+    cairn setup --no-herdr         skip the Herdr pane-title plugin, linked
+                                   when herdr is on PATH
     cairn setup --maintenance      also install reconcile + vitals; their key
                                    is paired on its own and needs an admin
     cairn setup --dry-run          print the plan, change nothing
@@ -4784,7 +4887,7 @@ const commands = {
       if (flags['no-hooks']) {
         line('– hooks     skipped (--no-hooks)')
       } else {
-        const result = spawnSync(process.execPath, [join(releaseDir, 'scripts', 'install-hooks.mjs'), ...(dry ? ['--dry-run'] : [])], { encoding: 'utf8' })
+        const result = spawnSync(process.execPath, [join(releaseDir, 'scripts', 'install-hooks.mjs'), ...(dry ? ['--dry-run'] : []), ...(flags['no-herdr'] ? ['--no-herdr'] : [])], { encoding: 'utf8' })
         line(`${dry ? '!' : '✓'} hooks     ${dry ? 'would install:' : 'installed:'}`)
         for (const l of `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n')) if (l.trim()) line(`   ${l}`)
       }
@@ -5098,7 +5201,9 @@ const commands = {
         payload.ongoing = true
         payload.checkpointHeld = false
       }
-      return emit(await request('POST', '/api/v1/sessions', payload))
+      const written = await request('POST', '/api/v1/sessions', payload)
+      if (verb === 'end') herdrClearPane()
+      return emit(written)
     }
 
     if (verb === 'list') {

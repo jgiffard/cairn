@@ -358,7 +358,7 @@ describe('the installer and the per-Read hook CCS-40 removed', () => {
     )
 
     const env = { PATH: BASE_PATH, HOME: home, CAIRN_OPENCLAW_BIN: 'openclaw-not-installed' }
-    const first = await run('node', ['scripts/install-hooks.mjs'], env)
+    const first = await run('node', ['scripts/install-hooks.mjs', '--no-herdr'], env)
     expect(first.code, first.stderr).toBe(0)
 
     const claude = JSON.parse(await readFile(join(home, '.claude/settings.json'), 'utf8'))
@@ -388,7 +388,7 @@ describe('the installer and the per-Read hook CCS-40 removed', () => {
     expect(cairnCommand('SessionEnd')).toMatch(/cairn-session-end\.mjs$/)
     expect(first.stdout).toContain('removed the per-Read PreToolUse hook')
 
-    const second = await run('node', ['scripts/install-hooks.mjs'], env)
+    const second = await run('node', ['scripts/install-hooks.mjs', '--no-herdr'], env)
     expect(second.code, second.stderr).toBe(0)
     expect(second.stdout).toContain(`${join(home, '.claude/settings.json')} — unchanged`)
     expect(second.stdout).toContain(`${join(home, '.codex/hooks.json')} — unchanged`)
