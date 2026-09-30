@@ -147,6 +147,9 @@ describe('cairn setup — dry run', () => {
     // A client config only reaches someone else's gateway.
     expect(await plan({ gateway: { auth: { token: 'x' } } })).toContain('! keys      claude-code would be paired')
     expect(await plan({ gateway: { port: 18789 } })).toContain('claude-code, openclaw would be paired')
+    // mode "remote" is OpenClaw's client mode, and a client config carries agents defaults too (CAIRN-332).
+    expect(await plan({ gateway: { mode: 'remote', remote: { url: 'wss://gw.example' } }, agents: { defaults: {} } }))
+      .toContain('! keys      claude-code would be paired')
   })
 
   it('stops with a clear error against an unreachable url', async () => {
@@ -630,5 +633,9 @@ describe('cairn setup — Hermes only on request', () => {
     expect(stdout).toContain('it is the upgrade path')
     expect(stdout).toMatch(/To undo:\n {2}job {5}node .*install-cron\.mjs --remove --only agent-files/)
     expect(stdout).toContain(`${base}/settings/keys`)
+    // Only claude-code was set up: nothing about Codex's files (CAIRN-332).
+    expect(stdout).toContain('  hooks   delete the entries naming ~/.cairn/hooks in ~/.claude/settings.json\n')
+    expect(stdout).toContain('skill: rm -r ~/.claude/skills/cairn\n')
+    expect(stdout).not.toContain('~/.codex/hooks.json')
   })
 })
