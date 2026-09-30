@@ -69,7 +69,7 @@ process.stdin.on('data', (d) => { input += d })
 process.stdin.on('end', () => {
   fs.appendFileSync(process.env.OUT + '/summariser.jsonl', JSON.stringify({
     args, cwd: process.cwd(),
-    flags: [process.env.CAIRN_SUMMARISER, process.env.QUARRY_SUMMARISER, process.env.AGENT_MEMORY_SUMMARISER],
+    flags: [process.env.CAIRN_SUMMARISER, process.env.QUARRY_SUMMARISER, process.env.CROFT_SUMMARISER, process.env.AGENT_MEMORY_SUMMARISER],
   }) + '\\n')
   const mode = process.env.FAKE_MODE ?? 'ok'
   if (mode === 'fail') { process.stderr.write('Not logged in · Please run /login'); process.exit(1) }
@@ -127,13 +127,19 @@ describe('the session-end hook', () => {
     expect(lines('cli.jsonl')).toEqual([])
   })
 
+  it("exits at once inside Croft's summariser too", async () => {
+    const path = transcript('croft', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    await run({ transcript_path: path, session_id: 'croft' }, { CROFT_SUMMARISER: '1' })
+    expect(lines('cli.jsonl')).toEqual([])
+  })
+
   it('asks the summariser without persistence, from a scratch directory, with every guard set', async () => {
     const path = transcript('ok', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
     await run({ transcript_path: path, session_id: 'ok', cwd: '/work/demo' })
     const [call] = lines('summariser.jsonl')
     expect(call.args).toContain('--no-session-persistence')
     expect(call.cwd).not.toBe('/work/demo')
-    expect(call.flags).toEqual(['1', '1', '1'])
+    expect(call.flags).toEqual(['1', '1', '1', '1'])
     const [args] = lines('cli.jsonl')
     expect(argValue(args, '--learned')).toBe('The cookie was lax')
   })

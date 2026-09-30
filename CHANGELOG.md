@@ -9,6 +9,25 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **The session briefing carries Croft's brief.** Croft, the lab board of subjects being
+  explored, proved or built, installs no session hook where Cairn's runs: one opener per
+  session, as with Trig. The context hook now keeps a short list of siblings. Trig's line is
+  unchanged, and Croft's `croft context --brief --cwd <dir>` follows Cairn's block, clipped
+  to 5 lines and 600 bytes. Each sibling runs beside Cairn's own call on a 1.5 s deadline
+  and says nothing when absent, failing, slow or empty. `CROFT_CLI` names the binary; without
+  it the hook also looks in `~/.local/bin`, which a runtime's PATH often lacks. The OpenClaw
+  briefing, which had no Trig line, now carries both. Siblings are skipped inside a
+  summariser and on the per-file `PreToolUse` question. Re-run
+  `node scripts/install-hooks.mjs` (or `cairn setup`) to pick up the new hook.
+- **`CROFT_SUMMARISER` joins the summariser guard.** The session-end and learn-nudge hooks
+  stay out of Croft's summariser children, and Cairn's own summariser sets the flag so
+  Croft's hooks stay out of its runs.
+- **The skill says when an idea belongs in Croft.** Exploring, evaluating or proving it is a
+  Croft subject; changing a repo for real is a Cairn task, and Croft's todos arrive here
+  labelled `croft:T-n` with Cairn owning their status.
+
 ## [0.12.1] — 2026-09-29
 
 ### Added
