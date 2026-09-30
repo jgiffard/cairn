@@ -138,6 +138,14 @@ commit, then push it and the tag yourself. Until the tag is pushed, `cairn setup
 version cannot download its release files (`v<version>` on GitHub); `install.sh` takes the
 CLI from the latest *published GitHub release*, so it moves on only once that exists.
 
+**Publishing the release moves `production`.** The `production` workflow fast-forwards the
+`production` branch to the tag as soon as a (non-pre-)release is published, and refuses a tag
+that does not descend from it. Nobody pushes `production` by hand. It is what downstream
+installs follow: Dispofi's mirror merges it every morning and deploys when it moved. `main`
+keeps deploying our own instance on every merge, so a merge reaches a downstream only once
+it is released. To re-point it by hand, run the workflow with a tag
+(`gh workflow run production.yml -f tag=v0.14.3`).
+
 The CLI carries its own version number because it is copied onto machines rather than
 installed from a registry — there is no package.json beside the copy in `/usr/local/bin`.
 That makes it exactly the kind of constant that goes stale silently, so a test pins it,
