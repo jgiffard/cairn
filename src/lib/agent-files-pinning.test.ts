@@ -182,21 +182,46 @@ describe.skipIf(SYSTEM_TARGETS)('sync-agent-files --source release', () => {
     expect(result.stdout).toContain('(codex was not set up here)')
   })
 
-  it('follows the default instance on a machine with several', async () => {
-    const work = await serve({ version: '1.2.3' })
-    const personal = await serve({ version: '9.9.9' })
+  const several = async (instances: Record<string, { url: string }>, unclassified: object) => {
     const home = await machine()
-    await writeFile(join(home, '.cairn/instances.json'), JSON.stringify({
-      version: 1,
-      instances: { work: { url: work.base }, personal: { url: personal.base } },
-      unclassified: { mode: 'default', instance: 'work' },
-    }))
+    await writeFile(join(home, '.cairn/instances.json'), JSON.stringify({ version: 1, instances, unclassified }))
+    return home
+  }
+
+  it('follows the newest release on a machine with several, even when the default runs an older one', async () => {
+    const work = await serve({ version: '1.2.3' })
+    const personal = await serve({ version: '1.10.0' })
+    const home = await several({ work: { url: work.base }, personal: { url: personal.base } }, { mode: 'default', instance: 'work' })
 
     const result = await sync(home, ['--source', 'release', '--repo', `${work.base}/raw`])
 
     expect(result.code, result.stdout).toBe(0)
+    expect(await readFile(join(home, '.local/bin/cairn'), 'utf8')).toBe('pinned:/raw/v1.10.0/cli/cairn.mjs')
+    expect(result.stdout).toContain('release   v1.10.0 (personal; also work 1.2.3)')
+  })
+
+  it('follows the newest when there is no default, instead of refusing instances that disagree', async () => {
+    const a = await serve({ version: '1.3.0-rc.1' })
+    const b = await serve({ version: '1.3.0' })
+    const c = await serve({ version: '1.2.9' })
+    const home = await several({ a: { url: a.base }, b: { url: b.base }, c: { url: c.base } }, { mode: 'ask' })
+
+    const result = await sync(home, ['--source', 'release', '--repo', `${a.base}/raw`])
+
+    expect(result.code, result.stdout).toBe(0)
+    expect(await readFile(join(home, '.local/bin/cairn'), 'utf8')).toBe('pinned:/raw/v1.3.0/cli/cairn.mjs')
+  })
+
+  it('leaves out an instance that cannot be asked, and follows the ones that answer', async () => {
+    const reachable = await serve({ version: '1.2.3' })
+    const walled = await serve({ status: 403, version: '9.9.9' })
+    const home = await several({ reachable: { url: reachable.base }, walled: { url: walled.base } }, { mode: 'default', instance: 'walled' })
+
+    const result = await sync(home, ['--source', 'release', '--repo', `${reachable.base}/raw`])
+
+    expect(result.code, result.stdout).toBe(0)
     expect(await readFile(join(home, '.local/bin/cairn'), 'utf8')).toBe('pinned:/raw/v1.2.3/cli/cairn.mjs')
-    expect(personal.requests).toEqual([])
+    expect(result.stdout).toMatch(/skipped {3}walled: .*answered 403/)
   })
 
   it('updates its own scripts from a tree on disk, which somebody put there on purpose', async () => {
@@ -255,16 +280,16 @@ describe('sync-agent-files --source release, when the release cannot be known', 
     await refused(await machine(base), ['--source', 'release', '--repo', 'http://mirror.example/cairn'], /is not https/)
   })
 
-  it('refuses instances that disagree when none is the default', async () => {
-    const a = await serve({ version: '1.2.3' })
-    const b = await serve({ version: '1.3.0' })
+  it('writes nothing when none of several instances answers', async () => {
+    const a = await serve({ status: 403, version: '1.2.3' })
+    const b = await serve({ status: 503, version: '1.3.0' })
     const home = await machine()
     await writeFile(join(home, '.cairn/instances.json'), JSON.stringify({
       version: 1,
       instances: { a: { url: a.base }, b: { url: b.base } },
       unclassified: { mode: 'ask' },
     }))
-    await refused(home, ['--source', 'release', '--repo', `${a.base}/raw`], /run different releases/)
+    await refused(home, ['--source', 'release', '--repo', `${a.base}/raw`], /no instance said which release it runs .*a: .*403.*b: .*503/)
   })
 })
 

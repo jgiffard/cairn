@@ -661,8 +661,10 @@ source is **the release your instance runs**: each run asks the instance's
 version cannot be read (the server is down, no instance is configured, the answer is not a
 release number) or any file of that release is missing, the run writes nothing and exits
 non-zero. It never replaces its own two scripts from the network; `cairn setup` updates
-them when it runs again. On a machine with several instances it follows the default one;
-with no default, every instance is asked and they must agree on one release.
+them when it runs again. On a machine with several instances it follows the newest release
+any of them reports, default or not, since one CLI serves them all and a CLI ahead of a
+server is the direction it already expects. An instance that cannot be asked (a company
+instance behind a VPN, from home) is left out; the run refuses only when none answers.
 
 - `CAIRN_SETUP_SOURCE=<checkout> cairn setup …` installs from that checkout and schedules the
   job to sync from it too, so a private mirror stays the only source.
