@@ -88,9 +88,17 @@ const siblingTimeout = (name: string) => {
 const quiet = (bin: string, args: string[], cwd: string, timeout: number): Promise<string> =>
   new Promise((resolve) => {
     try {
-      execFile(bin, args, { cwd, timeout, killSignal: 'SIGKILL', maxBuffer: 256 * 1024 }, (error, stdout) =>
-        resolve(error ? '' : String(stdout).trim()),
-      )
+      const child = execFile(bin, args, { cwd, timeout, killSignal: 'SIGKILL', maxBuffer: 256 * 1024 }, (error, stdout) => {
+        clearTimeout(deadline)
+        resolve(error ? '' : String(stdout).trim())
+      })
+      // execFile answers only once the pipes close, and a process the sibling
+      // forked keeps them open after the kill; the deadline is ours to keep.
+      const deadline = setTimeout(() => {
+        child.stdout?.destroy()
+        child.stderr?.destroy()
+        resolve('')
+      }, timeout + 100)
     } catch {
       resolve('')
     }

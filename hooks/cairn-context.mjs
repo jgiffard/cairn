@@ -96,6 +96,12 @@ const runTool = (bin, args, timeoutMs, { undecided = false } = {}) =>
     const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     const timer = setTimeout(() => {
       child.kill('SIGKILL')
+      // Killing the child does not kill what it forked: a wrapper script's
+      // own child keeps these pipes open, and the hook cannot exit until it
+      // ends, so a slow sibling would hold the session for its full run.
+      child.stdout.destroy()
+      child.stderr.destroy()
+      child.unref()
       done('')
     }, timeoutMs)
 
