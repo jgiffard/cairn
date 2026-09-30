@@ -567,3 +567,68 @@ describe('cairn setup — the agent-files job', () => {
     expect(stderr).toContain('is not <owner>/<name>')
   })
 })
+
+/**
+ * CAIRN-330: setup wired Hermes's pre_llm_call hook wherever `hermes` was on
+ * PATH, with no key paired for it, even with `--runtimes claude-code`. A fake
+ * `hermes` records every call and keeps the hooks it is given, so the real
+ * installer's write-then-read-back check passes.
+ */
+describe('cairn setup — Hermes only on request', () => {
+  const withHermes = async () => {
+    const { mkdir, writeFile, chmod } = await import('node:fs/promises')
+    const HOME = await home()
+    const bin = join(HOME, 'bin')
+    await mkdir(bin)
+    await mkdir(join(HOME, '.claude'))
+    const log = join(HOME, 'hermes.log')
+    const store = join(HOME, 'hermes-hooks.json')
+    await writeFile(join(bin, 'hermes'), [
+      '#!/bin/sh',
+      `echo "$*" >> "${log}"`,
+      `if [ "$1 $2" = "config get" ]; then cat "${store}" 2>/dev/null || echo '{}'; fi`,
+      `if [ "$1 $2" = "config set" ]; then printf '%s' "$5" > "${store}"; fi`,
+      '',
+    ].join('\n'))
+    await chmod(join(bin, 'hermes'), 0o755)
+    const calls = async () => (await readFile(log, 'utf8').catch(() => '')).split('\n').filter(Boolean)
+    return { HOME, env: { PATH: `${bin}:${process.env.PATH}` }, calls }
+  }
+  const keys = [{ agentName: 'claude-code', key: 'sk_claude' }, { agentName: 'hermes', key: 'sk_hermes' }]
+
+  it('does not wire Hermes when it was not chosen, and says how to add it', async () => {
+    const base = await serve({ status: 'approved', keys })
+    const { HOME, env, calls } = await withHermes()
+    const { code, stdout } = await run(['setup', '--url', base, '--no-jobs', '--no-herdr'], HOME, env)
+    expect(code, stdout).toBe(0)
+    expect(stdout).toContain('✓ runtimes  claude-code (detected) — only these get keys, hooks and skills')
+    expect(stdout).toContain('– hermes    found on PATH, not set up')
+    expect(stdout).toContain('--runtimes claude-code,hermes')
+    expect(stdout).toContain('Hermes Agent by Nous Research: not in --runtimes — skipped')
+    expect((await calls()).filter((c) => c.startsWith('config set'))).toEqual([])
+  })
+
+  it('wires Hermes when --runtimes names it', async () => {
+    const base = await serve({ status: 'approved', keys })
+    const { HOME, env, calls } = await withHermes()
+    const { code, stdout } = await run(['setup', '--url', base, '--runtimes', 'claude-code,hermes', '--no-jobs', '--no-herdr'], HOME, env)
+    expect(code, stdout).toBe(0)
+    expect(stdout).not.toContain('found on PATH, not set up')
+    expect(stdout).toContain('Hermes Agent by Nous Research: pre_llm_call (briefing on first turn)')
+    expect((await calls()).some((c) => c.startsWith('config set --force hooks'))).toBe(true)
+    expect(await readFile(join(HOME, '.cairn', 'env'), 'utf8')).toContain('CAIRN_API_KEY_HERMES=sk_hermes')
+  })
+
+  it('ends with what to do next and how to undo each step', async () => {
+    const base = await serve({ status: 'approved', keys })
+    const { HOME, env } = await withHermes()
+    const { stdout } = await run(['setup', '--url', base, '--no-jobs', '--no-herdr'], HOME, env)
+    expect(stdout.split('\n')[0]).toMatch(/^cairn setup: connects this machine to Cairn/)
+    expect(stdout).toContain('cairn setup --dry-run shows the plan without changing anything')
+    expect(stdout).toContain('– jobs      skipped (--no-jobs) · re-run without it to install the agent-files job')
+    expect(stdout).toContain('Next: restart your agent sessions so they load the hooks.')
+    expect(stdout).toContain('it is the upgrade path')
+    expect(stdout).toMatch(/To undo:\n {2}job {5}node .*install-cron\.mjs --remove --only agent-files/)
+    expect(stdout).toContain(`${base}/settings/keys`)
+  })
+})

@@ -9,6 +9,28 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`cairn setup` wired Hermes without being asked** (CAIRN-330). The hooks step passed
+  `--runtimes` only when you typed it, so a plain `cairn setup` let the installer wire every
+  runtime it found. That included Hermes Agent's `pre_llm_call` hook (through
+  `hermes config set --force`) wherever `hermes` was on PATH, a runtime setup never detects
+  or pairs a key for. Setup now always passes the runtimes it set up, to the hooks and to
+  the `agent-files` job. With `hermes` on PATH and not chosen, it prints a line saying so
+  and the command to add it. **If you relied on setup wiring Hermes**, run
+  `cairn setup --runtimes <yours>,hermes` once: it pairs a Hermes key
+  (`CAIRN_API_KEY_HERMES`) and wires the hook. `install-hooks.mjs` run by hand still wires
+  everything it finds unless given `--runtimes`.
+
+### Changed
+
+- **`cairn setup` says what it is doing.** It opens with one line on what it sets up and
+  that `--dry-run` shows the plan. A `runtimes` line says which runtimes get keys, hooks and
+  skills, and whether they were detected or named. Every skip says how to undo it. It ends
+  with the next step, the fact that re-running is the upgrade path, and the command that
+  takes out each piece. The README gains a "What `cairn setup` does" table (step, what it
+  writes, where, how to skip it, how to undo it) and what it never does.
+
 ## [0.14.1] — 2026-09-30
 
 ### Fixed
