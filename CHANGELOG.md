@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.14.1] — 2026-09-30
+
 ### Fixed
 
 - **A machine on several instances at different releases never synced.** With no default
@@ -1617,7 +1619,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/montytorr/cairn/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/montytorr/cairn/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/montytorr/cairn/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/montytorr/cairn/compare/v0.12.0...v0.12.1
