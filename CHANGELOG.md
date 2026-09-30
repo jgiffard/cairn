@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.14.3] — 2026-09-30
+
 ### Fixed
 
 - **A machine that is an OpenClaw client was taken for a gateway** (CAIRN-332). Setup and
@@ -1655,7 +1657,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.14.2...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.14.3...HEAD
+[0.14.3]: https://github.com/montytorr/cairn/compare/v0.14.2...v0.14.3
 [0.14.2]: https://github.com/montytorr/cairn/compare/v0.14.1...v0.14.2
 [0.14.1]: https://github.com/montytorr/cairn/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/montytorr/cairn/compare/v0.13.0...v0.14.0
