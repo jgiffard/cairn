@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-09-30
+
 ### Added
 
 - **The session briefing carries Croft's brief.** Croft, the lab board of subjects being
@@ -1552,7 +1554,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/montytorr/cairn/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/montytorr/cairn/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/montytorr/cairn/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/montytorr/cairn/compare/v0.11.0...v0.11.1
