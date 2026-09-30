@@ -1227,7 +1227,7 @@ const updateCommand = () => {
   }
   const sync = join(home, '.cairn/maintenance/sync-agent-files.mjs')
   if (existsSync(sync)) {
-    return `node ${sync} --source https://raw.githubusercontent.com/montytorr/cairn/main`
+    return `node ${sync} --source release`
   }
   return `copy cli/cairn.mjs from the deployed commit over ${process.argv[1] ?? 'this file'}`
 }
@@ -2736,6 +2736,9 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    one instance; names the new one
     cairn setup --runtimes claude-code,codex,openclaw   default: detected
     cairn setup --no-skill | --no-hooks | --no-jobs     skip one step
+                                   (the job syncs the release the instance
+                                   reports; CAIRN_SETUP_SOURCE=<checkout> makes
+                                   it that checkout, CAIRN_REPO=<owner>/<name> a fork)
     cairn setup --no-herdr         skip the Herdr pane-title plugin, linked
                                    when herdr is on PATH
     cairn setup --maintenance      also install reconcile + vitals; their key
@@ -4787,6 +4790,13 @@ const commands = {
 
     // --- 5. release files ------------------------------------------------------
     const localSource = process.env.CAIRN_SETUP_SOURCE
+    // The repository the release comes from, and the one the agent-files job
+    // then follows: CAIRN_REPO, as install.sh reads it, so a machine installed
+    // from a fork is not handed the public release half way through (#110).
+    const setupRepo = process.env.CAIRN_REPO?.trim() || 'montytorr/cairn'
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(setupRepo) || setupRepo.includes('..') || /(^|\/)\.(\/|$)/.test(setupRepo)) {
+      die(`CAIRN_REPO=${JSON.stringify(setupRepo)} is not <owner>/<name>`)
+    }
     const releaseDir = localSource || join(CAIRN_DIR, 'releases', VERSION)
     const releaseParts = ['scripts', 'hooks', 'skills', 'cli']
     const haveRelease = releaseParts.every((p) => existsSync(join(releaseDir, p)))
@@ -4796,9 +4806,9 @@ const commands = {
     } else if (haveRelease) {
       line(`– release   v${VERSION} already downloaded (~/.cairn/releases/${VERSION})`)
     } else if (dry) {
-      line(`! release   would download v${VERSION} from GitHub`)
+      line(`! release   would download v${VERSION} from github.com/${setupRepo}`)
     } else {
-      const tarUrl = `https://codeload.github.com/montytorr/cairn/tar.gz/refs/tags/v${VERSION}`
+      const tarUrl = `https://codeload.github.com/${setupRepo}/tar.gz/refs/tags/v${VERSION}`
       let res
       try {
         res = await fetch(tarUrl)
@@ -4887,7 +4897,11 @@ const commands = {
       if (flags['no-hooks']) {
         line('– hooks     skipped (--no-hooks)')
       } else {
-        const result = spawnSync(process.execPath, [join(releaseDir, 'scripts', 'install-hooks.mjs'), ...(dry ? ['--dry-run'] : []), ...(flags['no-herdr'] ? ['--no-herdr'] : [])], { encoding: 'utf8' })
+        // The runtimes only when they were named: detected ones are what the
+        // installer detects anyway, and naming them would stop it wiring a
+        // runtime setup has no pairing for (Hermes) that it always has.
+        const hookArgs = [...(dry ? ['--dry-run'] : []), ...(flags.runtimes ? ['--runtimes', runtimes.join(',')] : []), ...(flags['no-herdr'] ? ['--no-herdr'] : [])]
+        const result = spawnSync(process.execPath, [join(releaseDir, 'scripts', 'install-hooks.mjs'), ...hookArgs], { encoding: 'utf8' })
         line(`${dry ? '!' : '✓'} hooks     ${dry ? 'would install:' : 'installed:'}`)
         for (const l of `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n')) if (l.trim()) line(`   ${l}`)
       }
@@ -4919,9 +4933,30 @@ const commands = {
             line(`            CAIRN_OPENCLAW_SESSIONS=/root/.openclaw/agents/main/agent/codex-home/sessions cairn setup --url ${url}`)
           }
         }
+        // What the one job every machine gets actually does, said before it is
+        // installed rather than left to be found in a plist: it overwrites code
+        // every agent session runs, on a timer, and that is worth a sentence
+        // whether or not anybody asked (#110).
+        const followed = localSource
+          ? `${localSource} (CAIRN_SETUP_SOURCE)`
+          : process.env.CAIRN_RAW_BASE
+            ? `${process.env.CAIRN_RAW_BASE} (CAIRN_RAW_BASE — follows that URL, not pinned)`
+            : `the tag of the release ${url} reports, from ${process.env.CAIRN_RAW_REPO || `github.com/${setupRepo}`}`
+        line(`– job       agent-files keeps ${tilde(join(HOME, '.local', 'bin', 'cairn'))}, ~/.cairn/hooks and the skill equal to`)
+        line(`   ${followed},`)
+        line(`   ${process.platform === 'darwin' ? 'every 15 minutes and at login' : 'hourly'}, overwriting any copy that differs. It never replaces`)
+        line('   itself from the network: re-run `cairn setup` to update the job. --no-jobs skips it;')
+        line(`   node ${tilde(join(releaseDir, 'scripts', 'install-cron.mjs'))} --remove --only agent-files takes it out`)
         const result = spawnSync(
           process.execPath,
-          [join(releaseDir, 'scripts', 'install-cron.mjs'), ...(dry ? [] : ['--install']), '--only', jobs.join(',')],
+          [
+            join(releaseDir, 'scripts', 'install-cron.mjs'),
+            ...(dry ? [] : ['--install']),
+            '--only',
+            jobs.join(','),
+            ...(localSource ? ['--source', localSource] : []),
+            ...(flags.runtimes ? ['--runtimes', runtimes.join(',')] : []),
+          ],
           { encoding: 'utf8', ...(jobEnv ? { env: jobEnv } : {}) },
         )
         line(`${dry ? '!' : '✓'} jobs      ${jobs.join(', ')}${dry ? ' (plan):' : ':'}`)
