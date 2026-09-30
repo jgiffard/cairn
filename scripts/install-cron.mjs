@@ -13,6 +13,8 @@
  *
  * `cairn setup` runs this with `--only agent-files` (plus reconcile and vitals
  * under `--maintenance`); the rest, like openclaw-sessions, are installed here.
+ * It adds `--source <checkout>` when it was itself run from one
+ * (CAIRN_SETUP_SOURCE), and `--runtimes` when it was given them.
  *
  * Printing is the default on purpose: a script that edits a crontab the moment
  * it is run is a script nobody should run.
@@ -34,7 +36,7 @@
 import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const BEGIN = '# >>> cairn maintenance (managed by scripts/install-cron.mjs)'
@@ -70,13 +72,10 @@ const CLI = env(
 // the installed crontabs already name.
 const NODE = env('CAIRN_NODE_PATH', MAC ? process.execPath : '/usr/bin/node')
 const LOGS = env('CAIRN_LOG_DIR', MAC ? join(homedir(), 'Library/Logs') : '/var/log')
-const SYNC = env(
-  'CAIRN_SYNC_SCRIPT',
-  MAC
-    ? join(homedir(), '.cairn/maintenance/sync-agent-files.mjs')
-    : '/opt/cairn-maintenance/sync-agent-files.mjs',
-)
-const RAW = env('CAIRN_RAW_BASE', 'https://raw.githubusercontent.com/montytorr/cairn/main')
+const DEFAULT_SYNC = MAC
+  ? join(homedir(), '.cairn/maintenance/sync-agent-files.mjs')
+  : '/opt/cairn-maintenance/sync-agent-files.mjs'
+const SYNC = env('CAIRN_SYNC_SCRIPT', DEFAULT_SYNC)
 const HOOKS = env('CAIRN_HOOKS_DIR', join(homedir(), '.cairn/hooks'))
 
 /**
@@ -96,6 +95,85 @@ const rejectUnsafeEnvValue = (name, value) => {
     console.error('Fix the value (it should be a plain path or command), then run this again.')
     process.exit(2)
   }
+}
+
+const refuseSetting = (why) => {
+  console.error(why)
+  process.exit(2)
+}
+
+/**
+ * Where the agent-files job syncs from — the question issue #110 was about.
+ *
+ * The job overwrites the CLI, the hooks every agent session runs and the
+ * skill, with the user's rights, several times an hour. It used to fetch all
+ * of that from `main`, so any commit upstream (or a bad push, or a compromised
+ * account) ran on every connected machine within fifteen minutes, pinned to
+ * nothing and reviewed by nobody. So, in this order:
+ *
+ *   --source <dir>     a checkout on disk. `cairn setup` passes the
+ *                      CAIRN_SETUP_SOURCE it ran with, so a machine set up
+ *                      from a private mirror keeps syncing from that mirror
+ *                      instead of being quietly moved to the public one.
+ *   CAIRN_RAW_BASE     exactly that base URL, every run: the deliberate way to
+ *                      follow a branch. Rendered with `--unpinned`, so the job
+ *                      line says in so many words that it is not pinned.
+ *   (neither)          `release`: each run asks the instance this machine talks
+ *                      to which release it runs (/api/v1/health) and syncs that
+ *                      tag. A machine then runs the code of its server and
+ *                      nothing else, and no push to a branch can change that.
+ *
+ * The tags come from CAIRN_RAW_REPO, a base URL any mirror can serve, or from
+ * CAIRN_REPO=<owner>/<name> on GitHub — the same variable install.sh reads, so
+ * a one-line install from a fork keeps following the fork.
+ *
+ * `--source` also means something to `--run` (below): the tree to use for that
+ * one run. Here, on --install or the printed plan, it is what gets scheduled.
+ */
+const DEFAULT_REPO = 'https://raw.githubusercontent.com/montytorr/cairn'
+const RAW_BASE = env('CAIRN_RAW_BASE', '')
+rejectUnsafeEnvValue('CAIRN_RAW_BASE', RAW_BASE)
+const GITHUB_REPO = env('CAIRN_REPO', '')
+if (GITHUB_REPO && (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(GITHUB_REPO) || GITHUB_REPO.includes('..') || /(^|\/)\.(\/|$)/.test(GITHUB_REPO))) {
+  refuseSetting(`CAIRN_REPO=${JSON.stringify(GITHUB_REPO)} is not <owner>/<name>.`)
+}
+const RAW_REPO = env(
+  'CAIRN_RAW_REPO',
+  GITHUB_REPO ? `https://raw.githubusercontent.com/${GITHUB_REPO}` : DEFAULT_REPO,
+).replace(/\/+$/, '')
+rejectUnsafeEnvValue('CAIRN_RAW_REPO', RAW_REPO)
+if (!/^https:\/\//.test(RAW_REPO) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(`${RAW_REPO}/`)) {
+  refuseSetting(`CAIRN_RAW_REPO=${RAW_REPO} is not https: release files are code, and are not fetched in the clear.`)
+}
+
+const SCHEDULED_SOURCE = (() => {
+  const given = process.argv.includes('--run') ? null : flagValue('--source')
+  if (!given || given === 'release') return RAW_BASE ? 'unpinned' : 'release'
+  if (/^https?:\/\//.test(given)) {
+    refuseSetting('--source takes a checkout on disk here; a URL to follow is CAIRN_RAW_BASE, on purpose.')
+  }
+  const dir = resolve(given)
+  rejectUnsafeEnvValue('--source', dir)
+  if (!existsSync(join(dir, 'scripts', 'sync-agent-files.mjs'))) {
+    refuseSetting(`--source ${dir} is not a Cairn checkout (no scripts/sync-agent-files.mjs in it).`)
+  }
+  return dir
+})()
+
+const SOURCE_ARGS =
+  SCHEDULED_SOURCE === 'release'
+    ? ['--source', 'release', '--repo', RAW_REPO]
+    : SCHEDULED_SOURCE === 'unpinned'
+      ? ['--source', RAW_BASE, '--unpinned']
+      : ['--source', SCHEDULED_SOURCE]
+
+/**
+ * `--runtimes a,b`, as `cairn setup` was given it: the sync then leaves alone a
+ * runtime's copy that was not asked for, even where its directory exists.
+ */
+const SYNC_RUNTIMES = process.argv.includes('--run') ? null : flagValue('--runtimes')
+if (SYNC_RUNTIMES && !/^[a-z0-9-]+(,[a-z0-9-]+)*$/.test(SYNC_RUNTIMES)) {
+  refuseSetting(`--runtimes ${JSON.stringify(SYNC_RUNTIMES)} is not a comma list of runtime names.`)
 }
 
 /** Where a runtime keeps transcripts nothing else will hand us. */
@@ -190,8 +268,8 @@ const JOBS = [
     command: [
       NODE,
       SYNC,
-      '--source',
-      RAW,
+      ...SOURCE_ARGS,
+      ...(SYNC_RUNTIMES ? ['--runtimes', SYNC_RUNTIMES] : []),
       ...ALSO.flatMap((pair) => ['--also', pair]),
       ...(NOTIFY_FILES ? ['--notify', NOTIFY_FILES] : []),
     ],
@@ -517,10 +595,12 @@ const scheduledInLaunchd = (name) => {
  * the job, which is what this whole mechanism exists to avoid.
  *
  * `--source` because a deploy has the exact tree it just deployed sitting on
- * disk, which is strictly better than the schedule's raw.githubusercontent URL:
- * that URL is served from a CDN with a cache of its own, so a fetch seconds
- * after the merge can be handed the previous main and write it back as though
- * it were current. Omit it and the scheduled source is used unchanged.
+ * disk, which is strictly better than the schedule's network source: a URL is
+ * served from a CDN with a cache of its own, so a fetch seconds after the merge
+ * can be handed the previous tree and write it back as though it were current.
+ * Omit it and the scheduled source is used unchanged. What qualified the
+ * scheduled source (`--repo`, `--unpinned`) goes with it: it described a URL
+ * this run no longer reads.
  *
  * `--no-notify` because the schedule's note means "a runtime was reading a
  * stale copy until now", which is a surprise worth recording. On the deploy
@@ -533,6 +613,10 @@ const withRunOverrides = (command) => {
     const at = out.indexOf('--source')
     if (at === -1) out.push('--source', RUN_SOURCE)
     else out[at + 1] = RUN_SOURCE
+    const repo = out.indexOf('--repo')
+    if (repo !== -1) out.splice(repo, 2)
+    const unpinned = out.indexOf('--unpinned')
+    if (unpinned !== -1) out.splice(unpinned, 1)
   }
   if (RUN_WITHOUT_NOTIFY) {
     const at = out.indexOf('--notify')
@@ -578,13 +662,28 @@ if (RUN) {
  * pointed at a working tree breaks the first time the tree is moved or checked
  * out to a branch. On the server this directory was made by hand; doing it here
  * is what makes `--install` work on a machine that has never had it.
+ *
+ * It is also, now, how those two scripts are UPDATED. The scheduled sync no
+ * longer replaces itself from the network (#110), so the copies at the default
+ * location are refreshed here, from the tree this installer runs from — the
+ * release `cairn setup` just unpacked, or a checkout — whenever they differ. A
+ * script named by CAIRN_SYNC_SCRIPT is the operator's own and is only ever
+ * placed where it is missing, as before.
  */
 const REPO_SYNC = join(HERE, 'sync-agent-files.mjs')
-if (INSTALL && !existsSync(SYNC) && existsSync(REPO_SYNC)) {
-  mkdirSync(dirname(SYNC), { recursive: true })
-  copyFileSync(REPO_SYNC, SYNC)
-  console.log(`placed ${SYNC}`)
+const place = (from, to) => {
+  if (!existsSync(from) || resolve(from) === resolve(to)) return
+  if (existsSync(to) && readFileSync(to).equals(readFileSync(from))) return
+  try {
+    mkdirSync(dirname(to), { recursive: true })
+    copyFileSync(from, to)
+    console.log(`placed ${to}`)
+  } catch (error) {
+    console.error(`could not place ${to} (${error.code ?? error.message})`)
+  }
 }
+if (INSTALL && (SYNC === DEFAULT_SYNC || !existsSync(SYNC))) place(REPO_SYNC, SYNC)
+if (INSTALL && SYNC === DEFAULT_SYNC) place(join(HERE, 'install-cron.mjs'), join(dirname(SYNC), 'install-cron.mjs'))
 
 const applicable = JOBS.filter((job) => {
   if (only && !only.includes(job.name)) return false

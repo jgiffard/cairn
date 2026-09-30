@@ -522,3 +522,48 @@ describe('cairn setup — CAIRN_SETUP_SOURCE', () => {
     expect(existsSync(join(HOME, '.cairn', 'releases'))).toBe(false)
   })
 })
+
+/**
+ * Issue #110: a machine set up from a checkout (a private mirror, say) used to
+ * be scheduled to sync from the public `main` regardless. The plan is what
+ * install-cron would render — printed, never installed, because --install
+ * would run real launchctl here.
+ */
+describe('cairn setup — the agent-files job', () => {
+  const planned = async (extraEnv: Record<string, string> = {}) => {
+    const base = await serve()
+    const HOME = await home()
+    const { writeFile } = await import('node:fs/promises')
+    const script = join(HOME, 'sync.mjs')
+    await writeFile(script, '')
+    const result = await run(
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--dry-run'],
+      HOME,
+      { CAIRN_SYNC_SCRIPT: script, CAIRN_NODE_PATH: process.execPath, CAIRN_LOG_DIR: HOME, ...extraEnv },
+    )
+    // One shape for both backends: plist <string>s and crontab quotes alike.
+    const words = result.stdout.replace(/<\/?string>/g, ' ').replace(/'/g, ' ').replace(/\s+/g, ' ')
+    return { ...result, words, base }
+  }
+
+  it('schedules the CAIRN_SETUP_SOURCE checkout, and the runtimes it was given', async () => {
+    const { code, words } = await planned()
+    expect(code).toBe(0)
+    expect(words).toContain(`--source ${REPO} --runtimes claude-code`)
+    expect(words).not.toContain('raw.githubusercontent.com')
+  })
+
+  it('says what the job overwrites, how often, from where, and how to skip it', async () => {
+    const { stdout } = await planned()
+    expect(stdout).toContain('agent-files keeps ~/.local/bin/cairn, ~/.cairn/hooks and the skill')
+    expect(stdout).toContain(`${REPO} (CAIRN_SETUP_SOURCE)`)
+    expect(stdout).toMatch(/every 15 minutes and at login|hourly/)
+    expect(stdout).toContain('--no-jobs skips it')
+  })
+
+  it('refuses a CAIRN_REPO that is not <owner>/<name>', async () => {
+    const { code, stderr } = await planned({ CAIRN_REPO: 'acme/../evil' })
+    expect(code).not.toBe(0)
+    expect(stderr).toContain('is not <owner>/<name>')
+  })
+})

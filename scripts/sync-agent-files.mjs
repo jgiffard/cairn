@@ -12,12 +12,19 @@
  *
  *   node scripts/sync-agent-files.mjs --check   # report drift, write nothing
  *   node scripts/sync-agent-files.mjs           # make every reachable copy match
+ *   node sync-agent-files.mjs --source release  # from the release the instance runs
  *
  * Targets that do not apply to this machine are skipped, not invented: a file
  * in a directory no runtime reads is worse than no file at all. The built-in
  * targets are this user's own; anything else — another user's home, a runtime
  * with a tree of its own — is named by `--also`, because which copies exist is
  * a fact about a machine rather than about Cairn.
+ *
+ * What this writes is code every agent session on the machine then runs, with
+ * that user's rights, so where it comes from is the whole security question
+ * (issue #110). A scheduled run syncs from the release the connected instance
+ * reports (`--source release`), never from a branch that any push can move,
+ * and it never replaces itself from the network. See `resolveSource` below.
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -33,18 +40,22 @@ const arg = (name) => {
   return index === -1 ? null : process.argv[index + 1]
 }
 
-/**
- * Where the canonical files come from: a checkout, or the public repository.
- *
- * `--source <url>` is for the machine that has no checkout. raw.githubusercontent
- * cannot drift and is the same main branch the deploy already builds from.
- */
-const SOURCE = arg('--source') ?? join(HERE, '..')
-
 const home = homedir()
 
+/**
+ * `--runtimes claude-code,codex`: the runtimes `cairn setup` was told to set
+ * up. A target that belongs to one not listed is left alone even where its
+ * directory exists — a ~/.codex that is there for some other reason is not a
+ * request for Cairn's skill, and the issue that found this had exactly that:
+ * `--runtimes claude-code`, no Codex key, and a Codex skill written anyway.
+ * Absent, every target whose directory exists applies, as it always has.
+ */
+const RUNTIMES = arg('--runtimes')
+  ? new Set(arg('--runtimes').split(',').map((r) => r.trim()).filter(Boolean))
+  : null
+
 /** A target applies only if the directory its runtime reads already exists. */
-const at = (path, needs) => ({ path, needs: needs ?? dirname(path) })
+const at = (path, needs, runtime) => ({ path, needs: needs ?? dirname(path), runtime })
 
 const ARTEFACTS = [
   {
@@ -52,8 +63,8 @@ const ARTEFACTS = [
     file: 'skills/cairn/SKILL.md',
     mode: 0o644,
     targets: [
-      at(join(home, '.claude/skills/cairn/SKILL.md'), join(home, '.claude')),
-      at(join(home, '.codex/skills/cairn/SKILL.md'), join(home, '.codex')),
+      at(join(home, '.claude/skills/cairn/SKILL.md'), join(home, '.claude'), 'claude-code'),
+      at(join(home, '.codex/skills/cairn/SKILL.md'), join(home, '.codex'), 'codex'),
     ],
   },
   {
@@ -73,9 +84,12 @@ const ARTEFACTS = [
     // of the checkout to a stable path so a scheduled job does not depend on a
     // working tree that can be moved or checked out to a branch, and that copy
     // then goes stale exactly like every other copy here did.
+    //
+    // `self`: never replaced from a remote source — see REMOTE below.
     name: 'maintenance',
     file: 'scripts/sync-agent-files.mjs',
     mode: 0o755,
+    self: true,
     targets: [
       at('/opt/cairn-maintenance/sync-agent-files.mjs', '/opt/cairn-maintenance/sync-agent-files.mjs'),
       at(
@@ -113,6 +127,7 @@ const ARTEFACTS = [
     name: 'maintenance:cron',
     file: 'scripts/install-cron.mjs',
     mode: 0o755,
+    self: true,
     targets: [
       at('/opt/cairn-maintenance/install-cron.mjs', '/opt/cairn-maintenance/install-cron.mjs'),
       at(
@@ -251,7 +266,9 @@ const RETRY_DELAYS_MS = (process.env.CAIRN_SYNC_RETRY_MS ?? '5000,15000,30000,45
 const fetchWithRetry = async (url) => {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await fetch(url)
+      // Bounded per attempt: a server that accepts the connection and never
+      // answers would otherwise hold a scheduled run open until the next one.
+      return await fetch(url, { signal: AbortSignal.timeout(30_000) })
     } catch (error) {
       if (attempt >= RETRY_DELAYS_MS.length) throw error
       const why = error.cause?.code ?? error.message
@@ -261,18 +278,216 @@ const fetchWithRetry = async (url) => {
   }
 }
 
+/**
+ * The run stops here, before a single file is touched, and says why.
+ *
+ * Every way of not knowing what to install ends in this one place, and none of
+ * them falls back to anything: a sync that cannot say which release it should
+ * be installing and installs *something* anyway is the exact failure #110 is
+ * about. Exit 1, so launchd, cron and `--run` all see a job that did not do
+ * its work — the copies stay as they were, which is stale at worst.
+ */
+const refuse = (why) => {
+  console.log(`\nNOT SYNCED: ${why}`)
+  console.log('Nothing was written. The copies on this machine are unchanged.')
+  process.exit(1)
+}
+
+const DEFAULT_REPO = 'https://raw.githubusercontent.com/montytorr/cairn'
+
+/**
+ * The URL every scheduled job was rendered with before #110.
+ *
+ * A job keeps its command line until `cairn setup` runs again, but the script
+ * that command names is replaced by the very sync it runs — so the first run
+ * of this file on such a machine is the one chance to stop following `main`
+ * without waiting for anybody to re-run anything. It is read as `release`.
+ * Following a branch is still possible, on purpose: `CAIRN_RAW_BASE` on the
+ * installer renders `--unpinned` beside it, and nothing else does.
+ */
+const LEGACY_MAIN = `${DEFAULT_REPO}/main`
+const UNPINNED = process.argv.includes('--unpinned')
+
+/**
+ * Where the tags live: `--repo`, else CAIRN_RAW_REPO, else the public
+ * repository. A mirror only has to serve the same paths under `v<version>/`.
+ *
+ * https only, bar loopback. What comes back from here is run by every agent
+ * session on the machine, so a plain-http base would hand that to anyone on
+ * the path between the two.
+ */
+const repoBase = () => {
+  const given = (arg('--repo') ?? process.env.CAIRN_RAW_REPO ?? DEFAULT_REPO).replace(/\/+$/, '')
+  let url
+  try {
+    url = new URL(given)
+  } catch {
+    return refuse(`--repo ${given} is not a URL`)
+  }
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
+    return refuse(`--repo ${given} is not https — release files are code, and are not fetched in the clear`)
+  }
+  if (url.search || url.hash || url.username || url.password) {
+    return refuse(`--repo ${given} carries a query, fragment or credentials; give the bare base URL`)
+  }
+  return given
+}
+
+/**
+ * A release number as the server's package.json spells it, and nothing else:
+ * it is about to become a path segment in a URL whose answer is executed, so
+ * `main`, `../x`, `1.2.3/../../evil` or an empty string must never get there.
+ */
+const RELEASE = /^\d{1,4}\.\d{1,4}\.\d{1,6}(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/
+
+const envFile = (path) => {
+  try {
+    return Object.fromEntries(
+      readFileSync(path, 'utf8')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith('#') && line.includes('='))
+        .map((line) => [line.slice(0, line.indexOf('=')).trim(), line.slice(line.indexOf('=') + 1).trim()]),
+    )
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Which instance's release this machine follows.
+ *
+ * One instance: the CAIRN_BASE_URL the CLI itself would use — the environment,
+ * then ~/.cairn/env. Several (~/.cairn/instances.json): the default instance,
+ * the one an unrouted command goes to. With no default every instance is
+ * asked, and they have to agree: there is one CLI and one set of hooks per
+ * machine, and picking one of two releases at random is not a pin.
+ */
+const instances = () => {
+  const path = join(home, '.cairn', 'instances.json')
+  if (!existsSync(path)) {
+    const url = process.env.CAIRN_BASE_URL || envFile(join(home, '.cairn/env')).CAIRN_BASE_URL
+    return url
+      ? [{ name: 'this machine\'s instance', url }]
+      : refuse('no instance to pin to — no CAIRN_BASE_URL in ~/.cairn/env. Run `cairn setup --url <instance>`.')
+  }
+  let config
+  try {
+    config = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    return refuse(`~/.cairn/instances.json is not valid JSON (${error.message})`)
+  }
+  const all = Object.entries(config?.instances ?? {})
+    .filter(([, instance]) => typeof instance?.url === 'string')
+    .map(([name, instance]) => ({ name, url: instance.url }))
+  const fallback = config?.unclassified?.mode === 'default' ? config.unclassified.instance : null
+  const chosen = all.filter((instance) => !fallback || instance.name === fallback)
+  return chosen.length ? chosen : refuse('~/.cairn/instances.json names no instance with a url')
+}
+
+/** What `/api/v1/health` says the instance runs. No key: it is the liveness probe. */
+const releaseOf = async ({ name, url }) => {
+  const health = `${url.replace(/\/+$/, '')}/api/v1/health`
+  let version
+  try {
+    const response = await fetchWithRetry(health)
+    if (!response.ok) return refuse(`${health} answered ${response.status}, so ${name}'s release is unknown`)
+    version = (await response.json())?.data?.version
+  } catch (error) {
+    return refuse(`could not ask ${health} which release ${name} runs (${error.cause?.code ?? error.message})`)
+  }
+  if (typeof version !== 'string' || !RELEASE.test(version)) {
+    return refuse(`${health} reports version ${JSON.stringify(version)}, which is not a release number`)
+  }
+  return version
+}
+
+/**
+ * Where the canonical files come from, and whether that is the network.
+ *
+ *   (no --source)          the checkout this script sits in
+ *   --source <dir>         a checkout or a deploy's tree, on disk
+ *   --source release       the tag of the release the instance runs, under --repo
+ *   --source <url>         exactly that base; `--unpinned` says a branch is meant
+ *
+ * `release` is what `cairn setup` schedules. It used to be `main`, fetched every
+ * fifteen minutes and written over the CLI, the hooks every session runs, and
+ * this script (#110): any commit upstream — or a bad push, or a compromised
+ * account — ran on every connected machine within the quarter hour, unreviewed
+ * and unpinned. A machine should run the code of the server it talks to and
+ * nothing else, the server already says which release that is, and a tag is
+ * the one ref a push to main does not move.
+ */
+const resolveSource = async () => {
+  const given = arg('--source')
+  if (!given) return join(HERE, '..')
+  const legacy = given.replace(/\/+$/, '') === LEGACY_MAIN && !UNPINNED
+  if (given !== 'release' && !legacy) return given
+  if (legacy) console.log(`--source ${LEGACY_MAIN} is the pre-#110 default; pinning to the instance's release instead`)
+
+  const repo = repoBase()
+  const versions = []
+  for (const instance of instances()) versions.push({ ...instance, version: await releaseOf(instance) })
+  const distinct = [...new Set(versions.map((v) => v.version))]
+  if (distinct.length > 1) {
+    refuse(
+      `this machine's instances run different releases (${versions.map((v) => `${v.name} ${v.version}`).join(', ')}) ` +
+        'and none is the default. Make one the default in ~/.cairn/instances.json, or pass --source.',
+    )
+  }
+  console.log(`release   v${distinct[0]} (${versions.map((v) => v.name).join(', ')})`)
+  return `${repo}/v${distinct[0]}`
+}
+
+const SOURCE = await resolveSource()
+
+/**
+ * The network is not trusted with the repairer itself.
+ *
+ * A script that rewrites its own code from a URL on a timer cannot be audited
+ * once it is installed: whatever was reviewed is gone by the next slot. So from
+ * a remote source the two maintenance scripts are never written — they change
+ * when `cairn setup` runs, which places them from the release it installs, or
+ * when the source is a tree on disk (a checkout, or the deploy's own tree),
+ * which somebody put there on purpose.
+ */
+const REMOTE = /^https?:\/\//.test(SOURCE)
+console.log(`source    ${SOURCE}`)
+
 const readSource = async (file) => {
-  if (!/^https?:\/\//.test(SOURCE)) return readFileSync(join(SOURCE, file))
+  if (!REMOTE) return readFileSync(join(SOURCE, file))
   const response = await fetchWithRetry(`${SOURCE.replace(/\/+$/, '')}/${file}`)
   if (!response.ok) throw new Error(`${file} returned ${response.status}`)
   return Buffer.from(await response.arrayBuffer())
+}
+
+/**
+ * Every file is read before any is written. One that cannot be fetched — a tag
+ * the mirror never got, a CDN hiccup halfway down the list — used to throw
+ * after the files before it had been replaced, leaving a machine on two
+ * releases at once. Now it is all of them or none.
+ */
+const sources = new Map()
+for (const artefact of ARTEFACTS) {
+  if (REMOTE && artefact.self) continue
+  try {
+    sources.set(artefact.name, await readSource(artefact.file))
+  } catch (error) {
+    refuse(`could not read ${artefact.file} from ${SOURCE} (${error.cause?.code ?? error.code ?? error.message})`)
+  }
 }
 
 const repaired = []
 let drifted = 0
 
 for (const artefact of ARTEFACTS) {
-  const source = await readSource(artefact.file)
+  if (!sources.has(artefact.name)) {
+    console.log(`\n${artefact.name}  ${artefact.file}`)
+    console.log('  skipped   (updated by `cairn setup`, never from a remote source)')
+    continue
+  }
+  const source = sources.get(artefact.name)
   const canonical = hash(source)
   console.log(`\n${artefact.name}  ${canonical}  ${artefact.file}`)
 
@@ -284,6 +499,10 @@ for (const artefact of ARTEFACTS) {
   )
 
   for (const target of unique) {
+    if (RUNTIMES && target.runtime && !RUNTIMES.has(target.runtime)) {
+      console.log(`  skipped   ${target.path}  (${target.runtime} was not set up here)`)
+      continue
+    }
     if (!existsSync(target.needs)) {
       console.log(`  skipped   ${target.path}  (no ${target.needs} here)`)
       continue

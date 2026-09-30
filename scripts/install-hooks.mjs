@@ -19,7 +19,7 @@
  * without touching anyone else's. Every entry it owns is tagged, and tagging
  * is how it knows what is safe to replace.
  *
- * Usage: node scripts/install-hooks.mjs [--dry-run] [--openclaw] [--no-herdr]
+ * Usage: node scripts/install-hooks.mjs [--dry-run] [--openclaw] [--runtimes a,b] [--no-herdr]
  *
  * `cairn setup` runs this for you, alongside pairing keys and copying the
  * skill; run it by hand only to re-wire the hooks on their own.
@@ -36,6 +36,26 @@ const FORCE_OPENCLAW = process.argv.includes('--openclaw')
 const NO_HERDR = process.argv.includes('--no-herdr')
 const HOME = homedir()
 const REPO = dirname(import.meta.dirname)
+
+/**
+ * `--runtimes claude-code,codex,openclaw,hermes`: wire only these.
+ *
+ * Without it every runtime found on the machine is wired, which is right for
+ * someone running this by hand and wrong for `cairn setup --runtimes
+ * claude-code`: a ~/.codex that exists for other reasons got Cairn's hooks,
+ * with no Codex key to run them under (#110). `cairn setup` passes the list it
+ * was given; absent, nothing about detection changes.
+ */
+const RUNTIMES = (() => {
+  const at = process.argv.indexOf('--runtimes')
+  if (at === -1) return null
+  return new Set((process.argv[at + 1] ?? '').split(',').map((r) => r.trim()).filter(Boolean))
+})()
+const wanted = (runtime, label) => {
+  if (!RUNTIMES || RUNTIMES.has(runtime)) return true
+  log(`  ${label}: not in --runtimes — skipped`)
+  return false
+}
 
 const CONTEXT = join(HOME, '.cairn', 'hooks', 'cairn-context.mjs')
 const SESSION_END = join(HOME, '.cairn', 'hooks', 'cairn-session-end.mjs')
@@ -614,8 +634,8 @@ const version = () => {
 log(`Installing Cairn memory hooks${DRY ? ' (dry run)' : ''}`)
 log(`  ${version()}`)
 installScripts()
-installClaude()
-installCodex()
-installHermes()
-installOpenclaw()
+if (wanted('claude-code', 'claude')) installClaude()
+if (wanted('codex', 'codex')) installCodex()
+if (wanted('hermes', 'Hermes Agent by Nous Research')) installHermes()
+if (wanted('openclaw', 'openclaw')) installOpenclaw()
 installHerdr()

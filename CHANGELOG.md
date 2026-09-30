@@ -9,6 +9,36 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Security
+
+- **The `agent-files` job no longer runs unpinned code from `main` (#110).** Every 15 minutes
+  it downloaded the CLI, the hooks every session runs, the skill and its own script from
+  `raw.githubusercontent.com/montytorr/cairn/main` and wrote them with the user's rights, so
+  any upstream commit reached every connected machine within the quarter hour. It now syncs
+  `--source release`: each run asks the instance's `/api/v1/health` for its version and
+  fetches that tag (`v<version>`). The version is validated first. If it cannot be read, or
+  any file of the release is missing, the run writes nothing and exits 1. It does not fall
+  back to `main`. Every file is fetched before any is written. From a remote source the job
+  no longer replaces `sync-agent-files.mjs` or `install-cron.mjs`; `install-cron.mjs
+  --install`, which `cairn setup` runs, refreshes them from the release it unpacked. A job
+  installed earlier still names the old `main` URL, and the updated script reads that exact
+  URL as `release`, so existing machines are pinned from their next run without re-running
+  setup. `CAIRN_RAW_BASE` still follows a URL as given, now only as a deliberate opt-in
+  rendered with `--unpinned`. On a machine with several instances the job follows the
+  default one. Without a default, the instances must agree on one release.
+- **`cairn setup` schedules the source it was installed from.** With `CAIRN_SETUP_SOURCE`, the
+  job syncs from that checkout (`install-cron.mjs --install --source <checkout>`) instead of
+  the public repository. `CAIRN_REPO=<owner>/<name>` is read by `install.sh`, by `cairn
+  setup` (the release tarball) and by the job (its tags). Before, the one-line install and
+  the job could only come from `montytorr/cairn`. `CAIRN_RAW_REPO` takes any https mirror.
+  Before installing the job, setup now says what it overwrites, how often, where from, and
+  how to skip it (`--no-jobs`) or remove it.
+- **`--runtimes` is respected by the hooks and the job.** `cairn setup --runtimes
+  claude-code` still wrote Codex hooks to `~/.codex/hooks.json`, and the job still wrote the
+  Codex skill, wherever `~/.codex` existed. `install-hooks.mjs --runtimes a,b` and
+  `sync-agent-files.mjs --runtimes a,b` wire only those runtimes. Setup passes the list when
+  it was named. Without the flag, both detect runtimes as before.
+
 ### Added
 
 - **Herdr shows the task each agent pane holds.** Inside a Herdr pane, `claim`, a claiming

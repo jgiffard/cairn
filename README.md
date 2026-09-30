@@ -652,6 +652,26 @@ Codex (`~/.codex`) and OpenClaw (only where this account's OpenClaw config runs 
 pairs a key for each one that lacks a working one, and installs the files of the release
 matching its own version.
 
+**What the `agent-files` job does, and where from.** It is installed by default (skip it
+with `--no-jobs`) and `cairn setup` says so before installing it. Every 15 minutes and at
+login on macOS, hourly on Linux, it overwrites the CLI (`~/.local/bin/cairn`), the hooks in
+`~/.cairn/hooks` and the skill with the copies from its source, wherever they differ. Its
+source is **the release your instance runs**: each run asks the instance's
+`/api/v1/health` for its version and syncs that tag (`v<version>`), never a branch. If the
+version cannot be read (the server is down, no instance is configured, the answer is not a
+release number) or any file of that release is missing, the run writes nothing and exits
+non-zero. It never replaces its own two scripts from the network; `cairn setup` updates
+them when it runs again. On a machine with several instances it follows the default one;
+with no default, every instance is asked and they must agree on one release.
+
+- `CAIRN_SETUP_SOURCE=<checkout> cairn setup …` installs from that checkout and schedules the
+  job to sync from it too, so a private mirror stays the only source.
+- `CAIRN_REPO=<owner>/<name>` (read by `install.sh` and `cairn setup`) takes the release, and
+  the job's tags, from a fork on GitHub; `CAIRN_RAW_REPO=<https base>` from any mirror that
+  serves the same paths under `v<version>/`.
+- `CAIRN_RAW_BASE=<url>` makes the job follow exactly that URL (for example a branch). It is
+  a deliberate opt-in, and the job line says `--unpinned`.
+
 ```
 $ cairn setup --url https://cairn.acme.io
 ✓ instance  https://cairn.acme.io -> ~/.cairn/env
@@ -684,7 +704,7 @@ an administrator can also revoke it on **Users**. Unapproved, the request expire
 |---|---|
 | `--url <instance>` | required the first time, and whenever the machine has several instances; otherwise the configured one |
 | `--name <instance-name>` | names the instance when this `--url` is a second (or later) one on the machine (default: derived from the url, `cairn.acme.io` → `acme`). A first instance needs no name |
-| `--runtimes a,b` | which agent runtimes to pair and install for (default: detected — `~/.claude`, `~/.codex`, and OpenClaw where this account runs its gateway) |
+| `--runtimes a,b` | which agent runtimes to pair and install for (default: detected — `~/.claude`, `~/.codex`, and OpenClaw where this account runs its gateway). Named, it also limits the hooks and the job's skill copies to those runtimes: a `~/.codex` that exists is not wired unless `codex` is listed |
 | `--no-skill` / `--no-hooks` / `--no-jobs` | skip that step. Without `--maintenance` the only jobs are `agent-files` and, when OpenClaw is among the runtimes and its sessions directory can be found, `openclaw-sessions` — otherwise it prints which `CAIRN_OPENCLAW_SESSIONS` to set and [the manual command](#scheduled-maintenance--optional) |
 | `--maintenance` | also install `reconcile` and `vitals`, and pair a `maintenance` key for them — separately, because only an administrator can approve one: it releases anyone's claims |
 | `--dry-run` | print the plan, change nothing |
@@ -1162,14 +1182,19 @@ places reports the same findings twice.
 |---|---|
 | `reconcile` (30 min) | Releases any claim in the workspace that went quiet for two hours, and moves a `doing` task back to todo so `doing` keeps meaning somebody is on it (`in-review` keeps its status). Workspace-wide only under the `maintenance` key; any other agent's `reconcile` covers its own claims. Once per instance on a machine with several |
 | `vitals` (daily) | Asks whether the memory is still being written and read, and reports **only** when something looks wrong. Once per instance on a machine with several |
-| `agent-files` (hourly on Linux, and on every deploy; on macOS every 15 minutes and at load) | Repairs the skill, CLI and hooks wherever a runtime is reading a stale copy |
+| `agent-files` (hourly on Linux, and on every deploy; on macOS every 15 minutes and at load) | Repairs the skill, CLI and hooks wherever a runtime is reading a stale copy, from the release the instance reports (`--source release`) or a checkout `cairn setup` was run from |
 | `openclaw-sessions` (30 min) | OpenClaw has no session-end event, so its transcripts are swept instead of waiting to be handed over |
 
 Host-specific paths come from the environment, because a machine's layout does not belong
 in this repository: `CAIRN_CLI_PATH`, `CAIRN_NODE_PATH`, `CAIRN_LOG_DIR`,
-`CAIRN_SYNC_SCRIPT`, `CAIRN_RAW_BASE`, `CAIRN_HOOKS_DIR`, `CAIRN_OPENCLAW_SESSIONS`,
+`CAIRN_SYNC_SCRIPT`, `CAIRN_HOOKS_DIR`, `CAIRN_OPENCLAW_SESSIONS`,
 `CAIRN_SUMMARY_CLI` for a sweep that has to reach a summariser it cannot run as itself, and
-`CAIRN_SYNC_ALSO` for copies outside the running user's home. The defaults describe the
+`CAIRN_SYNC_ALSO` for copies outside the running user's home. Where `agent-files` syncs
+from is `release` by default — the tag of the version the instance reports, under
+`CAIRN_RAW_REPO` (or `CAIRN_REPO=<owner>/<name>` on GitHub; default the public repository)
+— or `--source <checkout>` on `--install`, which is what `cairn setup` passes from
+`CAIRN_SETUP_SOURCE`. `CAIRN_RAW_BASE` makes it follow one URL as given, rendered with
+`--unpinned`; that is the only way to schedule a branch. The defaults describe the
 machine rather than one host: on macOS the CLI is looked for in `~/.local/bin`, logs go to
 `~/Library/Logs`, and node is the one running the installer. `CAIRN_NOTIFY_VITALS` and
 `CAIRN_NOTIFY_FILES` name a task to report into; leave them unset and the jobs stay quiet. On
@@ -1203,9 +1228,17 @@ node scripts/sync-agent-files.mjs --check   # report drift, write nothing
 node scripts/sync-agent-files.mjs           # repair every reachable copy
 ```
 
-`--source <url>` takes the canonical files from the repository rather than a checkout,
-which is what lets it run on a host that has none. A CLI is only ever updated where one is
-already installed — `/usr/local/bin` existing is not consent to install into it.
+`--source release` takes the canonical files from the tag of the release the instance
+reports at `/api/v1/health` (`--repo <base>` for a mirror), which is what lets it run on a
+host with no checkout; `--source <url>` takes them from that URL as given. From any remote
+source everything is fetched before anything is written, a version that cannot be read or
+validated writes nothing, and the two maintenance scripts are skipped: a repairer that
+rewrites itself from the network cannot be audited once installed, so they change only when
+`install-cron.mjs --install` (which `cairn setup` runs) or a source on disk puts them there.
+A job installed before this read `--source https://raw.githubusercontent.com/montytorr/cairn/main`;
+that exact URL is now read as `release`. `--runtimes a,b` leaves a listed-out runtime's copy
+alone. A CLI is only ever updated where one is already installed — `/usr/local/bin`
+existing is not consent to install into it.
 
 The built-in targets are the running user's own `~/.claude`, `~/.codex` and `~/.cairn`.
 Every other copy is named with `--also <artefact>=<path>`, repeatable — another user's
@@ -1236,9 +1269,9 @@ that list in a workflow file would be the next thing to drift. If the job is not
 configured reaches none of the copies the real one reaches, and reports success for it.
 
 Two overrides, and deliberately only two. `--source` because a deploy has the tree it just
-deployed sitting on disk, which beats the schedule's `raw.githubusercontent.com` URL: that
-is CDN-cached, so a fetch seconds after a merge can be handed the previous `main` and write
-it back as current. `--no-notify` because a repair is the *expected* outcome of this path —
+deployed sitting on disk, which beats any network source the schedule names: that is
+CDN-cached, so a fetch seconds after a merge can be handed the previous tree and write it
+back as current (`--repo` and `--unpinned` go with the source they described). `--no-notify` because a repair is the *expected* outcome of this path —
 the schedule's note means "a runtime was reading a stale copy until now", and one of those
 per merge would bury the notes that mean something.
 
