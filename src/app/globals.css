@@ -639,6 +639,63 @@
   .raised-sm {
     box-shadow: var(--shadow-sm), var(--highlight);
   }
+
+  /* A table in the rich editor, drawn as MarkdownView draws one (see the
+     table/th/td entries in components/markdown.tsx) so editing a body does
+     not change how it looks. Tiptap wraps the table in .tableWrapper, which
+     scrolls on its own like the rendered view's container. */
+  .tiptap .tableWrapper {
+    margin-bottom: 0.75rem;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+
+  .tiptap .tableWrapper:last-child {
+    margin-bottom: 0;
+  }
+
+  .tiptap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78125rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tiptap th,
+  .tiptap td {
+    position: relative;
+    padding: 0.375rem 0.625rem;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  }
+
+  .tiptap th {
+    background: var(--surface-raised);
+    color: var(--fg-muted);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    border-bottom-color: var(--border);
+  }
+
+  .tiptap tr:last-child > td {
+    border-bottom: 0;
+  }
+
+  .tiptap th > p,
+  .tiptap td > p {
+    margin: 0;
+  }
+
+  .tiptap .selectedCell::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: var(--accent-subtle);
+    opacity: 0.6;
+  }
 }
 
 @layer base {

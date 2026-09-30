@@ -28,6 +28,20 @@ out under **Breaking** with what to do about it.
   Croft subject; changing a repo for real is a Cairn task, and Croft's todos arrive here
   labelled `croft:T-n` with Cairn owning their status.
 
+### Fixed
+
+- **Editing a description destroyed its tables** (CAIRN-326). The rich editor had no table
+  node, so a GFM table showed as flattened text and was saved back that way after any edit;
+  raw HTML was dropped the same way. Tables are now part of the editor, drawn as the page
+  draws them, and come back from an edit byte-for-byte: alignment, inline code and bold in
+  cells, and escaped pipes all survive. A body the rich editor would still lose part of (raw
+  HTML, a heading below level 3, a footnote, a table row wider than its header) opens as
+  its markdown in a plain textarea instead, with the reason under it.
+- **A slow sibling held the session briefing open.** Killing a sibling that had forked left
+  its child holding the pipes, and the hook could not exit until that child did: 5 s instead
+  of the 1.5 s deadline on Linux. The hook now drops the pipes on its deadline, and the
+  OpenClaw briefing keeps its own deadline rather than waiting on the child.
+
 ## [0.12.1] — 2026-09-29
 
 ### Added
