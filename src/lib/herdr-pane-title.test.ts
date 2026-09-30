@@ -304,6 +304,26 @@ describe('the CLI publishes the claimed task to Herdr', () => {
     })
     expect(code).toBe(0)
   })
+
+  it('kills a hung herdr on its own deadline, after the command has exited', async () => {
+    const { cairn, log } = await setup('Nommer les panes')
+    const pids = `${log}.pids`
+    await writeFile(join(log, '..', 'bin', 'herdr'), `#!/bin/sh\necho $$ >> "${pids}"\nexec sleep 60\n`)
+    const started = Date.now()
+    const claimed = await cairn(['claim', 'CAIRN-15'])
+    expect(claimed.code).toBe(0)
+    expect(Date.now() - started).toBeLessThan(3000)
+    let pid = 0
+    for (let i = 0; i < 40 && !pid; i += 1) {
+      pid = Number((await readFile(pids, 'utf8').catch(() => '')).trim().split('\n')[0]) || 0
+      if (!pid) await new Promise((r) => setTimeout(r, 50))
+    }
+    expect(pid).toBeGreaterThan(0)
+    const alive = () => { try { process.kill(pid, 0); return true } catch { return false } }
+    expect(alive()).toBe(true)
+    for (let i = 0; i < 40 && alive(); i += 1) await new Promise((r) => setTimeout(r, 250))
+    expect(alive()).toBe(false)
+  }, 20_000)
 })
 
 describe('cairn setup and the Herdr plugin', () => {

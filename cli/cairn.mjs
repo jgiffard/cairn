@@ -1964,7 +1964,9 @@ const request = async (method, path, body, { soft = false } = {}) => {
   if (method !== 'GET') {
     rememberWrite(method, path, payload.data)
     updateRememberedOwnership(path, payload.data)
-    herdrPublish(method, path, payload.data)
+    // A replayed write is history: labelling from it would put an older task
+    // back on the pane over the one the live command just showed.
+    if (!FLUSHING) herdrPublish(method, path, payload.data)
     // The server just answered, so anything put aside while it was down can go
     // now. No cron and nothing to remember to run: the next write drains it.
     if (!FLUSHING && hasReplayableOutbox()) {
@@ -2259,21 +2261,31 @@ const herdrTokenText = (ref, title) => {
   return text.length > HERDR_TOKEN_MAX ? `${text.slice(0, HERDR_TOKEN_MAX - 1)}…` : text
 }
 
+/**
+ * The deadline lives in the child, not here. The CLI exits within milliseconds
+ * of a claim, and a timer of its own dies with it: an unref'd kill timer never
+ * fired, so a hung herdr (a wedged socket) left one sh + herdr pair behind per
+ * claim, beat and checkpoint. spawn's `timeout` option would instead hold the
+ * CLI open for its full length. So sh brings its own watchdog; detached makes
+ * sh a group leader, and `kill 0` takes the whole group, hung herdr included.
+ * `sleep` and `kill` are POSIX; `timeout` is not on a stock Mac.
+ */
+const HERDR_DEADLINE_S = 5
+
 const herdrReport = (pane, args) => {
   try {
     // Herdr raises no plugin event for a metadata report, so the plugin is asked to resync
     // once the token has landed; arguments go through "$@", never through the script text.
-    const script = 'herdr pane report-metadata "$@" && herdr plugin action invoke sync --plugin cairn.pane-title'
+    const script =
+      `( sleep ${HERDR_DEADLINE_S}; kill -s KILL 0 ) & watchdog=$!; ` +
+      'herdr pane report-metadata "$@" && herdr plugin action invoke sync --plugin cairn.pane-title; ' +
+      'kill $watchdog 2>/dev/null'
     const child = spawn('sh', ['-c', script, 'sh', pane, '--source', 'cairn', ...args], {
       detached: true,
       stdio: 'ignore',
     })
     child.on('error', () => {})
     child.unref()
-    // spawn's own `timeout` option keeps the process alive for its full length
-    // when the binary is missing, which is the normal case outside Herdr.
-    // detached makes sh a group leader: kill the group, or a hung herdr under it survives
-    setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL') } catch { /* already gone */ } }, 5000).unref()
   } catch { /* display only */ }
 }
 
