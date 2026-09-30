@@ -72,9 +72,9 @@ cairn recall ACME-42        # decisions and facts that bear on this task
 cairn know <slug>           # read a knowledge hit
 ```
 
-`#0` means the subject is new. `--kinds task,note,knowledge,session` narrows `check` (the
-default searches all: you cannot know which store holds the answer); `--assignee me|<who>`
-keeps one person's tasks. Never pull bodies in bulk — the index is for choosing what to read.
+`#0` means the subject is new. `--kinds task,note,knowledge,session` narrows `check`
+(default: all — you cannot know which store holds the answer); `--assignee me|<who>` keeps
+one person's tasks. Never pull bodies in bulk — the index is for choosing what to read.
 
 `recall` starts from the task: resolutions and decision/finding notes on related tasks and
 knowledge on its files, each with why it was picked. `claim` prints the top of it — read
@@ -151,9 +151,9 @@ surfaced on an unrelated project, it is knowledge; bound to one task and moment,
 - **The title is the claim; the slug is the handle** — give a long claim a short `--slug`.
 - **`[[slug]]` in a body is a link**, followable in browser and terminal. A reference that
   misses while a near-named entry exists is refused, naming the slug you probably meant —
-  take it, it is almost always a misspelling. With nothing close it is accepted with a
-  warning (two entries can cite each other). `[[ACME-42]]` is refused: write task
-  refs bare. `--allow-dangling` is for when the refusal is genuinely wrong.
+  take it; it is almost always a typo. With nothing close it is accepted with a warning.
+  `[[ACME-42]]` is refused: write task refs bare. `--allow-dangling` is for when the
+  refusal is wrong.
 - **Correct rather than add.** Two contradictory claims, equally findable, is how every
   memory store fails. When `learn` lists same-subject entries, supersede the wrong one.
 
@@ -168,15 +168,18 @@ cairn know <slug> --history
 A fact is linked to the backticked paths in its body, its source task's files, and any
 `--files a,b`. **`stale`** means those files were reworked since it was confirmed;
 **`unverified Nd`** means a fact naming no file has gone 14+ days unconfirmed — age, not
-evidence of change. Either way: check it, then `verify` or `relearn`. Confirming an old
-fact is as useful as a new one, and faster.
+evidence of change. Either way: check it, then `verify` or `relearn`.
 
 `know --unused|--gaps|--orphans|--dangling` show what is *not* connected. **Scripted reads
 are not recalls:** pass `--sweep` (or `CAIRN_SWEEP=1`) when looping over entries.
 
-**If this machine also has Trig** (the map of what exists): ask *could a re-scan
-rediscover this?* Yes → `trig learn`; no → `cairn learn`. Unsure → Cairn: Trig ingests
-Cairn knowledge on every scan, while a fact hand-written into Trig is never superseded.
+**With Trig** (the map of what exists): *could a re-scan rediscover this?* Yes → `trig
+learn`; no or unsure → `cairn learn` — Trig ingests Cairn knowledge; a fact hand-written
+into Trig is never superseded.
+
+**With Croft** (the lab board): exploring, evaluating or proving an idea → a Croft subject
+(`croft check` first). Changing a repo for real → a Cairn task; Croft pushes its todos
+here labelled `croft:T-n`, and Cairn owns their status.
 
 ## Claims and liveness
 
@@ -188,7 +191,7 @@ cairn release ACME-42    # handing it back: a held doing task returns to todo
 ```
 
 - A claim is execution state, independent of status: `doing` and unclaimed means a human
-  is on it. Only claim open work — reopen settled work first if it truly needs revision.
+  is on it. Only claim open work — reopen settled work first if it needs revision.
 - **A claim is not ownership.** The assignee is the human accountable before and after
   it. `list --mine` is what you hold; `--assignee me`, what your human owns; `cairn
   people`, who can be assigned.
@@ -198,11 +201,11 @@ cairn release ACME-42    # handing it back: a held doing task returns to todo
 - **After 2 hours with no sign of life** the maintenance sweep (`reconcile`, where
   installed) releases the claim and leaves a note: `doing` → `todo`, `in-review` keeps its
   status. Sign of life is a beat, a note, a checkpoint you wrote, an edit, or your own
-  commit/push/run. Notes and checkpoints survive the release; the checkpoint is where the
-  next agent starts.
+  commit/push/run. Notes and checkpoints survive the release; the next agent starts
+  from the checkpoint.
 - **At session end the runtime checkpoints tasks the session worked on, never over a
-  checkpoint you wrote** unless this very session holds the claim; a checkpoint written
-  meanwhile always wins. A held task it did not touch gets a "still held" line (not a sign
+  checkpoint you wrote** unless this session holds the claim; one written meanwhile
+  always wins. A held task it did not touch gets a "still held" line (not a sign
   of life) only if it has no checkpoint. Your own checkpoint is the handoff.
 
 Sessions are created by the runtime; there is no `session create`. For a manual handoff
@@ -250,8 +253,8 @@ checkpoint for you.
 ## Output and rare verbs
 
 TSV by default (`#count`, a header, rows); `--json` to parse, `--pretty` for a human;
-`cairn --help` is the reference. `replay` sends writes queued offline. `task delete <ref>
---confirm <ref>` is for junk only; `cancel` keeps the record and the reason.
+`cairn --help` is the reference. `task delete <ref> --confirm <ref>` is for junk only;
+`cancel` keeps the record and the reason.
 
 Requires `cairn` on PATH and a key per runtime (`~/.cairn/env`; a person pairs them with
 `cairn setup`): the key is who wrote a thing.
