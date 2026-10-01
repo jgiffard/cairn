@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -229,7 +229,7 @@ describe('the session-end hook', () => {
     const [first] = lines('cli.jsonl')
     expect(argValue(first, '--request')).toBe('Audit the vitals endpoint for stale rows')
     expect(first).not.toContain('--learned')
-    expect(readFileSync(join(dir, '.cairn', 'summariser.log'), 'utf8')).toMatch(/claude failed: exit 1: Not logged in/)
+    expect(readFileSync(join(dir, '.cairn', 'summariser.log'), 'utf8')).toMatch(/claude failed: claude exit 1: Not logged in/)
     expect(Object.keys(JSON.parse(readFileSync(join(dir, '.cairn', 'unsummarised.json'), 'utf8')))).toEqual(['failed'])
 
     // The next session to end with a working summariser picks it up.
@@ -367,5 +367,162 @@ describe('the session-end hook', () => {
     const path = transcript('failing', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
     await run({ transcript_path: path, session_id: 'failing-1', cwd: '/work/demo' })
     expect(existsSync(join(dir, '.cairn', 'unrouted'))).toBe(false)
+  })
+})
+
+/**
+ * S-15: the summariser used to be `claude` or nothing, so a machine with only
+ * Codex recorded every session without prose. These run on a PATH holding
+ * only the fakes, so the real `claude` and `codex` on a developer's machine
+ * cannot answer for them.
+ */
+describe('the summariser backend', () => {
+  const FAKE_CODEX = `
+const fs = require('fs')
+const args = process.argv.slice(2)
+let input = ''
+process.stdin.on('data', (d) => { input += d })
+process.stdin.on('end', () => {
+  fs.appendFileSync(process.env.OUT + '/codex.jsonl', JSON.stringify({ args, input }) + '\\n')
+  const refuse = (process.env.FAKE_CODEX_REFUSE ?? '').split(',').filter(Boolean)
+  for (const f of refuse) {
+    if (f.startsWith('--') ? args.includes(f) : args.some((a, i) => a === f && args[i - 1] === '--disable')) {
+      process.stderr.write(f.startsWith('--') ? "error: unexpected argument '" + f + "' found\\n" : 'Error: Unknown feature flag: ' + f + '\\n')
+      process.exit(f.startsWith('--') ? 2 : 1)
+    }
+  }
+  const i = args.indexOf('--output-last-message')
+  const reply = JSON.stringify({ request: 'Rotate the cert', learned: 'Codex wrote this', completed: 'Rotated', next_steps: '' })
+  if (i !== -1) fs.writeFileSync(args[i + 1], reply)
+  else process.stdout.write(reply)
+})`
+
+  const isolated = (tools: Record<string, string>) => {
+    const bin = join(dir, 'bin')
+    mkdirSync(bin, { recursive: true })
+    symlinkSync(process.execPath, join(bin, 'node'))
+    for (const [name, body] of Object.entries(tools)) {
+      writeFileSync(join(bin, name), `#!/usr/bin/env node\n${body}\n`)
+      chmodSync(join(bin, name), 0o755)
+    }
+    return { PATH: `${bin}:/usr/bin:/bin`, CAIRN_SUMMARY_CLI: '' }
+  }
+
+  const codexEvent = (type: string, payload: unknown) => ({ type, timestamp: '2026-09-25T09:00:00.000Z', payload })
+  const rollout = (id: string, text: string) =>
+    transcript(`rollout-2026-09-25T09-00-00-${id}`, [
+      codexEvent('session_meta', { id }),
+      codexEvent('turn_context', { cwd: '/work/demo' }),
+      codexEvent('response_item', { type: 'message', role: 'user', content: [{ type: 'input_text', text }] }),
+      codexEvent('response_item', { type: 'function_call', arguments: '{"cmd":"edit deploy/certs.sh"}' }),
+    ])
+  const disabled = (args: string[]) => args.flatMap((a, i) => (args[i - 1] === '--disable' ? [a] : []))
+
+  it('summarises a Codex session with codex, locked down, when codex is all there is', async () => {
+    const env = isolated({ codex: FAKE_CODEX })
+    const id = '11111111-2222-3333-4444-555555555555'
+    await run({ transcript_path: rollout(id, 'Rotate the staging certificate') }, { ...env, CAIRN_PLATFORM: 'codex' })
+
+    const [call] = lines('codex.jsonl')
+    expect(call.args[0]).toBe('exec')
+    for (const flag of ['--ephemeral', '--ignore-user-config', '--skip-git-repo-check']) expect(call.args).toContain(flag)
+    expect(argValue(call.args, '--sandbox')).toBe('read-only')
+    expect(argValue(call.args, '--model')).toBe('gpt-6-luna')
+    expect(disabled(call.args)).toEqual(expect.arrayContaining(['shell_tool', 'unified_exec', 'hooks', 'apps', 'plugins', 'multi_agent']))
+    expect(call.args).toContain('mcp_servers={}')
+    const instructions = call.args.find((a: string) => a.startsWith('developer_instructions='))
+    expect(JSON.parse(instructions.slice('developer_instructions='.length))).toMatch(/^You are writing one entry in an engineering memory/)
+    expect(call.input).toMatch(/<transcript>\n[\s\S]*Rotate the staging certificate[\s\S]*\n<\/transcript>/)
+
+    const [args] = lines('cli.jsonl')
+    expect(argValue(args, '--learned')).toBe('Codex wrote this')
+  })
+
+  it('falls back to codex for a Claude session on a machine without claude', async () => {
+    const env = isolated({ codex: FAKE_CODEX })
+    const path = transcript('claude-on-codex', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    await run({ transcript_path: path, session_id: 'claude-on-codex', cwd: '/work/demo' }, env)
+    expect(lines('codex.jsonl')).toHaveLength(1)
+    expect(argValue(lines('cli.jsonl')[0], '--learned')).toBe('Codex wrote this')
+  })
+
+  it('prefers claude for a Claude session when both are installed, and codex for a Codex one', async () => {
+    const env = isolated({ codex: FAKE_CODEX, claude: FAKE_CLAUDE })
+    const path = transcript('both', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    await run({ transcript_path: path, session_id: 'both', cwd: '/work/demo' }, env)
+    expect(lines('summariser.jsonl')).toHaveLength(1)
+    expect(lines('codex.jsonl')).toHaveLength(0)
+
+    await run({ transcript_path: rollout('22222222-2222-3333-4444-555555555555', 'Rotate it') }, { ...env, CAIRN_PLATFORM: 'codex' })
+    expect(lines('codex.jsonl')).toHaveLength(1)
+    expect(lines('summariser.jsonl')).toHaveLength(1)
+  })
+
+  it('keeps CAIRN_SUMMARY_CLI meaning claude, and CAIRN_SUMMARY_BACKEND=codex points it at codex', async () => {
+    const env = isolated({})
+    const id = '33333333-2222-3333-4444-555555555555'
+    await run({ transcript_path: rollout(id, 'Rotate it') }, { ...env, CAIRN_SUMMARY_CLI: join(dir, 'claude') })
+    expect(lines('summariser.jsonl')).toHaveLength(1)
+
+    fake('codex-wrapper', FAKE_CODEX)
+    const other = rollout('44444444-2222-3333-4444-555555555555', 'Rotate another')
+    await run({ transcript_path: other }, { ...env, CAIRN_SUMMARY_CLI: join(dir, 'codex-wrapper'), CAIRN_SUMMARY_BACKEND: 'codex' })
+    expect(lines('codex.jsonl')).toHaveLength(1)
+  })
+
+  it('asks again without a feature or option an older codex does not know', async () => {
+    const env = isolated({ codex: FAKE_CODEX })
+    const path = transcript('old-codex', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    await run(
+      { transcript_path: path, session_id: 'old-codex', cwd: '/work/demo' },
+      { ...env, FAKE_CODEX_REFUSE: 'goals,--ignore-rules' },
+    )
+    const calls = lines('codex.jsonl')
+    expect(calls).toHaveLength(3)
+    expect(disabled(calls[2].args)).not.toContain('goals')
+    expect(calls[2].args).not.toContain('--ignore-rules')
+    expect(disabled(calls[2].args)).toContain('shell_tool')
+    expect(argValue(lines('cli.jsonl')[0], '--learned')).toBe('Codex wrote this')
+  })
+
+  it('will not run a codex that refuses to turn its shell off', async () => {
+    const env = isolated({ codex: FAKE_CODEX })
+    const path = transcript('renamed', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    await run({ transcript_path: path, session_id: 'renamed', cwd: '/work/demo' }, { ...env, FAKE_CODEX_REFUSE: 'shell_tool' })
+    expect(lines('codex.jsonl')).toHaveLength(1)
+    const [args] = lines('cli.jsonl')
+    expect(args).not.toContain('--learned')
+    expect(readFileSync(join(dir, '.cairn', 'summariser.log'), 'utf8')).toMatch(/codex refuses --disable shell_tool/)
+  })
+
+  it('records the row, queues nothing and says so once when there is no summariser at all', async () => {
+    const env = isolated({})
+    const a = transcript('none-a', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    const b = transcript('none-b', [user('Please fix the logout redirect'), edit('/work/demo/b.ts')])
+    await run({ transcript_path: a, session_id: 'none-a', cwd: '/work/demo' }, env)
+    await run({ transcript_path: b, session_id: 'none-b', cwd: '/work/demo' }, env)
+
+    expect(lines('cli.jsonl').map((c) => argValue(c, '--id'))).toEqual(['none-a', 'none-b'])
+    expect(argValue(lines('cli.jsonl')[0], '--request')).toBe('Please fix the login redirect')
+    expect(existsSync(join(dir, '.cairn', 'unsummarised.json'))).toBe(false)
+    const log = readFileSync(join(dir, '.cairn', 'summariser.log'), 'utf8').trim().split('\n')
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatch(/no summariser: neither claude nor codex is on PATH/)
+  })
+
+  it('reports which backend it would use in a dry run', async () => {
+    const env = isolated({ codex: FAKE_CODEX })
+    const path = rollout('55555555-2222-3333-4444-555555555555', 'Rotate it')
+    const out = await new Promise<string>((done) => {
+      const child = spawn('node', [HOOK, '--dry-run', path], {
+        env: { ...env, HOME: dir, OUT: dir, CAIRN_CLI: join(dir, 'cairn') } as unknown as NodeJS.ProcessEnv,
+        stdio: ['pipe', 'pipe', 'ignore'],
+      })
+      let text = ''
+      child.stdout.on('data', (d) => { text += d })
+      child.on('close', () => done(text))
+      child.stdin.end()
+    })
+    expect(JSON.parse(out).summariserBackend).toBe('codex')
   })
 })

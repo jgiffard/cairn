@@ -636,6 +636,23 @@ const version = () => {
   }
 }
 
+/**
+ * Who writes the prose on a session row: the hook asks the runtime that
+ * produced it, `claude` or `codex`, and falls back to whichever is here. With
+ * neither, every row is files and task refs only, which used to be found out
+ * from vitals a day later (S-15).
+ */
+const reportSummariser = () => {
+  const forced = process.env.CAIRN_SUMMARY_BACKEND?.trim()
+  const cli = process.env.CAIRN_SUMMARY_CLI?.trim()
+  if (cli) return log(`  summariser: ${cli} (CAIRN_SUMMARY_CLI${forced ? `, as ${forced}` : ''})`)
+  const found = ['claude', 'codex'].filter(onPath)
+  if (found.length === 2) return log('  summariser: claude and codex — each session is written up by the runtime that produced it')
+  if (found.length === 1) return log(`  summariser: ${found[0]} — every session is written up by it`)
+  log('  summariser: neither claude nor codex is on PATH — sessions will be recorded without prose')
+  log('              (files, task refs and counts only). Install one, or point CAIRN_SUMMARY_CLI at one.')
+}
+
 log(`Installing Cairn memory hooks${DRY ? ' (dry run)' : ''}`)
 log(`  ${version()}`)
 installScripts()
@@ -644,3 +661,4 @@ if (wanted('codex', 'codex')) installCodex()
 if (wanted('hermes', 'Hermes Agent by Nous Research')) installHermes()
 if (wanted('openclaw', 'openclaw')) installOpenclaw()
 installHerdr()
+reportSummariser()

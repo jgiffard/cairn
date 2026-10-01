@@ -904,13 +904,18 @@ installer prints what to add.
 
 The session-end hook records what a session touched by
 itself, but the prose on a session row — what was asked, what was learned, what landed,
-what is next — is written by a model. The hook pipes up to 24 KB of transcript to
-`claude -p` and parses the JSON that comes back. So a session row has prose only where
-Claude Code is installed **and logged in as the identity running the hook**.
+what is next — is written by a model. The hook pipes up to 24 KB of transcript to a
+summariser CLI and parses the JSON that comes back: `claude -p` for a Claude Code
+session, `codex exec` for a Codex or OpenClaw one, since the runtime that produced a
+session is the one certainly installed and logged in where it ran. When that one is not on
+`PATH` the other is used. With neither, the row keeps its files, task refs and counts, the
+log says so once a day, and nothing is queued for retry — `install-hooks` says so too.
 
 ```bash
-CAIRN_SUMMARY_CLI=claude                            # or a wrapper, see below
-CAIRN_SUMMARY_MODEL=claude-haiku-4-5-20251001
+CAIRN_SUMMARY_BACKEND=                              # claude | codex; unset: by runtime
+CAIRN_SUMMARY_CLI=claude                            # or a wrapper, see below; alone it means claude
+CAIRN_SUMMARY_MODEL=claude-haiku-4-5-20251001       # the claude backend's model
+CAIRN_SUMMARY_CODEX_MODEL=gpt-6-luna                # the codex backend's model
 CAIRN_SUMMARY_TIMEOUT_MS=60000
 CAIRN_SUMMARY_MIN_INTERVAL_MS=600000                # see below
 CAIRN_SUMMARY_LANGUAGE=                             # unset: the language of the person's prompts
@@ -922,6 +927,17 @@ The child starts with `--strict-mcp-config` and an empty `--mcp-config`, so none
 servers start for it: a server behind `op run` no longer asks for 1Password every time a
 session ends. It also starts with `--tools ""`: it is given the transcript as data, and has
 no tool to act on anything a transcript tells it to do.
+
+The codex child is held to the same standard, which takes more flags: `--ephemeral`,
+`--ignore-user-config`, `--sandbox read-only`, `mcp_servers={}`, and `--disable` for every
+feature that carries a tool — the shell, `unified_exec`, apps, plugins, browser and computer
+use, multi-agent — and for `hooks`, since `hooks.json` loads even without the config. The
+read-only sandbox alone is not enough: it still lets the shell read any file. A Codex that
+refuses an unknown flag is asked again without it, except the shell, `unified_exec` and
+`hooks`: a Codex that will not turn those off is not asked at all.
+
+For the OpenClaw sweep, `install-cron.mjs` carries `CAIRN_SUMMARY_BACKEND`, both models and
+`CAIRN_SUMMARY_LANGUAGE` into the crontab when they are set where it runs.
 
 **How often that call happens.** Not once per session, because not every runtime has a
 session-end event to hang it on. Claude Code records at `SessionEnd` *and* `PreCompact`,
@@ -954,7 +970,7 @@ Two cases where the summariser needs help:
   Point `CAIRN_SUMMARY_CLI` at a wrapper that drops to the account that is:
   `sudo -n -u <user> -H env HOME=/home/<user> CAIRN_SUMMARISER=1 claude "$@"`.
 - **The summariser is itself a Claude Code session.** It would trigger the hook again, so
-  the hook sets `CAIRN_SUMMARISER=1`, `QUARRY_SUMMARISER=1` and `AGENT_MEMORY_SUMMARISER=1`
+  the hook sets `CAIRN_SUMMARISER=1`, `QUARRY_SUMMARISER=1`, `CROFT_SUMMARISER=1` and `AGENT_MEMORY_SUMMARISER=1`
   in the child and exits immediately when it sees any of them — so Quarry's summariser is
   skipped too, and Quarry skips ours. The child also runs with `--no-session-persistence`
   from a scratch directory, so `claude --continue` in a project can never resume it. And a
