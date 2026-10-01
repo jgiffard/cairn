@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.14.4] — 2026-10-01
+
 ### Fixed
 
 - **The session summariser started every MCP server you have** (#119). `claude -p` is a full
@@ -23,6 +25,7 @@ out under **Breaking** with what to do about it.
   it now also runs with `--tools ""`, so a transcript that got past the fence has nothing to
   act with. It inherited your permission settings, which under an allow-all mode meant a
   shell. A CLI too old for `--tools` is asked again without it.
+- **The claimant avatar sat lower than the assignee's** in list rows and on board cards.
 
 ## [0.14.3] — 2026-09-30
 
@@ -1672,7 +1675,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.14.3...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.14.4...HEAD
+[0.14.4]: https://github.com/montytorr/cairn/compare/v0.14.3...v0.14.4
 [0.14.3]: https://github.com/montytorr/cairn/compare/v0.14.2...v0.14.3
 [0.14.2]: https://github.com/montytorr/cairn/compare/v0.14.1...v0.14.2
 [0.14.1]: https://github.com/montytorr/cairn/compare/v0.14.0...v0.14.1
