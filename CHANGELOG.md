@@ -9,6 +9,21 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The session summariser started every MCP server you have** (#119). `claude -p` is a full
+  Claude Code session, so a server behind `op run` asked for 1Password on every SessionEnd
+  and PreCompact, and slow servers ate into the 60 s timeout. The child now runs with
+  `--strict-mcp-config` and an empty `--mcp-config`.
+- **Summaries came out in a language nobody used** (#121). The prompt never named one, and
+  `--system-prompt` replaces the default that carries your preference, so a French session
+  was written up in Spanish. The summary is now in the language of the person's own prompts;
+  `CAIRN_SUMMARY_LANGUAGE` fixes one for everyone.
+- **The summariser had tools.** The fence from 0.14.0 keeps it from obeying the transcript;
+  it now also runs with `--tools ""`, so a transcript that got past the fence has nothing to
+  act with. It inherited your permission settings, which under an allow-all mode meant a
+  shell. A CLI too old for `--tools` is asked again without it.
+
 ## [0.14.3] — 2026-09-30
 
 ### Fixed

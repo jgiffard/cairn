@@ -913,7 +913,15 @@ CAIRN_SUMMARY_CLI=claude                            # or a wrapper, see below
 CAIRN_SUMMARY_MODEL=claude-haiku-4-5-20251001
 CAIRN_SUMMARY_TIMEOUT_MS=60000
 CAIRN_SUMMARY_MIN_INTERVAL_MS=600000                # see below
+CAIRN_SUMMARY_LANGUAGE=                             # unset: the language of the person's prompts
 ```
+
+The summary is written in the language the person wrote in, whatever language the
+instructions are in; set `CAIRN_SUMMARY_LANGUAGE` (say `English`) to fix one for everyone.
+The child starts with `--strict-mcp-config` and an empty `--mcp-config`, so none of your MCP
+servers start for it: a server behind `op run` no longer asks for 1Password every time a
+session ends. It also starts with `--tools ""`: it is given the transcript as data, and has
+no tool to act on anything a transcript tells it to do.
 
 **How often that call happens.** Not once per session, because not every runtime has a
 session-end event to hang it on. Claude Code records at `SessionEnd` *and* `PreCompact`,

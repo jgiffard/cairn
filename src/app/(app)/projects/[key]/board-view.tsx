@@ -65,12 +65,12 @@ export const Card = ({
         <PriorityIcon priority={task.priority} />
         <span className="ml-auto flex items-center gap-1">
           {task.assignee && (
-            <span title={`Assignee: ${task.assignee.name}`}>
+            <span className="flex" title={`Assignee: ${task.assignee.name}`}>
               <Avatar name={task.assignee.name} size={16} />
             </span>
           )}
           {task.claimed_by && (
-            <span title={`Held by ${task.claimed_by}`}>
+            <span className="flex" title={`Held by ${task.claimed_by}`}>
               <Avatar name={task.claimed_by} size={16} />
             </span>
           )}

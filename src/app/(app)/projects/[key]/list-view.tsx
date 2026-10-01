@@ -401,7 +401,7 @@ const Row = ({
 
         {task.claimed_by ? (
           <span
-            className={cn('shrink-0', stale && 'opacity-40')}
+            className={cn('flex shrink-0', stale && 'opacity-40')}
             title={
               stale
                 ? `${task.claimed_by} holds this but has gone quiet`
