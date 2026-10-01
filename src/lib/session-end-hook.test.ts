@@ -493,6 +493,25 @@ process.stdin.on('end', () => {
     const [args] = lines('cli.jsonl')
     expect(args).not.toContain('--learned')
     expect(readFileSync(join(dir, '.cairn', 'summariser.log'), 'utf8')).toMatch(/codex refuses --disable shell_tool/)
+    // The same refusal every time: queuing it would only repeat it.
+    expect(existsSync(join(dir, '.cairn', 'unsummarised.json'))).toBe(false)
+  })
+
+  it('still records the row when codex cannot even get a temp directory', async () => {
+    const env = isolated({ codex: FAKE_CODEX })
+    const path = transcript('no-tmp', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    await run({ transcript_path: path, session_id: 'no-tmp', cwd: '/work/demo' }, { ...env, TMPDIR: join(dir, 'does-not-exist') })
+    const [args] = lines('cli.jsonl')
+    expect(argValue(args, '--id')).toBe('no-tmp')
+    expect(argValue(args, '--request')).toBe('Please fix the login redirect')
+  })
+
+  it('keeps retrying a summariser somebody configured by path, even while it is missing', async () => {
+    const env = isolated({})
+    const path = transcript('configured', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
+    await run({ transcript_path: path, session_id: 'configured', cwd: '/work/demo' }, { ...env, CAIRN_SUMMARY_CLI: join(dir, 'not-installed-yet') })
+    expect(argValue(lines('cli.jsonl')[0], '--id')).toBe('configured')
+    expect(Object.keys(JSON.parse(readFileSync(join(dir, '.cairn', 'unsummarised.json'), 'utf8')))).toEqual(['configured'])
   })
 
   it('records the row, queues nothing and says so once when there is no summariser at all', async () => {

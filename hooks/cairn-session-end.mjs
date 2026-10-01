@@ -31,7 +31,6 @@ import {
   readFileSync,
   rmSync,
   statSync,
-  utimesSync,
   writeFileSync,
 } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -992,9 +991,15 @@ const codexArgs = (dir, dropped) => {
 const refusedByCodex = (text) =>
   text.match(/Unknown feature flag: ([\w.-]+)/)?.[1] ?? text.match(/unexpected argument '(--[\w-]+)'/)?.[1] ?? null
 
+/**
+ * Never throws, like runCli: a temp directory that cannot be made is a
+ * summary lost, never a session row lost — and in a sweep a throw here marked
+ * the rollout seen, so it would never have been recorded at all.
+ */
 const runCodex = async (command, input) => {
-  const dir = mkdtempSync(join(tmpdir(), 'cairn-summary-'))
+  let dir
   try {
+    dir = mkdtempSync(join(tmpdir(), 'cairn-summary-'))
     writeFileSync(join(dir, 'schema.json'), JSON.stringify(SUMMARY_SCHEMA))
     const dropped = new Set()
     for (;;) {
@@ -1004,13 +1009,20 @@ const runCodex = async (command, input) => {
         const last = join(dir, 'last.txt')
         return existsSync(last) ? { ...run, out: readFileSync(last, 'utf8') } : run
       }
+      // The same answer every time, so it is not queued for retry either.
       if (CODEX_REQUIRED.has(refused)) {
-        return { ...run, code: 0, error: `codex refuses --disable ${refused}, so it cannot run without tools; not asked` }
+        return { ...run, code: 0, unusable: true, error: `codex refuses --disable ${refused}, so it cannot run without tools; not asked` }
       }
       dropped.add(refused)
     }
+  } catch (error) {
+    return { out: '', err: '', error: `codex: ${error.message}` }
   } finally {
-    rmSync(dir, { recursive: true, force: true })
+    try {
+      if (dir) rmSync(dir, { recursive: true, force: true })
+    } catch {
+      // A leftover temp directory is the OS's to clean.
+    }
   }
 }
 
@@ -1039,10 +1051,10 @@ const BACKENDS = ['claude', 'codex']
 const chooseSummariser = (format) => {
   const forced = process.env.CAIRN_SUMMARY_BACKEND?.trim().toLowerCase()
   const cli = process.env.CAIRN_SUMMARY_CLI
-  if (BACKENDS.includes(forced)) return { backend: forced, command: cli || forced }
-  if (cli) return { backend: 'claude', command: cli }
+  if (BACKENDS.includes(forced)) return { backend: forced, command: cli || forced, explicit: true }
+  if (cli) return { backend: 'claude', command: cli, explicit: true }
   const found = (format === 'codex' ? ['codex', 'claude'] : ['claude', 'codex']).find(onPath)
-  return found ? { backend: found, command: found } : null
+  return found ? { backend: found, command: found, explicit: false } : null
 }
 
 const tail = (text, n) => text.trim().slice(-n)
@@ -1056,7 +1068,10 @@ const summarise = async (digest, format) => {
 
   const run = chosen.backend === 'codex' ? await runCodex(chosen.command, input) : await runClaude(chosen.command, input)
 
-  if (run.error) return { summary: null, error: `${chosen.backend}: ${run.error}`, missing: run.missing }
+  // A CLI found on PATH a moment ago and gone now is mid-update, and one
+  // somebody configured by path is theirs to fix: both are retried as before.
+  // Only a CLI that will give the same answer every time is not.
+  if (run.error) return { summary: null, error: `${chosen.backend}: ${run.error}`, missing: run.unusable }
   if (run.code) {
     return { summary: null, error: `${chosen.backend} exit ${run.code}: ${tail(run.err, 500) || tail(run.out, 300) || 'no output'}` }
   }
@@ -1076,12 +1091,12 @@ const summarise = async (digest, format) => {
 const MISSING_STAMP = join(homedir(), '.cairn', 'summariser-missing')
 const logMissing = (line) => {
   try {
-    if (existsSync(MISSING_STAMP) && Date.now() - statSync(MISSING_STAMP).mtimeMs < 24 * 60 * 60_000) return
+    const age = existsSync(MISSING_STAMP) ? Date.now() - statSync(MISSING_STAMP).mtimeMs : Infinity
+    // A stamp from the future (a clock set back) does not silence it for good.
+    if (age >= 0 && age < 24 * 60 * 60_000) return
     logSummariser(`${line} -- sessions are recorded without prose; install claude or codex, or set CAIRN_SUMMARY_CLI`)
     mkdirSync(dirname(MISSING_STAMP), { recursive: true })
     writeFileSync(MISSING_STAMP, '')
-    const now = new Date()
-    utimesSync(MISSING_STAMP, now, now)
   } catch {
     // Unstamped, it is said again next time; that is all.
   }
