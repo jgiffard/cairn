@@ -1,0 +1,36 @@
+name: issue and PR notifications
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+# The workflow runs only trusted default-branch code and never checks out a PR.
+permissions: {}
+
+jobs:
+  notify:
+    runs-on: [self-hosted, cairn]
+    timeout-minutes: 2
+    steps:
+      - name: notify Cairn channel
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          with open(os.environ['GITHUB_EVENT_PATH'], encoding='utf-8') as source:
+              event = json.load(source)
+          item = event.get('issue') or event.get('pull_request')
+          if not item:
+              raise SystemExit('No issue or pull request in event payload')
+          kind = 'PR' if 'pull_request' in event else 'issue'
+          title = ' '.join(item['title'].split())[:180].replace('@', '＠')
+          author = item['user']['login'].replace('@', '＠')
+          url = item['html_url']
+          number = item['number']
+          message = f'🆕 **Cairn {kind} #{number}** by {author}\n{title}\n<{url}>'
+          subprocess.run(['sudo', '/usr/local/bin/cairn-discord-send', message], check=True)
+          PY
