@@ -95,6 +95,9 @@ exit 1` can. Repeats dedupe, so retrying is safe. Name another task's ref in a
 `mentionedIn`; the ref in prose is the link. `cairn comment` addresses the human, not the
 next agent.
 
+In Cairn bodies and notes write the bare ref. Citing a task to the human in chat, write
+`[ACME-42](url)` with the `url` that `show`, `add`, `check`, `list` and `next` return.
+
 ## Filing, and the body
 
 ```bash
