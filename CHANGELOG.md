@@ -11,10 +11,29 @@ out under **Breaking** with what to do about it.
 
 ### Added
 
+- **A machine with only Codex gets session prose** (CAIRN-337, S-15). The summariser was
+  always `claude -p`, so a Codex-only machine recorded every session without its four prose
+  fields, and OpenClaw's GPT sessions on clawdius were written up by Claude as another
+  account. A session is now summarised by the runtime that produced it — `claude` for
+  Claude Code, `codex exec` (`gpt-6-luna`) for Codex and OpenClaw — falling back to
+  whichever is installed. `CAIRN_SUMMARY_BACKEND` forces one; `CAIRN_SUMMARY_CLI` alone
+  still means `claude`, so existing wrappers keep working. The codex child runs with no
+  shell, no MCP, no hooks and no saved session: `--sandbox read-only` on its own still let
+  it read any file.
+- **`install-cron.mjs` carries the summariser settings into the OpenClaw sweep**:
+  `CAIRN_SUMMARY_BACKEND`, `CAIRN_SUMMARY_MODEL`, `CAIRN_SUMMARY_CODEX_MODEL` and
+  `CAIRN_SUMMARY_LANGUAGE`, when set. Before, the sweep could only use claude's default.
 - **The account menu shows the running version, and a changelog page.** A "Changelog" row
   with the version opens `/changelog`, which renders this file as the instance shipped it:
   one section per release, the running one marked, and anything merged since the release
   shown as "On main".
+
+### Changed
+
+- **No summariser is not an outage** (CAIRN-338). With neither `claude` nor `codex` on
+  `PATH`, the session is no longer queued for four retries that cannot succeed, and the log
+  says so once a day instead of once a turn. `install-hooks.mjs` reports which summariser
+  this machine will use, or that there is none.
 
 ## [0.14.4] — 2026-10-01
 

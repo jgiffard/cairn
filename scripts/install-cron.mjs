@@ -192,6 +192,19 @@ rejectUnsafeEnvValue('CAIRN_OPENCLAW_SESSIONS', OPENCLAW_SESSIONS)
 const SUMMARY_CLI = env('CAIRN_SUMMARY_CLI', '')
 rejectUnsafeEnvValue('CAIRN_SUMMARY_CLI', SUMMARY_CLI)
 
+/**
+ * The rest of the summariser's settings, carried into the sweep as given. A
+ * cron job starts with almost no environment, so a model, a language or a
+ * backend set in the installer's shell used to stop at the crontab: the
+ * OpenClaw sweep could only ever summarise with claude's default model.
+ */
+const SUMMARY_SETTINGS = Object.fromEntries(
+  ['CAIRN_SUMMARY_BACKEND', 'CAIRN_SUMMARY_MODEL', 'CAIRN_SUMMARY_CODEX_MODEL', 'CAIRN_SUMMARY_LANGUAGE']
+    .map((name) => [name, env(name, '')])
+    .filter(([, value]) => value),
+)
+for (const [name, value] of Object.entries(SUMMARY_SETTINGS)) rejectUnsafeEnvValue(name, value)
+
 /** Tasks the jobs report into. Empty disables reporting for that job. */
 const NOTIFY_FILES = env('CAIRN_NOTIFY_FILES', '')
 const NOTIFY_VITALS = env('CAIRN_NOTIFY_VITALS', '')
@@ -283,6 +296,7 @@ const JOBS = [
       CAIRN_AGENT: 'openclaw',
       CAIRN_PLATFORM: 'openclaw',
       ...(SUMMARY_CLI ? { CAIRN_SUMMARY_CLI: SUMMARY_CLI } : {}),
+      ...SUMMARY_SETTINGS,
     },
     command: [NODE, join(HOOKS, 'cairn-session-end.mjs'), '--scan', OPENCLAW_SESSIONS],
   },
