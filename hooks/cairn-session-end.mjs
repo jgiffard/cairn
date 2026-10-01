@@ -20,21 +20,27 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  accessSync,
   appendFileSync,
+  constants,
   createReadStream,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
 
 const CLI = process.env.CAIRN_CLI ?? 'cairn'
+/** The claude backend's model; the codex backend has its own, below. */
 const MODEL = process.env.CAIRN_SUMMARY_MODEL ?? 'claude-haiku-4-5-20251001'
+const CODEX_MODEL = process.env.CAIRN_SUMMARY_CODEX_MODEL ?? 'gpt-6-luna'
 const SUMMARY_TIMEOUT_MS = Number(process.env.CAIRN_SUMMARY_TIMEOUT_MS ?? 60_000)
 
 /** Enough transcript for a summary, bounded so cost cannot run away. */
@@ -775,7 +781,7 @@ const knownClosed = (sessionId) => Boolean(readSummaryState()[sessionId]?.closed
  * Returns the summary, whether it is new, and — when the model was asked and
  * gave nothing usable — why, so the caller can log it and queue a retry.
  */
-const summaryFor = async (sessionId, digest) => {
+const summaryFor = async (sessionId, digest, format) => {
   const digestHash = createHash('sha256').update(digest).digest('hex')
   const previous = sessionId ? readSummaryState()[sessionId] : null
 
@@ -786,9 +792,9 @@ const summaryFor = async (sessionId, digest) => {
     }
   }
 
-  const { summary, error } = await summarise(digest)
+  const { summary, error, missing } = await summarise(digest, format)
   if (summary && sessionId) rememberSummary(sessionId, digestHash, summary)
-  return { summary, fresh: true, error }
+  return { summary, fresh: true, error, missing }
 }
 
 /**
@@ -851,7 +857,12 @@ const NO_TOOLS = ['--tools', '']
 const NEWER_FLAGS = [NO_PERSISTENCE, ...NO_TOOLS]
 const REFUSED_FLAG = /(unknown|unrecognized|invalid).*(--no-session-persistence|--tools)\b|(--no-session-persistence|--tools)\b.*(unknown|unrecognized)/i
 
-const runSummariser = (input, newerFlags) =>
+/**
+ * One child, text in on stdin, text out. Never throws: a hook that took the
+ * recorder down over an unavailable summariser would cost the session row.
+ * `missing` is a CLI that is not there at all, which no retry will cure.
+ */
+const runCli = (command, args, input) =>
   new Promise((resolve) => {
     let out = ''
     let err = ''
@@ -862,20 +873,18 @@ const runSummariser = (input, newerFlags) =>
       resolve(v)
     }
 
-    const args = ['-p', '--model', MODEL, '--output-format', 'text', '--system-prompt', PROMPT, ...NO_MCP]
-    if (newerFlags) args.push(...NEWER_FLAGS)
     const env = { ...process.env }
     for (const name of SUMMARISER_FLAGS) env[name] = '1'
 
     let child
     try {
-      child = spawn(process.env.CAIRN_SUMMARY_CLI ?? 'claude', args, {
+      child = spawn(command, args, {
         cwd: tmpdir(),
         stdio: ['pipe', 'pipe', 'pipe'],
         env,
       })
     } catch (error) {
-      return done({ out, err, error: `spawn failed: ${error.message}` })
+      return done({ out, err, error: `spawn failed: ${error.message}`, missing: error.code === 'ENOENT' })
     }
 
     const timer = setTimeout(() => {
@@ -891,16 +900,14 @@ const runSummariser = (input, newerFlags) =>
     })
     child.on('error', (error) => {
       clearTimeout(timer)
-      done({ out, err, error: `spawn failed: ${error.message}` })
+      done({ out, err, error: `spawn failed: ${error.message}`, missing: error.code === 'ENOENT' })
     })
     child.on('close', (code) => {
       clearTimeout(timer)
       done({ out, err, code })
     })
 
-    // A failed spawn leaves stdin null, and writing to it throws synchronously
-    // -- which, inside a hook whose whole contract is never to interfere, would
-    // take down the recorder over an unavailable summariser.
+    // A failed spawn leaves stdin null, and writing to it throws synchronously.
     try {
       child.stdin.on('error', () => {})
       child.stdin.end(input)
@@ -910,30 +917,188 @@ const runSummariser = (input, newerFlags) =>
     }
   })
 
-const tail = (text, n) => text.trim().slice(-n)
-
-/** `{summary}` or `{error}`, never a throw. */
-const summarise = async (digest) => {
-  if (!digest.trim()) return { summary: null }
-  const input = transcriptTurn(digest)
-
-  let run = await runSummariser(input, true)
+const runClaude = async (command, input) => {
+  const args = (newer) => [
+    '-p', '--model', MODEL, '--output-format', 'text', '--system-prompt', PROMPT, ...NO_MCP,
+    ...(newer ? NEWER_FLAGS : []),
+  ]
+  const run = await runCli(command, args(true), input)
   // A CLI that predates the flags refuses the whole call; ask again without
   // them rather than lose every summary to an upgrade nobody has run yet.
-  if (run.code && REFUSED_FLAG.test(`${run.err}\n${run.out}`)) {
-    run = await runSummariser(input, false)
-  }
+  if (run.code && REFUSED_FLAG.test(`${run.err}\n${run.out}`)) return runCli(command, args(false), input)
+  return run
+}
 
-  if (run.error) return { summary: null, error: run.error }
+/**
+ * Codex, made as inert as `claude -p --tools ""` (S-15, measured on 0.156.1
+ * and 0.159.2).
+ *
+ * `-s read-only` alone is not that: asked to, the child ran `cat` and
+ * returned the file, so an injection that got past the fence could read
+ * ~/.ssh into a summary that is sent to the server. Disabling the features
+ * that carry tools is what closes it. `--ignore-user-config` drops
+ * config.toml, MCP servers included, but not hooks.json, so the person's own
+ * SessionStart and Stop hooks ran inside the summariser until hooks were
+ * disabled too. The instructions go as developer_instructions, a message of
+ * their own, so the transcript stays fenced in the user turn as for claude.
+ */
+const CODEX_LOCKDOWN = [
+  'shell_tool', 'unified_exec', 'hooks', 'apps', 'plugins', 'remote_plugin', 'browser_use',
+  'browser_use_external', 'computer_use', 'image_generation', 'multi_agent', 'view_image',
+  'sleep_tool', 'goals', 'skill_search', 'tool_suggest', 'code_mode_host', 'shell_snapshot',
+]
+
+/**
+ * A Codex that refuses one of these cannot be locked down, so it is not asked
+ * at all. An unknown feature cannot be on, so dropping the rest is safe — but
+ * one of these refused means it was renamed, and its successor is on.
+ */
+const CODEX_REQUIRED = new Set(['shell_tool', 'unified_exec', 'hooks'])
+
+const SUMMARY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['request', 'learned', 'completed', 'next_steps'],
+  properties: Object.fromEntries(['request', 'learned', 'completed', 'next_steps'].map((k) => [k, { type: 'string' }])),
+}
+
+const codexArgs = (dir, dropped) => {
+  const args = ['exec']
+  const option = (flag, ...value) => {
+    if (!dropped.has(flag)) args.push(flag, ...value)
+  }
+  option('--ephemeral')
+  option('--skip-git-repo-check')
+  option('--ignore-user-config')
+  option('--ignore-rules')
+  args.push(
+    '--sandbox', 'read-only',
+    '--model', CODEX_MODEL,
+    '-c', `developer_instructions=${JSON.stringify(PROMPT)}`,
+    // Belt and braces for a Codex that refuses --ignore-user-config.
+    '-c', 'mcp_servers={}',
+    '-c', 'web_search="disabled"',
+    '-c', 'project_doc_max_bytes=0',
+  )
+  option('--output-schema', join(dir, 'schema.json'))
+  option('--output-last-message', join(dir, 'last.txt'))
+  option('--color', 'never')
+  for (const feature of CODEX_LOCKDOWN) if (!dropped.has(feature)) args.push('--disable', feature)
+  args.push('-')
+  return args
+}
+
+const refusedByCodex = (text) =>
+  text.match(/Unknown feature flag: ([\w.-]+)/)?.[1] ?? text.match(/unexpected argument '(--[\w-]+)'/)?.[1] ?? null
+
+/**
+ * Never throws, like runCli: a temp directory that cannot be made is a
+ * summary lost, never a session row lost — and in a sweep a throw here marked
+ * the rollout seen, so it would never have been recorded at all.
+ */
+const runCodex = async (command, input) => {
+  let dir
+  try {
+    dir = mkdtempSync(join(tmpdir(), 'cairn-summary-'))
+    writeFileSync(join(dir, 'schema.json'), JSON.stringify(SUMMARY_SCHEMA))
+    const dropped = new Set()
+    for (;;) {
+      const run = await runCli(command, codexArgs(dir, dropped), input)
+      const refused = run.code ? refusedByCodex(`${run.err}\n${run.out}`) : null
+      if (!refused || dropped.has(refused)) {
+        const last = join(dir, 'last.txt')
+        return existsSync(last) ? { ...run, out: readFileSync(last, 'utf8') } : run
+      }
+      // The same answer every time, so it is not queued for retry either.
+      if (CODEX_REQUIRED.has(refused)) {
+        return { ...run, code: 0, unusable: true, error: `codex refuses --disable ${refused}, so it cannot run without tools; not asked` }
+      }
+      dropped.add(refused)
+    }
+  } catch (error) {
+    return { out: '', err: '', error: `codex: ${error.message}` }
+  } finally {
+    try {
+      if (dir) rmSync(dir, { recursive: true, force: true })
+    } catch {
+      // A leftover temp directory is the OS's to clean.
+    }
+  }
+}
+
+const onPath = (command) => {
+  const executable = (path) => {
+    try {
+      accessSync(path, constants.X_OK)
+      return statSync(path).isFile()
+    } catch {
+      return false
+    }
+  }
+  if (command.includes('/')) return executable(command)
+  return (process.env.PATH ?? '').split(delimiter).some((dir) => dir && executable(join(dir, command)))
+}
+
+/**
+ * Which CLI writes the prose: the runtime that produced the session, since it
+ * is the one certainly installed and logged in there. A Codex-only machine
+ * used to get no prose at all, because this was always `claude`.
+ *
+ * CAIRN_SUMMARY_BACKEND forces one. CAIRN_SUMMARY_CLI alone keeps meaning a
+ * `claude` (or a wrapper around it), as it always has.
+ */
+const BACKENDS = ['claude', 'codex']
+const chooseSummariser = (format) => {
+  const forced = process.env.CAIRN_SUMMARY_BACKEND?.trim().toLowerCase()
+  const cli = process.env.CAIRN_SUMMARY_CLI
+  if (BACKENDS.includes(forced)) return { backend: forced, command: cli || forced, explicit: true }
+  if (cli) return { backend: 'claude', command: cli, explicit: true }
+  const found = (format === 'codex' ? ['codex', 'claude'] : ['claude', 'codex']).find(onPath)
+  return found ? { backend: found, command: found, explicit: false } : null
+}
+
+const tail = (text, n) => text.trim().slice(-n)
+
+/** `{summary}` or `{error}`, never a throw. `missing`: no summariser here at all. */
+const summarise = async (digest, format) => {
+  if (!digest.trim()) return { summary: null }
+  const chosen = chooseSummariser(format)
+  if (!chosen) return { summary: null, error: 'no summariser: neither claude nor codex is on PATH', missing: true }
+  const input = transcriptTurn(digest)
+
+  const run = chosen.backend === 'codex' ? await runCodex(chosen.command, input) : await runClaude(chosen.command, input)
+
+  // A CLI found on PATH a moment ago and gone now is mid-update, and one
+  // somebody configured by path is theirs to fix: both are retried as before.
+  // Only a CLI that will give the same answer every time is not.
+  if (run.error) return { summary: null, error: `${chosen.backend}: ${run.error}`, missing: run.unusable }
   if (run.code) {
-    return { summary: null, error: `exit ${run.code}: ${tail(run.err, 500) || tail(run.out, 300) || 'no output'}` }
+    return { summary: null, error: `${chosen.backend} exit ${run.code}: ${tail(run.err, 500) || tail(run.out, 300) || 'no output'}` }
   }
   const match = run.out.match(/\{[\s\S]*\}/)
-  if (!match) return { summary: null, error: `no JSON in output: ${tail(run.out, 300) || tail(run.err, 300) || 'empty'}` }
+  if (!match) return { summary: null, error: `${chosen.backend}: no JSON in output: ${tail(run.out, 300) || tail(run.err, 300) || 'empty'}` }
   try {
     return { summary: JSON.parse(match[0]) }
   } catch {
-    return { summary: null, error: `unparseable JSON: ${match[0].slice(0, 300)}` }
+    return { summary: null, error: `${chosen.backend}: unparseable JSON: ${match[0].slice(0, 300)}` }
+  }
+}
+
+/**
+ * Said once a day, not once a turn: Codex runs this on every Stop, and a
+ * machine without a summariser is a fact about the machine, not an outage.
+ */
+const MISSING_STAMP = join(homedir(), '.cairn', 'summariser-missing')
+const logMissing = (line) => {
+  try {
+    const age = existsSync(MISSING_STAMP) ? Date.now() - statSync(MISSING_STAMP).mtimeMs : Infinity
+    // A stamp from the future (a clock set back) does not silence it for good.
+    if (age >= 0 && age < 24 * 60 * 60_000) return
+    logSummariser(`${line} -- sessions are recorded without prose; install claude or codex, or set CAIRN_SUMMARY_CLI`)
+    mkdirSync(dirname(MISSING_STAMP), { recursive: true })
+    writeFileSync(MISSING_STAMP, '')
+  } catch {
+    // Unstamped, it is said again next time; that is all.
   }
 }
 
@@ -1071,6 +1236,7 @@ const record = async (payload, opts = {}) => {
   // the file, and a mislabelled platform should not silently produce an empty
   // session.
   const parse = looksLikeCodex(transcriptPath) ? parseCodexRollout : parseTranscript
+  const format = parse === parseCodexRollout ? 'codex' : 'claude'
 
   const t = await parse(transcriptPath).catch(() => null)
   if (!t) return
@@ -1084,7 +1250,8 @@ const record = async (payload, opts = {}) => {
       JSON.stringify(
         {
           transcript: transcriptPath,
-          format: parse === parseCodexRollout ? 'codex' : 'claude',
+          format,
+          summariserBackend: chooseSummariser(format)?.backend ?? 'none',
           sessionId,
           cwd: payload.cwd ?? t.cwd,
           prompts: t.prompts.length,
@@ -1123,10 +1290,15 @@ const record = async (payload, opts = {}) => {
   const platform = opts.platform ?? process.env.CAIRN_PLATFORM ?? 'claude'
   const agent = opts.agent ?? process.env.CAIRN_AGENT
   const files = keepFiles(t.files, cwd)
-  const outcome = await summaryFor(sessionId, buildDigest(t))
+  const outcome = await summaryFor(sessionId, buildDigest(t), format)
   const summary = outcome.summary ?? {}
 
-  if (outcome.error) {
+  if (outcome.missing) {
+    // No retry can cure a CLI that is not installed, so it is not queued: the
+    // row keeps its deterministic half, and the log says why, once a day.
+    logMissing(`${platform} ${sessionId}: ${outcome.error}`)
+    if (opts.retry) return { sessionId, failed: true }
+  } else if (outcome.error) {
     logSummariser(`${platform} ${sessionId}${opts.retry ? ' retry' : ''}: ${outcome.error}`)
     updateUnsummarised(sessionId, (e) => ({
       path: transcriptPath,
@@ -1207,6 +1379,9 @@ const retryUnsummarised = async (currentId) => {
     pruned = true
   }
   if (pruned) writeUnsummarised(queue)
+  // Nothing here can summarise them; leave them for a machine that can, or
+  // for the day one is installed, without spending their tries.
+  if (!chooseSummariser('claude')) return
 
   for (const [id, e] of dueRetries(queue, now, currentId)) {
     const result = await record(

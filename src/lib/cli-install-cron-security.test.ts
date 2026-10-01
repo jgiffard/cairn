@@ -150,6 +150,30 @@ describe('install-cron.mjs — crontab quoting (F2)', () => {
     expect(result.code).toBe(2)
     expect(result.stderr).toContain('CAIRN_SUMMARY_CLI contains a newline, carriage return or %')
   })
+
+  it('refuses a summariser setting carrying a newline too', async () => {
+    const { environment } = await setUp()
+    const result = await run(['--cron'], { ...environment, CAIRN_SUMMARY_LANGUAGE: 'English\n* * * * * evil' })
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain('CAIRN_SUMMARY_LANGUAGE contains a newline, carriage return or %')
+  })
+
+  it('carries the summariser settings into the OpenClaw sweep, and only the ones that are set', async () => {
+    const { directory, crontabFile, environment } = await setUp()
+    const sessions = join(directory, 'sessions')
+    await mkdir(sessions, { recursive: true })
+    const result = await run(['--install', '--only', 'openclaw-sessions', '--cron'], {
+      ...environment,
+      CAIRN_OPENCLAW_SESSIONS: sessions,
+      CAIRN_SUMMARY_BACKEND: 'codex',
+      CAIRN_SUMMARY_LANGUAGE: 'English',
+    })
+    expect(result.code).toBe(0)
+    const line = (await readFile(crontabFile, 'utf8')).split('\n').find((l) => l.includes('--scan')) ?? ''
+    expect(line).toContain("CAIRN_SUMMARY_BACKEND='codex'")
+    expect(line).toContain("CAIRN_SUMMARY_LANGUAGE='English'")
+    expect(line).not.toContain('CAIRN_SUMMARY_MODEL')
+  })
 })
 
 describe('install-cron.mjs — --only keeps other jobs (F3)', () => {
