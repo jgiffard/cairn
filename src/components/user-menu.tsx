@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronsUpDown, Keyboard, KeyRound, LogOut, Settings as SettingsIcon, Users } from 'lucide-react'
+import { ChevronsUpDown, Keyboard, KeyRound, LogOut, ScrollText, Settings as SettingsIcon, Users } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 import { Avatar } from '@/components/icons'
@@ -152,6 +152,22 @@ export const UserMenu = ({
             <Keyboard size={13} aria-hidden />
             Keyboard shortcuts
           </button>
+
+          <Link
+            href="/changelog"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              onNavigate?.()
+            }}
+            className={cn(item, 'row-hover hover:text-fg')}
+          >
+            <ScrollText size={13} aria-hidden />
+            Changelog
+            {process.env.CAIRN_VERSION ? (
+              <span className="text-fg-subtle tabular ml-auto text-[0.6875rem]">v{process.env.CAIRN_VERSION}</span>
+            ) : null}
+          </Link>
 
           <div className="border-border mx-2 my-1 border-t" />
 

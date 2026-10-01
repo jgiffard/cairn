@@ -9,6 +9,13 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **The account menu shows the running version, and a changelog page.** A "Changelog" row
+  with the version opens `/changelog`, which renders this file as the instance shipped it:
+  one section per release, the running one marked, and anything merged since the release
+  shown as "On main".
+
 ## [0.14.4] — 2026-10-01
 
 ### Fixed

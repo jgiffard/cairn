@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import { version } from './package.json'
 
 const nextConfig: NextConfig = {
   // Standalone output keeps the runtime image small; see Dockerfile.
@@ -17,6 +18,12 @@ const nextConfig: NextConfig = {
   // administrator outside the bundle, so they must exist as packages in the
   // standalone node_modules rather than only inside bundled server chunks.
   serverExternalPackages: ['@aws-sdk/client-s3', 'pg', 'bcryptjs'],
+  // Inlined at build, so the account menu can show the release without
+  // shipping all of package.json to the browser.
+  env: { CAIRN_VERSION: version },
+  // /changelog reads CHANGELOG.md from disk; the standalone trace would not
+  // otherwise carry a file no import names.
+  outputFileTracingIncludes: { '/changelog': ['./CHANGELOG.md'] },
   // Set by the app rather than left to a proxy: Traefik added these on the
   // compose deployment, and a platform that terminates TLS itself (App
   // Runner) adds none, so the same image was served without them there.
