@@ -108,6 +108,26 @@ jobs:
           ENV
           cp docker-compose.example.yml docker-compose.yml
 
+          # Other instances this host serves from the same build, so they are
+          # always on this release (CAIRN-376). Each is a directory
+          # $HOME/cairn-secrets/instances/<name>/ holding app.env (its
+          # container's environment) and deploy.env (its CAIRN_DOMAIN,
+          # CAIRN_CONTAINER and CAIRN_ATTACHMENTS, see the compose file). One
+          # with no deploy.env is still being set up and is left alone; a host
+          # with none deploys exactly as before. Each runs as compose project
+          # cairn-<name>, so it never touches the container above.
+          : > .instances
+          for dir in "$HOME"/cairn-secrets/instances/*/; do
+            [ -f "$dir/deploy.env" ] || continue
+            instance=$(basename "$dir")
+            [[ "$instance" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "bad instance name: $instance"; exit 1; }
+            test -f "$dir/app.env" || { echo "missing $dir/app.env"; exit 1; }
+            install -m 600 "$dir/app.env" ".env.$instance"
+            { cat "$dir/deploy.env"; echo "CAIRN_ENV_FILE=.env.$instance"; } > ".env.$instance.compose"
+            echo "$instance" >> .instances
+            echo "also deploying $instance"
+          done
+
       - name: note what is running
         id: previous
         # Captured BEFORE the build, because building overwrites the image tag
@@ -120,26 +140,63 @@ jobs:
           echo "name=${name:-cairn-cairn}" >> "$GITHUB_OUTPUT"
           echo "currently running ${image:-nothing}"
 
+          : > .instances-previous
+          for instance in $(cat .instances); do
+            container=$(sed -n 's/^CAIRN_CONTAINER=//p' ".env.$instance.compose" | tail -1)
+            image=$(docker inspect "$container" --format '{{.Image}}' 2>/dev/null || true)
+            echo "$instance $image" >> .instances-previous
+            echo "$instance currently running ${image:-nothing}"
+          done
+
       - name: build
-        run: docker compose --profile tools build --quiet
+        # One build. Each instance gets the same image under its own project's
+        # tag, which is the name compose looks for when it is not building.
+        run: |
+          set -euo pipefail
+          docker compose --profile tools build --quiet
+          image=$(docker compose config --images cairn)
+          for instance in $(cat .instances); do
+            docker tag "$image" "$(docker compose -p "cairn-$instance" --env-file .env --env-file ".env.$instance.compose" config --images cairn)"
+          done
 
       - name: migrate database
-        run: docker compose --profile tools run --rm migrate
+        # The instances migrate with the same migrator, pointed at their own
+        # environment. Every database is migrated before any new code starts.
+        run: |
+          set -euo pipefail
+          docker compose --profile tools run --rm migrate
+          for instance in $(cat .instances); do
+            echo "migrating $instance"
+            CAIRN_ENV_FILE=".env.$instance" docker compose --profile tools run --rm migrate </dev/null
+          done
 
       - name: deploy
-        run: docker compose up -d --remove-orphans
+        run: |
+          set -euo pipefail
+          docker compose up -d --remove-orphans
+          for instance in $(cat .instances); do
+            docker compose -p "cairn-$instance" --env-file .env --env-file ".env.$instance.compose" up -d --no-build cairn
+          done
 
       - name: wait for health
         run: |
           set -euo pipefail
-          for i in $(seq 1 30); do
-            state=$(docker inspect cairn --format '{{.State.Health.Status}}' 2>/dev/null || echo starting)
-            [ "$state" = "healthy" ] && { echo "healthy after ${i}0s"; exit 0; }
-            sleep 10
+          containers=cairn
+          for instance in $(cat .instances); do
+            containers="$containers $(sed -n 's/^CAIRN_CONTAINER=//p' ".env.$instance.compose" | tail -1)"
           done
-          echo "never became healthy"
-          docker compose logs --tail=40 cairn
-          exit 1
+          for container in $containers; do
+            healthy=
+            for i in $(seq 1 30); do
+              state=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo starting)
+              [ "$state" = "healthy" ] && { echo "$container healthy after ${i}0s"; healthy=1; break; }
+              sleep 10
+            done
+            [ -n "$healthy" ] && continue
+            echo "$container never became healthy"
+            docker logs --tail=40 "$container"
+            exit 1
+          done
 
       - name: smoke test
         # Through the public URL, so this exercises Traefik and TLS too — a
@@ -148,8 +205,15 @@ jobs:
           CAIRN_DOMAIN: ${{ vars.CAIRN_DOMAIN }}
         run: |
           set -euo pipefail
-          code=$(curl -s -o /dev/null -w '%{http_code}' "https://${CAIRN_DOMAIN}/api/v1/health")
-          [ "$code" = "200" ] || { echo "health endpoint returned $code"; exit 1; }
+          domains=$CAIRN_DOMAIN
+          for instance in $(cat .instances); do
+            domains="$domains $(sed -n 's/^CAIRN_DOMAIN=//p' ".env.$instance.compose" | tail -1)"
+          done
+          for domain in $domains; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://${domain}/api/v1/health")
+            [ "$code" = "200" ] || { echo "$domain health endpoint returned $code"; exit 1; }
+            echo "$domain answers"
+          done
           echo "deployed $DEPLOY_SHA"
 
       - name: refresh the files agents read
@@ -240,17 +304,31 @@ jobs:
           docker tag "$previous" "$name"
           docker compose up -d --no-build
 
-          for _ in $(seq 1 18); do
-            state=$(docker inspect cairn --format '{{.State.Health.Status}}' 2>/dev/null || echo starting)
-            if [ "$state" = healthy ]; then
-              echo "rolled back to the previous build, healthy"
-              exit 1   # the deploy still failed; say so
+          # The instances go back with it, so they stay on the same release.
+          containers=cairn
+          while read -r instance image; do
+            [ -n "$instance" ] || continue
+            if [ -z "$image" ]; then
+              echo "::warning::$instance had nothing running to fall back to"
+              continue
             fi
-            sleep 5
-          done
+            project=(-p "cairn-$instance" --env-file .env --env-file ".env.$instance.compose")
+            echo "restoring $instance to $image"
+            docker tag "$image" "$(docker compose "${project[@]}" config --images cairn)"
+            docker compose "${project[@]}" up -d --no-build cairn </dev/null
+            containers="$containers $(sed -n 's/^CAIRN_CONTAINER=//p' ".env.$instance.compose" | tail -1)"
+          done < <(cat .instances-previous 2>/dev/null)
 
-          echo "::error::rollback did not become healthy — the site may be down"
-          exit 1
+          for container in $containers; do
+            restored=
+            for _ in $(seq 1 18); do
+              state=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo starting)
+              [ "$state" = healthy ] && { echo "$container rolled back to the previous build, healthy"; restored=1; break; }
+              sleep 5
+            done
+            [ -n "$restored" ] || { echo "::error::$container did not become healthy after the rollback — the site may be down"; exit 1; }
+          done
+          exit 1   # the deploy still failed; say so
 
       - name: notify deploy result
         if: always()

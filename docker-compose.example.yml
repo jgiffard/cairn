@@ -11,6 +11,13 @@
 # Required environment:
 #   CAIRN_DOMAIN         hostname to serve on, e.g. cairn.example.com
 #   CAIRN_PROXY_NETWORK  existing external Docker network your proxy is on
+#
+# Optional, for a second instance on the same host (its own project, `-p`):
+#   CAIRN_CONTAINER      container name, and the name of its Traefik router,
+#                        service and middleware (default: cairn)
+#   CAIRN_ENV_FILE       the app's environment file (default: .env.local)
+#   CAIRN_ATTACHMENTS    the host directory for attachments
+#                        (default: /srv/cairn/attachments)
 # ---------------------------------------------------------------------------
 
 services:
@@ -20,7 +27,7 @@ services:
       context: .
       target: migrator
     env_file:
-      - .env.local
+      - ${CAIRN_ENV_FILE:-.env.local}
     networks:
       - database
 
@@ -30,12 +37,12 @@ services:
       target: runner
       args:
         GIT_SHA: ${GIT_SHA:-unknown}
-    container_name: cairn
+    container_name: ${CAIRN_CONTAINER:-cairn}
     restart: unless-stopped
 
     # Secrets come from a gitignored env file, never from this compose file.
     env_file:
-      - .env.local
+      - ${CAIRN_ENV_FILE:-.env.local}
 
     expose:
       - '3000'
@@ -72,7 +79,7 @@ services:
       # A root-owned directory here is readable, so the app boots and reports
       # healthy; it fails only later, when someone attaches a file and the
       # per-project mkdir returns EACCES.
-      - /srv/cairn/attachments:/data/attachments
+      - ${CAIRN_ATTACHMENTS:-/srv/cairn/attachments}:/data/attachments
     cap_drop:
       - ALL
     security_opt:
@@ -92,16 +99,16 @@ services:
     labels:
       - 'traefik.enable=true'
       - 'traefik.docker.network=${CAIRN_PROXY_NETWORK}'
-      - 'traefik.http.routers.cairn.rule=Host(`${CAIRN_DOMAIN}`)'
-      - 'traefik.http.routers.cairn.entrypoints=websecure'
-      - 'traefik.http.routers.cairn.tls.certresolver=letsencrypt'
-      - 'traefik.http.services.cairn.loadbalancer.server.port=3000'
-      - 'traefik.http.routers.cairn.middlewares=cairn-headers'
-      - 'traefik.http.middlewares.cairn-headers.headers.stsSeconds=31536000'
-      - 'traefik.http.middlewares.cairn-headers.headers.stsIncludeSubdomains=true'
-      - 'traefik.http.middlewares.cairn-headers.headers.stsPreload=true'
-      - 'traefik.http.middlewares.cairn-headers.headers.frameDeny=true'
-      - 'traefik.http.middlewares.cairn-headers.headers.contentTypeNosniff=true'
+      - 'traefik.http.routers.${CAIRN_CONTAINER:-cairn}.rule=Host(`${CAIRN_DOMAIN}`)'
+      - 'traefik.http.routers.${CAIRN_CONTAINER:-cairn}.entrypoints=websecure'
+      - 'traefik.http.routers.${CAIRN_CONTAINER:-cairn}.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.${CAIRN_CONTAINER:-cairn}.loadbalancer.server.port=3000'
+      - 'traefik.http.routers.${CAIRN_CONTAINER:-cairn}.middlewares=${CAIRN_CONTAINER:-cairn}-headers'
+      - 'traefik.http.middlewares.${CAIRN_CONTAINER:-cairn}-headers.headers.stsSeconds=31536000'
+      - 'traefik.http.middlewares.${CAIRN_CONTAINER:-cairn}-headers.headers.stsIncludeSubdomains=true'
+      - 'traefik.http.middlewares.${CAIRN_CONTAINER:-cairn}-headers.headers.stsPreload=true'
+      - 'traefik.http.middlewares.${CAIRN_CONTAINER:-cairn}-headers.headers.frameDeny=true'
+      - 'traefik.http.middlewares.${CAIRN_CONTAINER:-cairn}-headers.headers.contentTypeNosniff=true'
 
 networks:
   proxy:

@@ -104,6 +104,13 @@ out under **Breaking** with what to do about it.
   database check, unless the instance already has a project keyed `LAB`: then the migration
   still runs, and turning the Lab on is refused until that project is rekeyed.
 - Task responses gain `handoff`, and `subject` while the Lab is on.
+- **More than one instance per host** (CAIRN-376). `docker-compose.example.yml` takes
+  `CAIRN_CONTAINER`, `CAIRN_ENV_FILE` and `CAIRN_ATTACHMENTS`, with today's values as defaults,
+  so a second instance runs from the same file under its own project. The deploy workflow
+  deploys each instance it finds in `$HOME/cairn-secrets/instances/<name>/` from the same
+  build: migrated, started, health-checked, smoke-tested and rolled back with the main one.
+- `scripts/restore-drill.sh` restores as `CAIRN_DB_OWNER` (default `cairn_app`), so a second
+  instance's database, owned by another role, can be drilled.
 
 ## [0.21.0] — 2026-10-08
 

@@ -5,6 +5,8 @@ set -euo pipefail
 
 DEST=${CAIRN_BACKUP_DIR:-/srv/backups/cairn}
 DB_CONTAINER=${CAIRN_DB_CONTAINER:-cairn-postgres}
+# The role that owns the database: the restore runs as it, as the app would.
+DB_OWNER=${CAIRN_DB_OWNER:-cairn_app}
 SCRATCH="cairn_restore_drill_$(date -u +%s)"
 
 LATEST=$(find "$DEST/daily" -maxdepth 1 -name 'cairn-db-*.dump' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
@@ -12,11 +14,11 @@ LATEST=$(find "$DEST/daily" -maxdepth 1 -name 'cairn-db-*.dump' -printf '%T@ %p\
 echo "restoring $(basename "$LATEST")"
 
 q() { docker exec "$DB_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d "$1" -qtAX -c "$2"; }
-q postgres "create database $SCRATCH owner cairn_app" >/dev/null
+q postgres "create database $SCRATCH owner $DB_OWNER" >/dev/null
 trap 'q postgres "drop database if exists $SCRATCH with (force)" >/dev/null' EXIT
 q "$SCRATCH" 'drop schema public' >/dev/null
 
-docker exec -i "$DB_CONTAINER" pg_restore -U cairn_app -d "$SCRATCH" \
+docker exec -i "$DB_CONTAINER" pg_restore -U "$DB_OWNER" -d "$SCRATCH" \
   --exit-on-error --no-owner --no-privileges < "$LATEST"
 
 check() {

@@ -602,6 +602,20 @@ a Let's Encrypt resolver; adapt the labels for nginx or Caddy. The container run
 read-only, as a non-root user, with all capabilities dropped — which is why the bind mount
 above has to be writable by that user rather than by root.
 
+A second instance on the same host (its own database, domain and attachments) uses the same
+compose file under its own project name, with `CAIRN_CONTAINER` (the container, and its
+Traefik router and middleware), `CAIRN_ENV_FILE` and `CAIRN_ATTACHMENTS` set:
+
+```bash
+CAIRN_DOMAIN=lab.example.com CAIRN_CONTAINER=cairn-lab CAIRN_ENV_FILE=.env.lab \
+CAIRN_ATTACHMENTS=/srv/cairn-lab/attachments docker compose -p cairn-lab up -d --build cairn
+```
+
+The deploy workflow does this for every directory in `$HOME/cairn-secrets/instances/<name>/`
+that holds an `app.env` (the container's environment) and a `deploy.env` (those variables):
+each one is migrated, started, health-checked, smoke-tested and rolled back with the main
+instance, from the same build, so every instance is on the same release.
+
 ### The first administrator
 
 There is no public sign-up page. Bootstrap the first administrator after migrating:
@@ -1463,7 +1477,8 @@ it by reading the script rather than by losing a backup.
 `restore-drill.sh` restores the newest dump into a throwaway database, asserts the data is
 really there — including that the generated `search_vector` survived, which would otherwise
 break prior-work discovery silently while everything else looked fine — then drops it. An
-untested backup is not a backup.
+untested backup is not a backup. It restores as `CAIRN_DB_OWNER` (default `cairn_app`), the
+role that owns the database; a second instance sets it, with its own `CAIRN_BACKUP_DIR`.
 
 ## Contributing
 
