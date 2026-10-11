@@ -170,6 +170,30 @@ describe('cairn setup — dry run', () => {
  * the sessions directory. Dry-run only here: --install would run real
  * launchctl, which this suite must never do.
  */
+describe('cairn setup — dry run with no release on disk', () => {
+  const noRelease = { CAIRN_SETUP_SOURCE: '' }
+  const cases: [string, string[]][] = [
+    ['--no-skill', ['--no-skill']],
+    ['--no-hooks', ['--no-hooks']],
+    ['--no-jobs', ['--no-jobs']],
+    ['all three', ['--no-skill', '--no-hooks', '--no-jobs']],
+  ]
+  for (const [label, extra] of cases) {
+    it(`accepts ${label} instead of refusing it as read by nothing`, async () => {
+      const base = await serve()
+      const HOME = await home()
+      const { code, stdout, stderr } = await run(
+        ['setup', '--url', base, '--runtimes', 'claude-code', '--dry-run', ...extra],
+        HOME,
+        noRelease,
+      )
+      expect(stderr).not.toContain('read by nothing')
+      expect(code).toBe(0)
+      expect(stdout).toContain('no release on disk yet')
+    })
+  }
+})
+
 describe('cairn setup — openclaw-sessions job', () => {
   it('includes openclaw-sessions with the derived directory when it can find one', async () => {
     const base = await serve()

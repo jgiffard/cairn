@@ -6668,6 +6668,10 @@ const commands = {
     // false "unchanged" for files that were never compared.
     const releaseReady = existsSync(join(releaseDir, 'cli', 'cairn.mjs'))
     if (!releaseReady) {
+      // The flags the plan below would have read: a dry run takes the same
+      // ones a real run does, so the unused-flag guard has nothing to refuse
+      // (CAIRN-378).
+      for (const name of ['no-skill', 'no-hooks', 'no-herdr', 'no-jobs', 'maintenance']) void flags[name]
       line('! plan      cli, skill, hooks, jobs skipped — no release on disk yet to plan from;')
       line('   run once without --dry-run, or set CAIRN_SETUP_SOURCE to a checkout')
     } else {
