@@ -9,6 +9,14 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- `cairn setup` no longer writes an older CLI over a newer one (CAIRN-381). It installs the
+  CLI that is running it, and a setup waiting minutes on a browser approval (for a second
+  instance, say) could land after the agent-files job had updated `~/.local/bin/cairn`,
+  downgrading the one CLI every instance on the machine shares. It now says
+  `~/.local/bin/cairn is X, newer than this setup (Y) — kept`, in a dry run too.
+
 ## [0.22.1] — 2026-10-11
 
 ### Fixed
