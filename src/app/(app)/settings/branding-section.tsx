@@ -16,7 +16,7 @@ const STOCK_ACCENT = '#5e6ad2'
 const PRESETS = ['#5e6ad2', '#01519b', '#0e7490', '#15803d', '#b45309', '#be123c', '#7c3aed', '#3f3f46']
 
 const STOCK_TOKENS: Record<'light' | 'dark', AccentTokens> = {
-  light: { accent: '#5e6ad2', accentFg: '#ffffff', accentSubtle: '#eceefb', ring: '#5e6ad2' },
+  light: { accent: '#4a56c4', accentFg: '#ffffff', accentSubtle: '#e4e7fa', ring: '#4a56c4' },
   dark: { accent: '#7b86e8', accentFg: '#ffffff', accentSubtle: '#23253a', ring: '#5e6ad2' },
 }
 
@@ -36,7 +36,7 @@ const Preview = ({
   mark: string
   name: string
 }) => {
-  const ground = theme === 'light' ? { bg: '#ffffff', fg: '#0d0e10', muted: '#61656c', border: '#e6e7e9' } : { bg: '#08090a', fg: '#f7f8f8', muted: '#9aa0a9', border: '#1f2023' }
+  const ground = theme === 'light' ? { bg: '#f2f4f7', fg: '#12141a', muted: '#484e59', border: '#d3d8e0' } : { bg: '#08090a', fg: '#f7f8f8', muted: '#9aa0a9', border: '#1f2023' }
   return (
     <div
       className="flex flex-1 flex-col gap-3 rounded-md border p-3 transition-colors duration-[var(--dur-2)] ease-[var(--ease-out)]"

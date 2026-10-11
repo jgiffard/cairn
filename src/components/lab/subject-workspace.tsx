@@ -62,11 +62,11 @@ export const SubjectWorkspace = ({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden lg:flex lg:overflow-hidden">
+    <div className="bg-surface-read min-h-0 flex-1 overflow-y-auto overflow-x-hidden lg:flex lg:overflow-hidden">
       <div className="min-w-0 lg:flex-1 lg:overflow-y-auto lg:overflow-x-hidden">
         <div className="mx-auto max-w-[51.25rem] px-4 pt-6 sm:px-6 lg:px-8">{header}</div>
 
-        <div className="bg-bg border-border sticky top-0 z-20 mt-4 border-b">
+        <div className="bg-surface-read border-border sticky top-0 z-20 mt-4 border-b">
           <div
             role="tablist"
             aria-label="Sections"

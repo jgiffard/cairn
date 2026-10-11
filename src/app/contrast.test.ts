@@ -10,20 +10,25 @@ import { AVATAR_COLORS } from '@/components/icons'
  */
 const css = readFileSync('src/app/globals.css', 'utf8')
 
+// Every block the selector opens: the tokens and the syntax colours are two.
 const block = (selector: RegExp): Record<string, string> => {
-  const start = css.search(selector)
-  const open = css.indexOf('{', start)
-  let depth = 0
-  let end = open
-  for (let i = open; i < css.length; i++) {
-    if (css[i] === '{') depth++
-    if (css[i] === '}' && --depth === 0) {
-      end = i
-      break
+  const found: Record<string, string> = {}
+  const pattern = new RegExp(selector.source, 'gm')
+  for (const match of css.matchAll(pattern)) {
+    const open = css.indexOf('{', match.index)
+    let depth = 0
+    let end = open
+    for (let i = open; i < css.length; i++) {
+      if (css[i] === '{') depth++
+      if (css[i] === '}' && --depth === 0) {
+        end = i
+        break
+      }
     }
+    const body = css.slice(open + 1, end)
+    for (const m of body.matchAll(/^\s*--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})\s*;/gm)) found[m[1]!] = m[2]!
   }
-  const body = css.slice(open + 1, end)
-  return Object.fromEntries([...body.matchAll(/^\s*--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})\s*;/gm)].map((m) => [m[1]!, m[2]!]))
+  return found
 }
 
 const light = block(/^:root\s*\{/m)
@@ -67,6 +72,33 @@ describe.each([['light', light], ['dark', dark]] as const)('%s theme contrast', 
     expect(ratio(tokens['accent']!, tokens['accent-subtle']!)).toBeGreaterThanOrEqual(4.5)
     expect(ratio(tokens['accent-fg']!, tokens['accent']!)).toBeGreaterThanOrEqual(4.5)
     expect(ratio(tokens['danger']!, tokens['danger-subtle']!)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+const CODE = ['code-keyword', 'code-string', 'code-number', 'code-comment', 'code-function', 'code-type', 'code-variable']
+
+describe('light theme surfaces (CAIRN-388)', () => {
+  it('steps its grounds instead of laying white on white', () => {
+    // The page is an off-white; panels, fields and floating surfaces are the
+    // lightest thing on it; chrome and tinted fills sit a step below the page.
+    expect(luminance(light['surface']!)).toBeGreaterThan(luminance(light['bg']!))
+    expect(luminance(light['bg']!)).toBeGreaterThan(luminance(light['bg-elevated']!))
+    expect(luminance(light['bg']!)).toBeGreaterThan(luminance(light['surface-raised']!))
+    expect(ratio(light['surface']!, light['bg']!)).toBeGreaterThanOrEqual(1.1)
+  })
+
+  it('draws a hairline that shows on the page and on a panel', () => {
+    for (const ground of ['bg', 'bg-elevated', 'surface']) {
+      expect(ratio(light['border']!, light[ground]!), ground).toBeGreaterThanOrEqual(1.15)
+    }
+    expect(ratio(light['border-strong']!, light['bg']!)).toBeGreaterThan(ratio(light['border']!, light['bg']!))
+  })
+
+  it('keeps syntax colours readable on the surface a code block is drawn on', () => {
+    const failures = CODE.map((token) => [token, ratio(light[token]!, light['surface']!)] as const)
+      .filter(([, r]) => r < 4.5)
+      .map(([token, r]) => `${token}: ${r.toFixed(2)}`)
+    expect(failures).toEqual([])
   })
 })
 
