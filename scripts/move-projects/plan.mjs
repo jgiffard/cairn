@@ -51,6 +51,26 @@ export const chooseProjects = ({ projects, keep, move }) => {
 }
 
 /**
+ * Source users matched to target users by email. Only a person the moving rows
+ * name needs an account on the target: the source can be a shared instance
+ * whose other members never had one there, and nothing of theirs moves.
+ * `referenced` maps a source user id to how many moving rows name it.
+ */
+export const matchUsers = ({ sourceUsers, targetUsers, referenced }) => {
+  const errors = []
+  const warnings = []
+  const byEmail = new Map(targetUsers.map((u) => [u.email, u.id]))
+  const users = sourceUsers.map((u) => ({ ...u, target_id: byEmail.get(u.email) ?? null }))
+  for (const u of users) {
+    if (u.target_id) continue
+    const rows = referenced.get(u.id) ?? 0
+    if (rows) errors.push(`${u.email} has no account on the target and ${rows} moving row(s) name them: users are matched by email`)
+    else warnings.push(`${u.email} has no account on the target; nothing that moves names them`)
+  }
+  return { users: users.filter((u) => u.target_id), errors, warnings }
+}
+
+/**
  * A hand-off mirror: a target task that stands for a source task (`cairn`
  * tracker, its URL on the source instance). Mirrors of moving tasks are
  * merged into the real task; the rest are reported and left alone.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Moves projects from one Cairn instance to another (CAIRN-385): personal
- * Cairn to croft. Everything that hangs off a project goes with it, ids,
+ * Moves projects from one Cairn instance to another: personal Cairn to croft
+ * (CAIRN-385), and some of them back (CAIRN-389). Everything that hangs off a project goes with it, ids,
  * numbers, actors and timestamps kept, and the Lab's hand-off mirrors of the
  * moving tasks are merged into them.
  *
@@ -38,8 +38,8 @@ import { sourceDigest, totals, verify } from './move-projects/verify.mjs'
 
 const USAGE = `Usage: node scripts/move-projects.mjs --from <url> --to <url> --keep <KEYS> --move <KEYS> [--apply] [options]
 
-  --from <url>              the instance the projects leave (personal)
-  --to <url>                the instance they join (croft)
+  --from <url>              the instance the projects leave
+  --to <url>                the instance they join
   --keep <KEYS>             projects that stay, comma-separated. Everything else moves.
   --move <KEYS>             the projects you mean to move. An active project in neither list stops the run;
                             an archived one moves and is reported.
@@ -51,7 +51,10 @@ const USAGE = `Usage: node scripts/move-projects.mjs --from <url> --to <url> --k
   --lab-mapping <file>      that import's mapping file: together they tell a mirror's ref from a real one
   --from-files-dir <dir>    the source's attachment directory
   --to-files-dir <dir>      the target's attachment directory (needed with --apply when files move)
-  --actor <text>            who the notes the move writes are from (default "move-projects · CAIRN-385")
+  --from-name <text>        the source, as the notes the move writes name it (default "personal Cairn")
+  --to-name <text>          the target, likewise (default "croft")
+  --task <ref>              the task the move is done under, named in those notes (default CAIRN-385)
+  --actor <text>            who the notes are from (default "move-projects · <task>")
   --mapping-file <path>     write what moved and every ref that changed (JSON)
   --report-file <path>      write the report as JSON
   --json                    print the report as JSON
@@ -95,10 +98,14 @@ export const moveProjects = async ({
   }
   if (!fromUrl || !toUrl) return (report.errors.push('--from and --to are both required'), finish())
   if (fromUrl === toUrl) return (report.errors.push('--from and --to are the same connection string'), finish())
+  const task = options.task ?? 'CAIRN-385'
   const opts = {
     sourceBaseUrl: trimBase(options.sourceBaseUrl ?? 'https://tasks.montytorr.com'),
     targetBaseUrl: trimBase(options.targetBaseUrl ?? 'https://croft.montytorr.com'),
-    actor: options.actor ?? 'move-projects · CAIRN-385',
+    sourceName: options.sourceName ?? 'personal Cairn',
+    targetName: options.targetName ?? 'croft',
+    task,
+    actor: options.actor ?? `move-projects · ${task}`,
     lab: null,
     origin: null,
   }
@@ -176,7 +183,7 @@ export const moveProjects = async ({
 
     log('reading both sides')
     const facts = await readFacts({ source, target, movingIds: chosen.moving.map((p) => p.id), sourceBaseUrl: opts.sourceBaseUrl })
-    const pre = await preflight({ source, target, facts })
+    const pre = await preflight({ source, target, facts, catalog: sc })
     report.errors.push(...pre.errors)
     report.warnings.push(...pre.warnings)
     if (facts.mirrors.length && !opts.lab) {
@@ -336,6 +343,9 @@ const main = async () => {
       'to-url': { type: 'string' },
       'lab-origin': { type: 'string' },
       'lab-mapping': { type: 'string' },
+      'from-name': { type: 'string' },
+      'to-name': { type: 'string' },
+      task: { type: 'string' },
       'from-files-dir': { type: 'string' },
       'to-files-dir': { type: 'string' },
       actor: { type: 'string' },
@@ -366,6 +376,9 @@ const main = async () => {
       targetBaseUrl: values['to-url'],
       labOrigin: values['lab-origin'],
       labMapping: values['lab-mapping'],
+      sourceName: values['from-name'],
+      targetName: values['to-name'],
+      task: values.task,
       actor: values.actor,
     },
   })

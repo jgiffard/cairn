@@ -11,6 +11,7 @@
 import { ident, LEFT_ALONE, TABLES } from './catalog.mjs'
 import {
   findMirrors,
+  matchUsers,
   moveUrl,
   planCollisions,
   refKeys,
@@ -122,6 +123,11 @@ const DROPPED = {
   task_deps: 'not (t.blocked_id in (select id from mv_tasks) and t.blocking_id in (select id from mv_tasks))',
   knowledge_projects: 't.project_id not in (select id from mv_projects)',
 }
+
+/** The entities the moving rows link to, on the source. */
+const MOVING_ENTITIES = `t.id in (
+  select entity_id from project_entities where project_id in (select id from mv_projects)
+  union select entity_id from knowledge_entities where knowledge_id in (select id from mv_knowledge))`
 
 const ORDER = {
   project_former_keys: 't.key',
@@ -281,14 +287,41 @@ export const readFacts = async ({ source, target, movingIds, sourceBaseUrl }) =>
   }
 }
 
+/** How many moving rows name each of these source users, over every user column the copy writes. */
+const usersReferenced = async (source, catalog, ids) => {
+  const counts = new Map()
+  if (!ids.length) return counts
+  const where = { ...MOVES, entities: MOVING_ENTITIES }
+  for (const table of TABLES) {
+    for (const column of catalog.userColumns.get(table) ?? []) {
+      for (const row of await q(
+        source,
+        `select t.${ident(column)} as id, count(*)::int as n from public.${ident(table)} t
+          where (${where[table]}) and t.${ident(column)} = any($1::uuid[]) group by 1`,
+        [ids],
+      )) {
+        counts.set(row.id, (counts.get(row.id) ?? 0) + row.n)
+      }
+    }
+  }
+  return counts
+}
+
 /** Problems that stop the move before anything is written. */
-export const preflight = async ({ source, target, facts }) => {
+export const preflight = async ({ source, target, facts, catalog }) => {
   const errors = [...facts.errors]
   const warnings = []
 
-  const targetByEmail = new Map(facts.targetUsers.map((u) => [u.email, u.id]))
-  const users = facts.sourceUsers.map((u) => ({ ...u, target_id: targetByEmail.get(u.email) ?? null }))
-  for (const u of users) if (!u.target_id) errors.push(`${u.email} has no account on the target: users are matched by email`)
+  const targetEmails = new Set(facts.targetUsers.map((u) => u.email))
+  const unmatched = facts.sourceUsers.filter((u) => !targetEmails.has(u.email)).map((u) => u.id)
+  const matched = matchUsers({
+    sourceUsers: facts.sourceUsers,
+    targetUsers: facts.targetUsers,
+    referenced: await usersReferenced(source, catalog, unmatched),
+  })
+  errors.push(...matched.errors)
+  warnings.push(...matched.warnings)
+  const { users } = matched
 
   const movingKeys = new Set(facts.movingProjects.map((p) => p.key))
   const collidingKeys = new Set(facts.collisions.map((c) => c.key))
@@ -596,12 +629,7 @@ export const writeTarget = async ({ source, target, catalog, facts, pre, options
   await target.query(`update tasks set external_ref = null where id = any($1::uuid[])`, [facts.mirrors.map((m) => m.id)])
 
   // 3. Entities the moving rows link to: matched by key, added when missing.
-  const entities = await q(
-    source,
-    `select id, key from entities where id in (
-       select entity_id from project_entities where project_id in (select id from mv_projects)
-       union select entity_id from knowledge_entities where knowledge_id in (select id from mv_knowledge))`,
-  )
+  const entities = await q(source, `select t.id, t.key from entities t where ${MOVING_ENTITIES}`)
   const targetEntities = new Map((await q(target, `select id, key from entities`)).map((e) => [e.key, e.id]))
   await target.query(`create temp table mv_entities (src uuid primary key, dst uuid not null) on commit drop`)
   await fill(target, 'mv_entities', ['src', 'dst'], entities.map((e) => ({ src: e.id, dst: targetEntities.get(e.key) ?? e.id })))
@@ -708,7 +736,7 @@ export const writeTarget = async ({ source, target, catalog, facts, pre, options
     for (const s of successors) {
       await target.query(
         `update knowledge set body = body || $2 where id = $1`,
-        [s.id, `\n\nSuperseded by \`${s.slug}\`, which stayed on ${trimBase(options.sourceBaseUrl)} when this entry moved (CAIRN-385).`],
+        [s.id, `\n\nSuperseded by \`${s.slug}\`, which stayed on ${trimBase(options.sourceBaseUrl)} when this entry moved (${options.task}).`],
       )
     }
     out.notes.push(...successors.map((s) => `knowledge whose successor stays behind: superseded_by cleared, the successor ${s.slug} named in its body`))
@@ -750,8 +778,8 @@ export const writeTarget = async ({ source, target, catalog, facts, pre, options
       return {
         ...m,
         note:
-          `Merged the Lab mirror of this task into it when ${m.real_ref.slice(0, m.real_ref.lastIndexOf('-'))} moved from personal Cairn to croft (CAIRN-385). ` +
-            `The mirror was ${quiet(m.ref)} on croft (number ${num} in the Lab's ${key} project)${origin}.` +
+          `Merged the Lab mirror of this task into it when ${m.real_ref.slice(0, m.real_ref.lastIndexOf('-'))} moved from ${options.sourceName} to ${options.targetName} (${options.task}). ` +
+            `The mirror was ${quiet(m.ref)} on ${options.targetName} (number ${num} in the Lab's ${key} project)${origin}.` +
             (m.subject_number ? ` Its subject link (LAB-${m.subject_number}), notes and history are now on this task.` : ' Its notes and history are now on this task.') +
             (links.length ? ` This task's links to the mirror were cleared: ${links.join(', ')}.` : ''),
       }
@@ -877,11 +905,11 @@ export const writeTarget = async ({ source, target, catalog, facts, pre, options
   const lost = [
     ...(options.crossing?.parents ?? []).filter((p) => p.child_moves).map((p) => ({
       task: p.child_id,
-      text: `Its parent ${p.parent} stayed on personal Cairn when this project moved to croft (CAIRN-385), so the sub-task link was dropped: ${sourceUrl(p.parent)}`,
+      text: `Its parent ${p.parent} stayed on ${options.sourceName} when this project moved to ${options.targetName} (${options.task}), so the sub-task link was dropped: ${sourceUrl(p.parent)}`,
     })),
     ...(options.crossing?.alsoIn ?? []).filter((a) => a.task_moves).map((a) => ({
       task: a.task_id,
-      text: `It was also filed under ${a.also}, which stayed on personal Cairn when this project moved to croft (CAIRN-385); that link was dropped.`,
+      text: `It was also filed under ${a.also}, which stayed on ${options.sourceName} when this project moved to ${options.targetName} (${options.task}); that link was dropped.`,
     })),
   ]
   for (const note of lost) {
@@ -985,11 +1013,11 @@ export const writeSource = async ({ source, options, crossing, log = () => {} })
   const notes = [
     ...crossing.parents.filter((p) => !p.child_moves).map((p) => ({
       task: p.child_id,
-      text: `Its parent ${p.parent} moved to croft with its project (CAIRN-385), so the sub-task link was dropped: ${urlOf(p.parent)}`,
+      text: `Its parent ${p.parent} moved to ${options.targetName} with its project (${options.task}), so the sub-task link was dropped: ${urlOf(p.parent)}`,
     })),
     ...crossing.alsoIn.filter((a) => !a.task_moves).map((a) => ({
       task: a.task_id,
-      text: `It was also filed under ${a.also}, which moved to croft (CAIRN-385); that link was dropped.`,
+      text: `It was also filed under ${a.also}, which moved to ${options.targetName} (${options.task}); that link was dropped.`,
     })),
   ]
   for (const note of notes) {
