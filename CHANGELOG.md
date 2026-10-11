@@ -9,6 +9,27 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The agent-files job updates its own scripts** (CAIRN-390). It ran
+  `~/.cairn/maintenance/sync-agent-files.mjs` and never replaced it from the network, so a
+  machine whose copy predated an artefact never learned the artefact existed: the Mac missed
+  `lab.md` from 0.22.0 until `cairn setup` was run again, and nothing said so. The job now
+  fetches `sync-agent-files.mjs` and `install-cron.mjs` from the same release tag as the CLI
+  and the hooks, requires each to be a node script that parses, writes it beside the old
+  copy and renames it over (mode and owner kept), then runs once more from the new copy with
+  the resolved tag, so the run that replaced the script also installs what the release added.
+  A script that cannot be fetched, does not verify or cannot be written is left as it was and
+  reported as `SELF-UPDATE FAILED` with the exit status 1, every run, while the files it can
+  still sync are synced. `--check` reports a stale script as drift. An instance that cannot
+  be asked is skipped, as before.
+  - **Not retroactive.** A copy already deployed has no self-update to run, so it needs
+    `cairn setup` once more on each machine (the Mac, clawdius) to get this one. Every release
+    after that reaches it by itself.
+  - There is no signed manifest to check a script against; the check is the tag the instance
+    reports, over https, plus "parses as a node script", which is what the CLI and the hooks
+    were already trusted on.
+
 ### Added
 
 - **A comment's author can edit it** (CAIRN-391). `PATCH /api/v1/tasks/{ref}/comments/{id}`

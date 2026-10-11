@@ -712,8 +712,12 @@ source is **the release your instance runs**: each run asks the instance's
 `/api/v1/health` for its version and syncs that tag (`v<version>`), never a branch. If the
 version cannot be read (the server is down, no instance is configured, the answer is not a
 release number) or any file of that release is missing, the run writes nothing and exits
-non-zero. It never replaces its own two scripts from the network; `cairn setup` updates
-them when it runs again. On a machine with several instances it follows the newest release
+non-zero. It updates its own two scripts from the same tag, once each has parsed as a node
+script, and swaps them in atomically; the updated copy then runs once more, so the run that
+replaced the script also installs what the release added. A script that cannot be fetched,
+parsed or written is reported as `SELF-UPDATE FAILED` and the run exits 1, while the files
+it can still sync are synced. A copy that predates this still needs one `cairn setup`.
+On a machine with several instances it follows the newest release
 any of them reports, default or not, since one CLI serves them all and a CLI ahead of a
 server is the direction it already expects. An instance that cannot be asked (a company
 instance behind a VPN, from home) is left out; the run refuses only when none answers.
@@ -1322,10 +1326,16 @@ node scripts/sync-agent-files.mjs           # repair every reachable copy
 `--source release` takes the canonical files from the tag of the release the instance
 reports at `/api/v1/health` (`--repo <base>` for a mirror), which is what lets it run on a
 host with no checkout; `--source <url>` takes them from that URL as given. From any remote
-source everything is fetched before anything is written, a version that cannot be read or
-validated writes nothing, and the two maintenance scripts are skipped: a repairer that
-rewrites itself from the network cannot be audited once installed, so they change only when
-`install-cron.mjs --install` (which `cairn setup` runs) or a source on disk puts them there.
+source everything is fetched before anything is written and a version that cannot be read
+or validated writes nothing. The two maintenance scripts are part of that release: each is
+checked to be a node script that parses, written beside the old copy and renamed over it
+(mode and owner kept), and the run is repeated once by the new copy, with the resolved tag,
+so a machine whose copy predates an artefact installs it on the same run. If a script
+cannot be fetched, does not verify or cannot be written, the old copy stays, the run prints
+`SELF-UPDATE FAILED` with the reason and exits 1, and everything else is still synced.
+`--check` reports a stale script as drift. A machine whose copy has no self-update yet
+changes only when `install-cron.mjs --install` (which `cairn setup` runs) or a source on
+disk puts the new one there.
 A job installed before this read `--source https://raw.githubusercontent.com/montytorr/cairn/main`;
 that exact URL is now read as `release`. `--runtimes a,b` leaves a listed-out runtime's copy
 alone. A CLI is only ever updated where one is already installed — `/usr/local/bin`
