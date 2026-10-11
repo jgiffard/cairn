@@ -66,7 +66,7 @@ session that changed or ruled something out and left no trace.
 ```bash
 cairn check "flaky auth redirect"  # index: one line per hit, answered?, ~token cost
 cairn show ACME-42          # digest: the answer, findings, a clipped body
-cairn show ACME-42 --full   # everything, when the digest is not enough
+cairn show ACME-42 --full   # everything; update --body replaces it: edit this
 cairn log ACME-42           # what agents said · cairn history: what actually changed
 cairn recall ACME-42        # decisions and facts that bear on this task
 cairn know <slug>           # read a knowledge hit

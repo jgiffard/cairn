@@ -2862,6 +2862,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    already holds work here or similar open work
                                    exists; --no-start to only file it)
     cairn update <ref> [--title T] [--status S] [--type T] [--priority P] [--assignee <who>] [--body -]
+                                   --body replaces the whole description: edit from show --full
     cairn add|update ... --due YYYY-MM-DD      a due date; update --due none clears it
     cairn add|update ... --label a,b           update replaces the labels; --label none empties them
     cairn add ... --external-ref KEY --external-url URL
