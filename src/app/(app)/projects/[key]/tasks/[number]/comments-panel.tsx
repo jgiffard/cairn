@@ -14,13 +14,101 @@ import { useMutate } from '@/lib/api/use-mutate'
 import { cn } from '@/lib/utils'
 import { COUNT, LABEL } from './styles'
 
+/**
+ * One comment, and the author's inline edit of it. Only the author sees the
+ * control: the API refuses anyone else, so hiding it is courtesy, not the rule.
+ */
+const CommentBody = ({
+  comment,
+  taskId,
+  mine,
+  onSaved,
+}: {
+  comment: Comment
+  taskId: string
+  mine: boolean
+  onSaved: (next: Comment) => void
+}) => {
+  const request = useMutate()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(comment.content)
+  const [pending, setPending] = useState(false)
+
+  const save = async () => {
+    const content = draft.trim()
+    if (!content || pending) return
+    if (content === comment.content) {
+      setEditing(false)
+      return
+    }
+    setPending(true)
+    const result = await request<Comment>(`/api/v1/tasks/${taskId}/comments/${comment.id}`, {
+      method: 'PATCH',
+      body: { content },
+    })
+    setPending(false)
+    // The toast carries the reason; the draft stays so nothing typed is lost.
+    if (!result.ok) return
+    onSaved({ ...comment, ...result.data })
+    setEditing(false)
+  }
+
+  const cancel = () => {
+    setDraft(comment.content)
+    setEditing(false)
+  }
+
+  return editing ? (
+    <div className="flex flex-col gap-2">
+      <Textarea
+        rows={3}
+        value={draft}
+        autoFocus
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save()
+          if (e.key === 'Escape') cancel()
+        }}
+        aria-label="Edit your comment"
+        className="max-h-[40vh] w-full"
+      />
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="ghost" onClick={cancel} disabled={pending} className="ml-auto">
+          Cancel
+        </Button>
+        <Button size="sm" variant="primary" onClick={save} disabled={!draft.trim() || pending}>
+          {pending ? <Spinner /> : 'Save'}
+        </Button>
+      </div>
+    </div>
+  ) : (
+    <>
+      <MarkdownView>{comment.content}</MarkdownView>
+      {mine && (
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(comment.content)
+            setEditing(true)
+          }}
+          className="text-fg-subtle hover:text-fg-muted mt-1 text-meta"
+        >
+          Edit
+        </button>
+      )}
+    </>
+  )
+}
+
 /** Conversation aimed at the human, kept separate from the agent work log. */
 export const CommentsPanel = ({
   taskId,
   comments: initial,
+  viewerActorId,
 }: {
   taskId: string
   comments: Comment[]
+  viewerActorId: string
 }) => {
   const router = useRouter()
   const request = useMutate()
@@ -71,9 +159,19 @@ export const CommentsPanel = ({
                 </span>
                 <span className="text-fg-subtle tabular ml-auto">
                   <RelativeTime iso={c.created_at} />
+                  {c.edited_at ? (
+                    <span title={`Edited ${new Date(c.edited_at).toLocaleString()}`}> · edited</span>
+                  ) : null}
                 </span>
               </div>
-              <MarkdownView>{c.content}</MarkdownView>
+              <CommentBody
+                comment={c}
+                taskId={taskId}
+                mine={c.actor_type === 'human' && c.actor_id === viewerActorId}
+                onSaved={(next) =>
+                  setComments((current) => current.map((x) => (x.id === next.id ? next : x)))
+                }
+              />
             </li>
           ))}
         </ul>

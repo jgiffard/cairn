@@ -991,6 +991,30 @@ export const openapiSpec = () => ({
         responses: { '201': okResponse('Created.'), '409': errorResponse },
       },
     },
+    '/tasks/{ref}/comments/{id}': {
+      parameters: [
+        refParam,
+        { name: 'id', in: 'path', required: true, schema: { type: 'string' },
+          description: 'Comment id.' },
+      ],
+      patch: {
+        summary: 'Edit a comment you wrote',
+        description:
+          'Only the author: the comment\'s actor_type and actor_id must be the caller\'s. ' +
+          'Anyone else gets 403 not_author. Sets edited_at and records a comment_edited event. ' +
+          'An archived task is refused, as on POST.',
+        requestBody: body({
+          type: 'object',
+          properties: { content: { type: 'string' } },
+          required: ['content'],
+        }),
+        responses: {
+          '200': okResponse('The comment, with edited_at.'),
+          '403': errorResponse,
+          '404': errorResponse,
+        },
+      },
+    },
     '/tasks/{ref}/attachments': {
       parameters: [refParam],
       get: { summary: 'List attachments', responses: { '200': okResponse('Attachments.') } },

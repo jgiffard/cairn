@@ -418,12 +418,13 @@ export type Comment = {
   actor_type: string
   actor_id: string
   created_at: string
+  edited_at: string | null
 }
 
 export const listComments = async (taskId: string): Promise<Comment[]> => {
   const { data } = await admin()
     .from('task_comments')
-    .select('id, content, comment_type, actor_type, actor_id, created_at')
+    .select('id, content, comment_type, actor_type, actor_id, created_at, edited_at')
     .eq('task_id', taskId)
     .order('created_at')
   return (data ?? []) as Comment[]

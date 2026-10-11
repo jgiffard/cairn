@@ -110,6 +110,8 @@ const describe = (entry: ActivityEntry): React.ReactNode => {
           unlinked <code className="font-mono text-meta">{val(d.other ?? d.ref)}</code>
         </>
       )
+    case 'comment_edited':
+      return <>edited a comment</>
     case 'task_deleted':
       return <>deleted <code className="font-mono text-meta">{val(d.ref)}</code></>
     case 'run_result':

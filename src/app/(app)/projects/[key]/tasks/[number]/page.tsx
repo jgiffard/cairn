@@ -15,6 +15,7 @@ import { BrandName } from '@/components/brand'
 import { RelativeTime } from '@/components/relative-time'
 import { isTerminal } from '@/schemas/task'
 import { cn } from '@/lib/utils'
+import { actorLabel } from '@/lib/api/actor'
 import { Properties } from './properties'
 import { EditableTitle } from './editable-title'
 import { LiveUpdates } from '@/components/live-updates'
@@ -327,7 +328,11 @@ const TaskPage = async ({
               />
               <AttachmentsPanel taskId={task.id} attachments={attachments} />
               <NotesPanel taskId={task.id} notes={notes} />
-              <CommentsPanel taskId={task.id} comments={comments} />
+              <CommentsPanel
+                taskId={task.id}
+                comments={comments}
+                viewerActorId={actorLabel('human', user.email ?? user.id, user.displayName)}
+              />
               <ActivityPanel entries={activity} />
             </div>
           </div>
