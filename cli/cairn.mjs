@@ -6678,8 +6678,16 @@ const commands = {
       // --- 6. the CLI itself -----------------------------------------------------
       const cliTarget = join(HOME, '.local', 'bin', 'cairn')
       const releaseCli = readFileSync(join(releaseDir, 'cli', 'cairn.mjs'))
-      const cliChanged = !existsSync(cliTarget) || !readFileSync(cliTarget).equals(releaseCli)
-      if (!cliChanged) {
+      const installedCli = existsSync(cliTarget) ? readFileSync(cliTarget) : null
+      const cliChanged = !installedCli || !installedCli.equals(releaseCli)
+      // Setup writes the CLI that is running it, which may be older than the one
+      // on disk: it waits minutes for a browser approval while the agent-files job
+      // updates the file under it, and a machine's CLI is shared by every instance
+      // (CAIRN-381). Never write an older one over a newer one.
+      const installedVersion = installedCli ? /^const VERSION = '([^']+)'/m.exec(installedCli.toString('utf8'))?.[1] : null
+      if (installedVersion && compareReleases(installedVersion, VERSION) > 0) {
+        line(`– cli       ${tilde(cliTarget)} is ${installedVersion}, newer than this setup (${VERSION}) — kept`)
+      } else if (!cliChanged) {
         line(`– cli       ${tilde(cliTarget)} (${VERSION}) — unchanged`)
       } else if (dry) {
         line(`! cli       would write ${tilde(cliTarget)} (${VERSION})`)

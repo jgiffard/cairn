@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from 'node:http'
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -547,6 +547,69 @@ describe('cairn setup — CAIRN_SETUP_SOURCE', () => {
     expect(existsSync(join(HOME, '.claude', 'skills', 'cairn', 'SKILL.md'))).toBe(true)
     // No release was fetched from GitHub or cached under ~/.cairn/releases.
     expect(existsSync(join(HOME, '.cairn', 'releases'))).toBe(false)
+  })
+})
+
+/**
+ * CAIRN-381: setup writes the CLI that is running it. One machine has one CLI
+ * for every instance, and setup for a second instance waits minutes on a browser
+ * approval, so the file on disk can be newer than the process by the time it
+ * writes. It must never replace a newer CLI with an older one.
+ */
+describe('cairn setup — the installed cli', () => {
+  const installed = async (HOME: string, version: string) => {
+    const target = join(HOME, '.local', 'bin', 'cairn')
+    const body = `#!/usr/bin/env node\nconst VERSION = '${version}'\n`
+    await mkdir(join(HOME, '.local', 'bin'), { recursive: true })
+    await writeFile(target, body, { mode: 0o755 })
+    return { target, body }
+  }
+  const args = (base: string, ...extra: string[]) =>
+    ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', ...extra]
+
+  it('keeps a newer installed cli and says so', async () => {
+    const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
+    const HOME = await home()
+    const { target, body } = await installed(HOME, '99.0.0')
+    const { code, stdout } = await run(args(base), HOME)
+    expect(code).toBe(0)
+    expect(stdout).toMatch(/– cli\s+~\/\.local\/bin\/cairn is 99\.0\.0, newer than this setup \(\d+\.\d+\.\d+\) — kept/)
+    expect(stdout).not.toContain('✓ cli')
+    expect(await readFile(target, 'utf8')).toBe(body)
+  })
+
+  it('says it would keep a newer installed cli in a dry run, rather than offering to write', async () => {
+    const base = await serve()
+    const HOME = await home()
+    const { target, body } = await installed(HOME, '99.0.0')
+    const { code, stdout } = await run(['setup', '--url', base, '--runtimes', 'claude-code', '--dry-run'], HOME)
+    expect(code).toBe(0)
+    expect(stdout).toContain('is 99.0.0, newer than this setup')
+    expect(stdout).not.toContain('would write ~/.local/bin/cairn')
+    expect(await readFile(target, 'utf8')).toBe(body)
+  })
+
+  it('replaces an older installed cli with this one', async () => {
+    const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
+    const HOME = await home()
+    const { target } = await installed(HOME, '0.0.1')
+    const { code, stdout } = await run(args(base), HOME)
+    expect(code).toBe(0)
+    expect(stdout).toContain('✓ cli       ~/.local/bin/cairn')
+    expect(stdout).not.toContain('newer than this setup')
+    expect(await readFile(target, 'utf8')).toBe(await readFile(CLI, 'utf8'))
+  })
+
+  it('replaces a cli whose version it cannot read', async () => {
+    const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
+    const HOME = await home()
+    const target = join(HOME, '.local', 'bin', 'cairn')
+    await mkdir(join(HOME, '.local', 'bin'), { recursive: true })
+    await writeFile(target, '#!/bin/sh\necho not a cairn\n', { mode: 0o755 })
+    const { code, stdout } = await run(args(base), HOME)
+    expect(code).toBe(0)
+    expect(stdout).toContain('✓ cli       ~/.local/bin/cairn')
+    expect(await readFile(target, 'utf8')).toBe(await readFile(CLI, 'utf8'))
   })
 })
 
