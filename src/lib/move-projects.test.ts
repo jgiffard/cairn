@@ -40,6 +40,11 @@ type Plan = {
   }) => { text: string | null; mode: string; changes: { from: string; to: string }[] }
   moveUrl: (url: string | null, o: { fromBase: string; toBase: string; movingKeys: Set<string> }) => string | null
   knowledgeScope: (ids: string[], moving: Set<string>) => string
+  matchUsers: (i: { sourceUsers: Row[]; targetUsers: Row[]; referenced: Map<string, number> }) => {
+    users: Row[]
+    errors: string[]
+    warnings: string[]
+  }
 }
 
 const load = <T>(path: string) => import(/* @vite-ignore */ join(process.cwd(), path)) as Promise<T>
@@ -73,6 +78,26 @@ describe('choosing what moves', () => {
   it('parses keys however they are written', () => {
     expect(plan.parseKeys(' at, bb  ccs,')).toEqual(['AT', 'BB', 'CCS'])
     expect(plan.parseKeys(undefined)).toEqual([])
+  })
+})
+
+describe('people', () => {
+  const sourceUsers = [
+    { id: 's-cal', email: 'cal@example.com' },
+    { id: 's-mael', email: 'mael@example.com' },
+  ]
+  const targetUsers = [{ id: 't-cal', email: 'cal@example.com' }]
+
+  it('maps by email, and lets a person the target lacks stay behind when nothing that moves names them', () => {
+    const r = plan.matchUsers({ sourceUsers, targetUsers, referenced: new Map() })
+    expect(r.errors).toEqual([])
+    expect(r.users).toEqual([{ id: 's-cal', email: 'cal@example.com', target_id: 't-cal' }])
+    expect(r.warnings).toEqual(['mael@example.com has no account on the target; nothing that moves names them'])
+  })
+
+  it('stops when a moving row names a person the target lacks', () => {
+    const r = plan.matchUsers({ sourceUsers, targetUsers, referenced: new Map([['s-mael', 3]]) })
+    expect(r.errors).toEqual(['mael@example.com has no account on the target and 3 moving row(s) name them: users are matched by email'])
   })
 })
 

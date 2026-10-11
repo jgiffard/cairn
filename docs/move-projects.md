@@ -25,7 +25,9 @@ rolled back. Ids, numbers, actors and timestamps are kept, so a moved task keeps
 **Staying behind:** global knowledge, knowledge scoped only to staying projects, sessions with no
 project or a staying one, users, agent keys, sign-ins and search telemetry.
 
-**Users** are matched by email. A source user with no account on the target stops the run.
+**Users** are matched by email. A source user with no account on the target stops the run only
+when a moving row names them (an owner, an assignee). Anyone else stays behind with a warning: a
+shared source has members who never had an account on the target, and nothing of theirs moves.
 
 **Links across the line:**
 - A mention between a moving task and a staying one is lost: there is no cross-instance mention.
@@ -85,6 +87,10 @@ How each project is decided:
 - **In neither list and active:** the run stops. It was probably made after the plan.
 - **In neither list and archived:** it moves, and the report says so.
 
+The notes the move writes name both sides and the task it ran under. They default to personal Cairn,
+croft and CAIRN-385; `--from-name`, `--to-name` and `--task` change them, and `--actor` defaults to
+`move-projects · <task>`.
+
 Exit codes:
 - `0`: the dry run or the apply succeeded.
 - `1`: blocked or rolled back; nothing changed.
@@ -119,6 +125,29 @@ It switches them back on before committing, and a check fails if any is left off
    - all triggers are on.
 6. Copy the attachment files without overwriting, commit the target, then commit the source.
    The mapping file is written last.
+
+### Moving projects back
+
+The same tool runs the other way. CAIRN-389 took the archived AOD, BU, TBV, TS and WAWPL back from
+croft to personal:
+
+```bash
+node scripts/move-projects.mjs \
+  --from 'postgresql://…/cairn_lab' --to 'postgresql://…/cairn' \
+  --keep AA,BOTHY,CAIRN,CC,CIVIC,CROFT,DROVE,HOL,HOLC,KDP,LT,MTC,POD,QRY,TRIG \
+  --move AOD,BU,TBV,TS,WAWPL \
+  --from-url https://croft.montytorr.com --to-url https://tasks.montytorr.com \
+  --from-name croft --to-name 'personal Cairn' --task CAIRN-389 \
+  --from-files-dir /srv/cairn-lab/attachments --to-files-dir /srv/cairn/attachments
+```
+
+`--keep` has to name every croft project that stays, since an active project in neither list stops
+the run. No `--lab-origin`: personal has no Lab mirrors. A moving task linked to a subject stops
+the run, because subjects stay on the Lab.
+
+Entities are matched by key and links are copied, but a link the source no longer has cannot come
+back. Croft's entities were deleted after CAIRN-385, so the five projects returned without their
+entity links; CAIRN-389 records what was done about them.
 
 ## Rollback
 

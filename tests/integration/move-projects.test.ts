@@ -420,10 +420,13 @@ describe('it refuses', () => {
     expect(r.report.errors).toContain('TRIG (active) is neither kept nor named in --move: decide about it first')
   })
 
-  it('a person the target does not have', async () => {
-    await sql(personal, `insert into app_users (email, encrypted_password) values ('stranger@example.com', 'x')`)
+  it('a person the target does not have, when a moving row names them', async () => {
+    const stranger = (await sql(personal, `insert into app_users (email, encrypted_password) values ('stranger@example.com', 'x') returning id`))[0].id
+    await sql(personal, `update tasks set assignee_user_id = $1 where id = $2`, [stranger, T.CAIRN1])
     const r = await run()
-    expect(r.report.errors).toContain('stranger@example.com has no account on the target: users are matched by email')
+    expect(r.report.errors).toContain(
+      'stranger@example.com has no account on the target and 1 moving row(s) name them: users are matched by email',
+    )
   })
 
   it('knowledge that exists on both sides', async () => {
@@ -584,6 +587,58 @@ describe('an applied move', () => {
     // A second run finds nothing left to move.
     const again = await run()
     expect(again.report.verdict).toBe('blocked')
+  })
+})
+
+describe('moving a project back', () => {
+  it('takes an archived project from croft to personal, leaving behind a person personal never had', async () => {
+    await sql(personal, `insert into app_users (email, encrypted_password) values ('stranger@example.com', 'x')`)
+    const there = await run({ apply: true })
+    expect(there.report.verdict).toBe('applied')
+    expect(there.report.warnings).toContain('stranger@example.com has no account on the target; nothing that moves names them')
+    await sql(croft, `update tasks set parent_id = $1 where id = $2`, [T.CAIRN1, T.OLD1])
+    await sql(croft, `insert into task_notes (task_id, actor_type, actor_id, note, kind) values ($1, 'agent', 'claude-code · cal', 'old note', 'note')`, [
+      T.OLD1,
+    ])
+
+    const back = await moveProjects({
+      fromUrl: urlFor(croft),
+      toUrl: urlFor(personal),
+      keep: 'CAIRN,LT,TRIG',
+      move: 'OLD',
+      apply: true,
+      stores: { source: stores.target, target: stores.source },
+      options: {
+        sourceBaseUrl: 'https://croft.example.com',
+        targetBaseUrl: 'https://tasks.example.com',
+        sourceName: 'croft',
+        targetName: 'personal Cairn',
+        task: 'CAIRN-389',
+      },
+    })
+    expect(back.report.errors).toEqual([])
+    expect(failed(back)).toEqual([])
+    expect(back.report.verdict).toBe('applied')
+    expect(back.report.warnings).toContain('mael@example.com has no account on the target; nothing that moves names them')
+
+    expect((await sql(croft, `select key from projects order by key`)).map((p) => p.key)).toEqual(['CAIRN', 'LT', 'TRIG'])
+    expect((await sql(personal, `select key, status from projects order by key`))).toEqual([
+      { key: 'AT', status: 'active' },
+      { key: 'OLD', status: 'archived' },
+    ])
+    expect((await sql(personal, `select project_id, number, parent_id from tasks where id = $1`, [T.OLD1]))[0]).toEqual({
+      project_id: P.OLD,
+      number: 1,
+      parent_id: null,
+    })
+    const notes = (await sql(personal, `select actor_id, note from task_notes where task_id = $1 order by note`, [T.OLD1]))
+    expect(notes).toEqual([
+      {
+        actor_id: 'move-projects · CAIRN-389',
+        note: 'Its parent CAIRN-1 stayed on croft when this project moved to personal Cairn (CAIRN-389), so the sub-task link was dropped: https://croft.example.com/projects/CAIRN/tasks/1',
+      },
+      { actor_id: 'claude-code · cal', note: 'old note' },
+    ])
   })
 })
 
