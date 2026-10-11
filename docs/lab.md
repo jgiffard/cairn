@@ -16,6 +16,33 @@ session cookie, and answers `{ "success": true, "data": … }` or
 responses are `snake_case` (rows); request bodies are `camelCase` where a field has two
 words, as task routes already are.
 
+## The lifecycle
+
+```
+idea ─────────────────────────────────────────►  project
+under construction → to explore → exploring ──┬─► promote: a project with the subject's
+ (write-up being written)   (ready to look at)│    open todos as its tasks, subject linked
+                                              └─► done | rejected: concluded, kept as the answer
+```
+
+1. **File it.** A new subject (`cairn idea`, `POST /subjects`) lands in the first `planned`
+   stage by position. On a default board that is **`under construction`**: the write-up is still
+   being written. Moving it to `to explore` says it is ready to be looked at.
+2. **Explore it.** Stages move; the log records findings, decisions and dead ends; **todos** are
+   ordinary tasks filed in the subject's project, else the Lab's home project.
+3. **Close it one of two ways.**
+   - **Conclude**: move it to a `completed` or `dropped` stage with a conclusion. The record stays
+     searchable as the answer.
+   - **Promote** it to a project ([Promoting a subject](#promoting-a-subject)): the subject is
+     linked to a new project, its **open** todos move into it and become that project's tasks,
+     and it moves to `implementing`. From then on its work is the project's tasks; the subject
+     stays as the "why".
+4. A subject with a project is listed on that project's page under "From the Lab", and its
+   project chip links to the project.
+
+Work that is committed but belongs to another instance or a repository leaves with a
+[hand-off](#hand-off), not a promotion.
+
 ## The switch: `lab_enabled`
 
 The Lab is per instance and **off by default**. An instance that upgrades gets the tables,
@@ -123,8 +150,41 @@ Seeded once, in order, by 071 (on conflict nothing):
 | 7 | ready for rollout | active | `#4f8c86` |
 | 8 | rolled out | completed | `#4e7f5a` |
 
+**`under construction`** (CAIRN-384, migration 079) is the first stage of a default board:
+category `planned`, color `#7d8590`, position 0, the other nine shifted down by one. It is seeded
+**only where the stages are still exactly the nine above, untouched** (same names, categories,
+colors and positions); a board that was renamed, recolored, reordered, added to or pruned is left
+exactly as its administrator made it. Running 079 again changes nothing.
+
 An **idea** is a subject in a `planned` stage. There is no idea entity. The default stage for
-a new subject is the first `planned` stage by position (`to explore`).
+a new subject is the first `planned` stage by position: `under construction` on a default
+board, `to explore` where the board was curated without it.
+
+#### Adding `under construction` to a curated board
+
+An administrator adds it through the stages API (or `cairn lab stages add` then `order`). New
+stages go last unless given a `position`, and a position that ties another sorts by name, so
+the stage is created and then the full order is sent, `under construction` first. For
+**croft** (`https://croft.montytorr.com`), as an admin key:
+
+```bash
+BASE=https://croft.montytorr.com
+AUTH="authorization: Bearer $CAIRN_API_KEY"
+
+# 1. create it (201; 409 if it exists already)
+curl -sS -X POST "$BASE/api/v1/lab/stages" -H "$AUTH" -H 'content-type: application/json' \
+  -d '{"name":"under construction","category":"planned","color":"#7d8590"}'
+
+# 2. put it first, every stage exactly once
+STAGES=$(curl -sS "$BASE/api/v1/lab/stages" -H "$AUTH")
+IDS=$(jq -c '[.data | (map(select(.name=="under construction")) + map(select(.name!="under construction")))[].id]' <<<"$STAGES")
+curl -sS -X POST "$BASE/api/v1/lab/stages/reorder" -H "$AUTH" -H 'content-type: application/json' \
+  -d "{\"ids\":$IDS}"
+```
+
+The same with the CLI, given croft's current order from `cairn lab stages`:
+`cairn --instance croft lab stages add "under construction" --category planned --color "#7d8590"`
+then `cairn --instance croft lab stages order "under construction,<every other stage in order>"`.
 
 ### `lab_tags`
 
@@ -204,8 +264,8 @@ off by default. Both or neither.
 
 `task_activity_events.subject_id uuid` (no foreign key, so a deleted subject's history stays,
 as task events outlive their task). New events: `subject_created`, `subject_stage_changed`,
-`subject_archived`, `subject_restored`, `subject_deleted`, `handed_off`, `handoff_taken_back`.
-`data` always carries `{ ref, title }` so a tombstone still reads.
+`subject_archived`, `subject_restored`, `subject_deleted`, `handed_off`, `handoff_taken_back`,
+and (079) `subject_promoted`. `data` always carries `{ ref, title }` so a tombstone still reads.
 
 ## Response shapes
 
@@ -366,6 +426,55 @@ See [Deleting a subject](#deleting-a-subject). Owner or admin.
 → `{ deleted: true, ref, id, todos_detached: n, files_removed: n }`.
 Errors: 400 `validation_failed` (missing or wrong `confirm`); 403 `forbidden`;
 409 **`subject_has_todos`** `{ todos: n, open: n }`.
+
+#### `POST /api/v1/subjects/{ref}/promote`
+
+<a id="promoting-a-subject"></a>Starts a project from a subject. Owner of the subject or an
+administrator (a human administrator or one of an admin's agents), the rule for delete.
+
+```json
+{ "key": "PGV",                 // required; 2-10 letters or digits, upper-cased for you; LAB is reserved
+  "title": "pgvector recall",   // optional; default the subject's title (≤ 200)
+  "description": "…" }          // optional; default the write-up's first section + "From LAB-12."
+```
+
+In **one transaction**:
+
+1. **Creates the project** (owned by the caller, key validated as for `POST /projects`, `LAB`
+   reserved). The default description is the write-up's first section (text up to the next
+   heading, leading headings dropped, cut at about 2 000 characters), then a blank line and
+   `From LAB-12.`; with no write-up it is only `From LAB-12.`. An explicit `description` is used
+   as sent.
+2. **Links the subject** (`project`). A subject that has a project, or is archived, is refused.
+3. **Moves its open todos** (`status` not `done` or `cancelled`, those with `subject_id` = this
+   subject) into the project with Cairn's task move (`move_task`, 012/047): each takes the next
+   number of the new project, in the order it was filed, and keeps a task note
+   `Moved from LT-4 to PGV-1 when LAB-12 was promoted to project PGV.` **Closed todos stay where
+   they are**, still the subject's. A task's ref changes with a move, as on `PATCH {project}`:
+   `moved[]` is the old-to-new list. **An old todo ref does not resolve afterwards** (`LT-4` is
+   a 404; Cairn keeps no alias for a moved task, only for a renamed project key), so anything
+   written elsewhere that names it goes stale. The mapping is kept in three places: the `moved[]`
+   of the response, the subject's `decision` log note (`LT-4 → PGV-1, …`) and a note on each
+   moved task (`Moved from LT-4 to PGV-1 …`); the subject's own todos list shows the new refs.
+4. **Sets the stage** to the first `active` stage named `implementing` (any case), else the first
+   `active` stage by position; if there is none the stage is left. A move writes the usual
+   `stage` log note and `subject_stage_changed` event; no move (already there) writes neither.
+5. **Writes a `decision` log note** (`Promoted to project PGV (pgvector recall). 2 open todos
+   moved: LT-4 → PGV-1, LT-5 → PGV-2. Stage: implementing.`) and the events **`project_created`**
+   (`{ key, title, from: "LAB-12" }`), `subject_stage_changed` when the stage moved, and
+   **`subject_promoted`** (`{ ref, title, project, project_title, moved }`, with the subject and
+   the new project).
+
+A refusal or failure at any step rolls the whole transaction back: no project, no moved todo.
+
+→ 201 `{ subject: Subject, project: { id, key, title, description }, moved: [{ from, to, title }],
+stage: { from, to } | null }`.
+Errors: 400 `validation_failed` (key shape, `LAB`; `field: "key"`); 403 `forbidden`; 404
+`not_found` / `lab_disabled`; 409 `conflict` (the key is a live project's or a retired key that
+still resolves; the subject already has a project; it is archived).
+
+CLI: `cairn subject promote LAB-12 --key PGV [--title T]`. Web: **Start a project** in the
+subject page's rail, with a confirmation dialog.
 
 #### Log: `/api/v1/subjects/{ref}/notes`
 
@@ -622,6 +731,8 @@ lab?: {
 | `074_lab_pulse_activity.sql` | `cairn_pulse` redefined; `activity_feed` transformed in place |
 | `075_subject_mentions.sql` | `subject_mentions` and `task_mentions_refresh` |
 | `076_lab_validate_checks.sql` | validates what 071 and 072 added `NOT VALID` |
+| `079_lab_lifecycle.sql` | `under construction`, seeded first only on an untouched default board; `subject_promoted` in the event list (`NOT VALID`, with every earlier kind restated from 077) |
+| `080_validate_subject_promoted.sql` | validates what 079 added `NOT VALID` |
 
 The constraints 071 and 072 add on `tasks`, `projects` and `task_activity_events` (the
 `subject_id` foreign key, the hand-off checks, the event list) are added `NOT VALID`: enforced
@@ -645,7 +756,7 @@ Tables and columns (all in `public`):
 | table | columns the importer sets |
 |---|---|
 | `lab_settings` | `id = true`, `enabled`, `home_project_id` (upsert on `id`) |
-| `lab_stages` | `id`, `name`, `category`, `color`, `position`, `created_at` (071 seeds Croft's nine: match on `lower(name)` rather than inserting duplicates) |
+| `lab_stages` | `id`, `name`, `category`, `color`, `position`, `created_at` (071 seeds Croft's nine: match on `lower(name)` rather than inserting duplicates; 079 also seeds `under construction` at position 0, which the import leaves alone, so it ties with Croft's first stage until an administrator orders it first) |
 | `lab_tags` | `id`, `name` (lower-case), `color`, `position`, `created_at` |
 | `subjects` | `id`, **`number`**, `title`, `body`, `stage_id`, `owner_user_id`, `project_id`, `conclusion`, `concluded_at`, `position`, `actor_type`, `actor_id`, `created_at`, `updated_at`, `archived_at` |
 | `subject_tags` | `subject_id`, `tag_id` |

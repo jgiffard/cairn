@@ -3074,6 +3074,9 @@ const LAB_HELP = `  the lab — exploring and proving ideas before they become w
     cairn update <ref> --subject LAB-12|none    link an existing task, or unlink it
     cairn list --subject LAB-12 [--project K]   its todos
     cairn subject mentions LAB-12 [--limit N]   the tasks that name it
+    cairn subject promote LAB-12 --key KEY [--title T]
+                                   start a project from it: links it, moves its open todos
+                                   in, sets the stage (the owner's or an administrator's)
     cairn subject archive|restore LAB-12        off the board, still searchable
     cairn subject delete LAB-12 --confirm LAB-12 [--detach-todos]
                                    for mistakes; refuses while it has todos, and never
@@ -5178,7 +5181,7 @@ const commands = {
   async subject() {
     const verb = positional[0]
     const usage =
-      'usage: cairn subject add|list|show|edit|stage|note|notes|tag|attach|files|detach|todo|archive|restore|delete|mentions …  (cairn help)'
+      'usage: cairn subject add|list|show|edit|stage|note|notes|tag|attach|files|detach|todo|promote|archive|restore|delete|mentions …  (cairn help)'
 
     if (verb === 'add') {
       const title = need(
@@ -5366,6 +5369,34 @@ const commands = {
         process.stderr.write(`filed ${todo.ref} but could not claim it — \`cairn claim ${todo.ref}\`\n`)
       }
       return emit(todo)
+    }
+
+    if (verb === 'promote') {
+      const ref = subjectArg(positional[1], 'usage: cairn subject promote LAB-12 --key KEY [--title T]')
+      const key = need(flags.key, `usage: cairn subject promote ${ref} --key KEY [--title T]   (the new project's key: 2-10 letters or digits)`)
+      const body = { key: String(key).toUpperCase() }
+      if (flags.title !== undefined) body.title = need(flags.title, '--title needs text')
+      const promoted = await request('POST', `/api/v1/subjects/${ref}/promote`, body)
+      if (FORMAT !== 'tsv') return emit(promoted)
+      const project = promoted.project ?? {}
+      emit(
+        [
+          {
+            subject: promoted.subject?.ref ?? ref,
+            project: project.key ?? body.key,
+            title: truncate(project.title ?? '', 60),
+            moved: (promoted.moved ?? []).length,
+            stage: promoted.stage ? `${promoted.stage.from} → ${promoted.stage.to}` : cellOf(promoted.subject?.stage),
+            url: project.key ? `${BASE}/projects/${project.key}` : '',
+          },
+        ],
+        { columns: ['subject', 'project', 'title', 'moved', 'stage', 'url'] },
+      )
+      for (const m of promoted.moved ?? []) process.stderr.write(`  ${m.from} → ${m.to}  ${truncate(m.title, 70)}\n`)
+      process.stderr.write(
+        `${ref} is now project ${project.key ?? body.key}: its open todos are its tasks (cairn list --project ${project.key ?? body.key})\n`,
+      )
+      return
     }
 
     if (verb === 'archive' || verb === 'restore') {

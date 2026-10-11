@@ -13,15 +13,22 @@ write-up, a log, tags, an owner, optionally a project, a **stage** and, in the e
 
 An idea is a subject in a `planned` stage. There is no separate idea object.
 
+**idea** (`under construction` → `to explore`) → **exploring** → **promote to a project**, or
+**conclude** as `done` or `rejected`. A new subject starts `under construction`: the write-up
+is still being written. Move it to `to explore` when it is ready to be looked at. Promoting
+makes it a project and its open todos the project's tasks.
+
 ## The lifecycle
 
 ```bash
 cairn check "pgvector for recall"       # subjects come back too (--kinds subject narrows)
-cairn idea "pgvector for recall" --tag search --body -   # first planned stage
+cairn idea "pgvector for recall" --tag search --body -   # first planned stage (under construction)
+cairn subject stage LAB-12 "to explore"                  # the write-up is ready to be looked at
 cairn subject add "pgvector for recall" --stage exploring --project ACME --body -
 cairn subject todo LAB-12 "benchmark 1M rows" --body -   # an ordinary task of the subject
 cairn subject note LAB-12 - --kind finding|decision|attempt
 cairn subject stage LAB-12 rejected --conclusion -       # a closing stage needs the answer
+cairn subject promote LAB-12 --key PGV [--title T]       # the answer is "build it": a project
 cairn subject show LAB-12 [--full]      # conclusion, todos, write-up, log (cairn show LAB-12 too)
 cairn subject list [--stage S] [--category planned] [--tag t] [--mine] [--project K]
 cairn ideas                             # the planned subjects: what the lab has not started
@@ -45,6 +52,13 @@ cairn ideas                             # the planned subjects: what the lab has
    what stops the next agent re-evaluating the same thing. Without it the server answers
    `conclusion_required`: pass `--conclusion -`. The conclusion is the answer the next
    `check` finds.
+6. **Or promote.** When the answer is "build it", `subject promote LAB-12 --key KEY` starts
+   a project from it, in one step: the subject is linked to the new project, its **open**
+   todos move in (each takes a new ref, `LT-4` → `KEY-1`, and notes the old one; closed todos
+   stay) and the subject moves to `implementing`, with a `decision` line in its log. The
+   owner or an administrator does it; the key is 2-10 letters or digits and `LAB` is reserved.
+   Log the decision (why now, what it is) on the subject first, then promote: from then on
+   the work is the project's tasks, and the subject is the "why" behind them.
 
 Bodies, notes and conclusions are markdown (`##` headings, lists, paths in backticks); a
 wall of text is refused, and so are secrets.
@@ -65,7 +79,7 @@ administrator's: an agent key is refused, even an administrator's.
 ## When not to file a subject
 
 - The work is committed already: that is a task. A todo that outgrows its subject is still
-  a task; it leaves with `handoff`.
+  a task; it leaves with `handoff`. A whole subject that is now work is `subject promote`.
 - A fact that will still be true next month: `cairn learn`.
 - A file or one command answers it.
 

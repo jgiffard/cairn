@@ -410,6 +410,53 @@ describe('cairn subject tag, todo, archive and delete', () => {
   })
 })
 
+describe('cairn subject promote', () => {
+  const promoted = {
+    subject: { ...subject, ref: 'LAB-12', stage: { ...stage, name: 'implementing' } },
+    project: { id: 'p-9', key: 'PGV', title: 'Evaluate pgvector for recall', description: null },
+    moved: [
+      { from: 'LT-4', to: 'PGV-1', title: 'Benchmark 1M rows' },
+      { from: 'LT-5', to: 'PGV-2', title: 'Tune m and ef' },
+    ],
+    stage: { from: 'exploring', to: 'implementing' },
+  }
+
+  it('posts the key upper-cased and the title, and says what moved', async () => {
+    const { seen, base } = serve(() => promoted)
+    const out = await run(['subject', 'promote', 'lab-12', '--key', 'pgv', '--title', 'pgvector recall'], await base())
+    expect(out.code).toBe(0)
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toMatchObject({
+      method: 'POST',
+      path: '/api/v1/subjects/LAB-12/promote',
+      body: { key: 'PGV', title: 'pgvector recall' },
+    })
+    expect(out.stdout).toContain('PGV')
+    expect(out.stdout).toContain('exploring → implementing')
+    expect(out.stderr).toContain('LT-4 → PGV-1')
+    expect(out.stderr).toContain('LT-5 → PGV-2')
+  })
+
+  it('sends only the key when no title is given, and wants a key before any request', async () => {
+    const { seen, base } = serve(() => promoted)
+    const url = await base()
+    const missing = await run(['subject', 'promote', 'LAB-12'], url)
+    expect(missing.code).toBe(1)
+    expect(missing.stderr).toContain('--key KEY')
+    expect(seen).toHaveLength(0)
+
+    await run(['subject', 'promote', 'LAB-12', '--key', 'PGV'], url)
+    expect(seen[0]!.body).toEqual({ key: 'PGV' })
+  })
+
+  it('shows the server\'s refusal', async () => {
+    const { base } = serve(() => ({ status: 400, fail: { error: 'LAB is reserved for Lab subjects (LAB-12); choose another key.', code: 'validation_failed' } }))
+    const out = await run(['subject', 'promote', 'LAB-12', '--key', 'LAB'], await base())
+    expect(out.code).toBe(1)
+    expect(out.stderr).toContain('reserved')
+  })
+})
+
 describe('--subject on the task verbs', () => {
   it('add links the new task, and update takes none as an unlink', async () => {
     const { seen, base } = serve(() => ({ ref: 'ACME-1', number: 1, title: 'x', status: 'todo', results: [], tasks: [] }))

@@ -13,6 +13,7 @@ import {
   listSubjectsQuery,
   listTodosQuery,
   mentionsQuery,
+  promoteSubjectSchema,
   reorderSchema,
   updateStageSchema,
   updateSubjectSchema,
@@ -442,6 +443,58 @@ export const labPaths = ({ json, body, okResponse, errorResponse }: OpenapiHelpe
               files_removed: { type: 'integer' },
             },
             required: ['deleted', 'ref', 'id', 'todos_detached', 'files_removed'],
+          }),
+          '400': errorResponse,
+          '403': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+        },
+      },
+    },
+    '/subjects/{ref}/promote': {
+      parameters: [subjectRefParam],
+      post: {
+        summary: 'Start a project from a subject (owner or admin)',
+        description:
+          'One transaction: creates the project (`key` is validated as for `POST /projects`, and `LAB` ' +
+          'is reserved), links the subject, moves its **open** todos into the project (each takes a ' +
+          'number from it and keeps a note of its old ref; closed todos stay), moves the subject to ' +
+          'the first `active` stage named `implementing`, else the first `active` stage, and writes a ' +
+          '`decision` log note and `subject_promoted`. `title` defaults to the subject\'s, `description` ' +
+          'to the write-up\'s first section plus "From LAB-n". 409 `conflict` when the subject already ' +
+          'has a project, is archived, or the key is taken (live or retired). ' +
+          LAB_OFF,
+        requestBody: body(json(promoteSubjectSchema)),
+        responses: {
+          '201': okResponse('Promoted.', {
+            type: 'object',
+            properties: {
+              subject,
+              project: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  key: { type: 'string' },
+                  title: { type: 'string' },
+                  description: { type: ['string', 'null'] },
+                },
+                required: ['id', 'key', 'title', 'description'],
+              },
+              moved: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: { from: { type: 'string', example: 'LT-4' }, to: { type: 'string', example: 'ACME-1' }, title: { type: 'string' } },
+                  required: ['from', 'to', 'title'],
+                },
+              },
+              stage: {
+                type: ['object', 'null'],
+                description: 'Null when the subject was already in the stage promotion picks.',
+                properties: { from: { type: 'string' }, to: { type: 'string' } },
+              },
+            },
+            required: ['subject', 'project', 'moved', 'stage'],
           }),
           '400': errorResponse,
           '403': errorResponse,

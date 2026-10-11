@@ -42,6 +42,21 @@ export const createSubjectSchema = z.object({
   number: z.number().int().min(1).max(9_999_999).optional(),
 })
 
+/** A project key as `POST /projects` takes it, but upper-cased for the caller. */
+const projectKey = z
+  .string()
+  .trim()
+  .transform((v) => v.toUpperCase())
+  .refine((v) => /^[A-Z][A-Z0-9]{1,9}$/.test(v), 'key must be 2-10 letters or digits, starting with a letter, e.g. CAI')
+
+export const promoteSubjectSchema = z.object({
+  key: projectKey,
+  /** Default: the subject's title. */
+  title: z.string().trim().min(1).max(200).optional(),
+  /** Default: the write-up's first section, then "From LAB-n". */
+  description: z.string().max(100_000).optional(),
+})
+
 /** No defaults: a PATCH never rewrites a field its caller did not send. */
 export const updateSubjectSchema = z
   .object({

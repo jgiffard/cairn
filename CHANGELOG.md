@@ -19,6 +19,17 @@ out under **Breaking** with what to do about it.
   paused|completed|archived`; `cairn entities delete <key> --confirm <key>`; and
   `relearn --superseded-by none`, `--unverify` and `--label none` undo what `relearn` and
   `unlearn` could only set. `relearn --title` was already there and is now in `--help`.
+- **The Lab lifecycle** (CAIRN-384; `docs/lab.md`, "The lifecycle").
+  - **`under construction`**, a first stage for a subject whose write-up is still being
+    written: the default for `cairn idea` and new subjects, before `to explore`. Migration 079
+    adds it only where the stages are still exactly the untouched default set; a curated board
+    is left as it is, and an administrator adds it there through the stages API.
+  - **Promote a subject to a project**: `POST /api/v1/subjects/{ref}/promote`,
+    `cairn subject promote LAB-12 --key KEY [--title T]` and "Start a project" on the subject
+    page. In one transaction it creates the project, links the subject, moves its open todos in
+    (closed ones stay), moves the subject to `implementing`, and logs a `decision` note and a
+    `subject_promoted` event (079, validated by 080).
+  - The subject page's project chip links to the project.
 
 ### Fixed
 

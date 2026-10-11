@@ -110,6 +110,56 @@ export const noteContentHash = (kind: string, note: string) => hash32(`${kind}\n
 export const stageNoteHash = (from: string, to: string, at: string) => hash32(`stage\n${from}\n${to}\n${at}`)
 
 // ---------------------------------------------------------------------------
+// Promoting a subject to a project
+// ---------------------------------------------------------------------------
+
+const PROMOTED_DESCRIPTION_LIMIT = 2_000
+
+/**
+ * A new project's description when the caller sent none: the write-up's first
+ * section, then where it came from. The first section is the text up to the
+ * next heading once there has been some; leading headings are dropped (the
+ * project has its own title) and a very long section is cut at a paragraph.
+ */
+export const promotedDescription = (ref: string, body: string | null | undefined): string => {
+  const from = `From ${ref}.`
+  const lines = (body ?? '').replace(/\r\n/g, '\n').split('\n')
+  const heading = /^#{1,6}\s/
+  const section: string[] = []
+  let content = false
+  for (const line of lines) {
+    if (heading.test(line)) {
+      if (content) break
+      continue
+    }
+    if (line.trim()) content = true
+    if (content) section.push(line)
+  }
+  let text = section.join('\n').trim()
+  if (text.length > PROMOTED_DESCRIPTION_LIMIT) {
+    const cut = text.slice(0, PROMOTED_DESCRIPTION_LIMIT)
+    const paragraph = cut.lastIndexOf('\n\n')
+    text = `${(paragraph > 0 ? cut.slice(0, paragraph) : cut).trimEnd()}…`
+  }
+  return text ? `${text}\n\n${from}` : from
+}
+
+/** The log line a promotion leaves on the subject: where it went and which todos moved with it. */
+export const promotedNote = (input: {
+  key: string
+  title: string
+  moved: { from: string; to: string }[]
+  stage: { from: string; to: string } | null
+}) => {
+  const todos = input.moved.length
+    ? ` ${input.moved.length} open todo${input.moved.length === 1 ? '' : 's'} moved: ${input.moved
+        .map((m) => `${m.from} → ${m.to}`)
+        .join(', ')}.`
+    : ' It had no open todos to move.'
+  return `Promoted to project ${input.key} (${input.title}).${todos}${input.stage ? ` Stage: ${input.stage.to}.` : ''}`
+}
+
+// ---------------------------------------------------------------------------
 // Hand-off
 // ---------------------------------------------------------------------------
 

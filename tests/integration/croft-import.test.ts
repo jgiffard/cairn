@@ -325,7 +325,7 @@ describe('--apply', () => {
   })
 
   it('reconciles the seeded stages by name instead of duplicating them', async () => {
-    expect(await count(target, 'lab_stages')).toBe(9)
+    expect(await count(target, 'lab_stages')).toBe(10)
     const used = await sql(
       target,
       `select s.name, count(*)::int as n from subjects x join lab_stages s on s.id = x.stage_id group by s.name order by s.name`,

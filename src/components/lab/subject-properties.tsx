@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
-import { Archive, ArchiveRestore, Check, ChevronsUpDown, Plus, Tags, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Check, ChevronsUpDown, FolderPlus, Plus, Tags, Trash2 } from 'lucide-react'
 import { Avatar } from '@/components/icons'
 import { MarkdownView } from '@/components/markdown'
 import { usePeople } from '@/components/people-context'
@@ -14,7 +14,9 @@ import { mutate } from '@/lib/api/mutate'
 import { useMutate } from '@/lib/api/use-mutate'
 import { cn } from '@/lib/utils'
 import { DeleteSubjectDialog } from './delete-subject-dialog'
+import { canPromote, promotionStage } from './promote'
 import { ProjectLabel } from './project-label'
+import { PromoteSubjectDialog } from './promote-subject-dialog'
 import { StageBadge } from './stage'
 import { TagChip } from './tag-chip'
 import { filterTags, tagToCreate } from './tag-picker'
@@ -190,12 +192,22 @@ export const SubjectProperties = ({
   const [tagQuery, setTagQuery] = useState('')
   const [busy, setBusy] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [promoting, setPromoting] = useState(false)
 
   const onMoved = useCallback(() => router.refresh(), [router])
   const { move, dialog } = useStageMove(onMoved)
 
-  const canDelete = canDeleteSubject(subject, { userId: currentUserId, role: isAdmin ? 'admin' : 'member' })
+  const viewer = { userId: currentUserId, role: isAdmin ? ('admin' as const) : ('member' as const) }
+  const canDelete = canDeleteSubject(subject, viewer)
   const closeDelete = useCallback(() => setDeleting(false), [])
+  const closePromote = useCallback(() => setPromoting(false), [])
+  const promoted = useCallback(
+    (key: string) => {
+      router.push(`/projects/${key}`)
+      router.refresh()
+    },
+    [router],
+  )
   const deleted = useCallback(() => {
     router.push('/lab')
     router.refresh()
@@ -443,6 +455,16 @@ export const SubjectProperties = ({
       </section>
 
       <section className="border-border flex flex-col items-start gap-2 border-t pt-3">
+        {canPromote(subject, viewer) ? (
+          <div className="flex flex-col items-start gap-1.5">
+            <Button size="sm" disabled={busy} onClick={() => setPromoting(true)}>
+              <FolderPlus size={13} aria-hidden /> Start a project
+            </Button>
+            <p className="text-fg-subtle text-meta">
+              Links it to a new project and moves its open todos in.
+            </p>
+          </div>
+        ) : null}
         {archived ? (
           <>
             <p className="text-fg-muted text-meta">Archived: off the board, still searchable, not deleted.</p>
@@ -469,6 +491,17 @@ export const SubjectProperties = ({
           </Button>
         ) : null}
       </section>
+
+      {promoting ? (
+        <PromoteSubjectDialog
+          subjectRef={subject.ref}
+          subjectTitle={subject.title}
+          openTodos={subject.todos.open}
+          stageName={promotionStage(stages)?.name ?? null}
+          onClose={closePromote}
+          onPromoted={promoted}
+        />
+      ) : null}
 
       {deleting ? (
         <DeleteSubjectDialog

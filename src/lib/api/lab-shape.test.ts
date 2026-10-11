@@ -10,6 +10,8 @@ import {
   normalizeHandoffStatus,
   noteContentHash,
   parseSubjectRef,
+  promotedDescription,
+  promotedNote,
   refuseHandedOff,
   reservedKeyRefusal,
   stageNoteHash,
@@ -159,5 +161,49 @@ describe('hand-off shape', () => {
     expect(closedInKind('fixed', ['fixed', 'verified'])).toBe('fixed')
     expect(closedInKind('completed', ['fixed', 'verified'])).toBe('verified')
     expect(closedInKind(undefined, ['fixed', 'verified'])).toBe('verified')
+  })
+})
+
+describe('promoting a subject', () => {
+  it("describes the project with the write-up's first section and where it came from", () => {
+    const body = '## Why\n\nRecall is poor on long notes.\n\nSecond paragraph.\n\n## Options\n\n- HNSW\n- IVF'
+    expect(promotedDescription('LAB-12', body)).toBe('Recall is poor on long notes.\n\nSecond paragraph.\n\nFrom LAB-12.')
+  })
+
+  it('takes a write-up with no headings whole, and drops a leading title heading', () => {
+    expect(promotedDescription('LAB-3', 'Try Bun for the CLI.')).toBe('Try Bun for the CLI.\n\nFrom LAB-3.')
+    expect(promotedDescription('LAB-3', '# Bun\n\n## Why\nStartup time.\n\n## Notes\nlater')).toBe(
+      'Startup time.\n\nFrom LAB-3.',
+    )
+  })
+
+  it('says only where it came from when there is no write-up', () => {
+    expect(promotedDescription('LAB-4', null)).toBe('From LAB-4.')
+    expect(promotedDescription('LAB-4', '   \n')).toBe('From LAB-4.')
+    expect(promotedDescription('LAB-4', '## Heading only')).toBe('From LAB-4.')
+  })
+
+  it('cuts a very long first section at a paragraph', () => {
+    const paragraph = 'word '.repeat(150).trim()
+    const description = promotedDescription('LAB-5', [paragraph, paragraph, paragraph, paragraph].join('\n\n'))
+    expect(description.length).toBeLessThan(2_100)
+    expect(description.endsWith('…\n\nFrom LAB-5.')).toBe(true)
+  })
+
+  it('writes the log line with the todos that moved and the stage', () => {
+    expect(
+      promotedNote({
+        key: 'PGV',
+        title: 'pgvector',
+        moved: [
+          { from: 'LT-4', to: 'PGV-1' },
+          { from: 'LT-5', to: 'PGV-2' },
+        ],
+        stage: { from: 'exploring', to: 'implementing' },
+      }),
+    ).toBe('Promoted to project PGV (pgvector). 2 open todos moved: LT-4 → PGV-1, LT-5 → PGV-2. Stage: implementing.')
+    expect(promotedNote({ key: 'PGV', title: 'pgvector', moved: [], stage: null })).toBe(
+      'Promoted to project PGV (pgvector). It had no open todos to move.',
+    )
   })
 })

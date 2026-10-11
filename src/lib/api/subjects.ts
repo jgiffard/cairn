@@ -26,6 +26,9 @@ import {
   nextConcludedAt,
   noteContentHash,
   parseSubjectRef,
+  promotedDescription,
+  promotedNote,
+  reservedKeyRefusal,
   stageNoteHash,
   stageNoteText,
   subjectRef,
@@ -644,6 +647,222 @@ export const addSubjectNote = async (
   )
   const note = rows<SubjectNote>(result)[0] ?? null
   return { note, duplicate: note === null }
+}
+
+// ---------------------------------------------------------------------------
+// Promoting: a subject becomes a project (docs/lab.md, "Promoting a subject")
+// ---------------------------------------------------------------------------
+
+export type PromoteInput = { key: string; title?: string; description?: string }
+
+export type Promoted = {
+  subject: Subject
+  project: { id: string; key: string; title: string; description: string | null }
+  /** Each open todo that moved, by its old and new ref, in the order they were filed. */
+  moved: { from: string; to: string; title: string }[]
+  /** Null when the subject was already in the stage promotion picks (or the board has no active stage). */
+  stage: { from: string; to: string } | null
+}
+
+/** The owner of the subject, or an administrator: the same people who may delete it. */
+export const canPromoteSubject = canDeleteSubject
+
+/** The stage a promoted subject moves to: `implementing`, else the first active stage, else none. */
+const promotionStage = async (db: Db): Promise<Stage | null> =>
+  rows<Stage>(
+    await db.query(
+      `select id, name, category, color, position from lab_stages
+        where category = 'active'
+        order by (lower(name) = 'implementing') desc, position, name
+        limit 1`,
+    ),
+  )[0] ?? null
+
+/** Thrown inside the transaction so a refusal after the first write rolls all of it back. */
+class PromotionRefused extends Error {
+  constructor(readonly response: Response) {
+    super('promotion refused')
+  }
+}
+
+const refusal = (message: string, extra: Record<string, unknown> = {}) =>
+  new PromotionRefused(fail('conflict', message, extra))
+
+/**
+ * Starts a project from a subject, in one transaction: the project, the link,
+ * the subject's open todos moved into it (Cairn's own task move, so each takes
+ * a number from the new project and keeps a note of where it came from), the
+ * stage, the log and the events.
+ *
+ * Closed todos stay where they were: they are the exploration's history.
+ */
+export const promoteSubject = async (
+  actor: Actor,
+  subject: Subject,
+  input: PromoteInput,
+): Promise<Outcome<Promoted>> => {
+  if (!canPromoteSubject(subject, actor)) {
+    return {
+      ok: false,
+      response: fail('forbidden', `Only the owner of ${subject.ref} or an administrator can start a project from it.`),
+    }
+  }
+  const reserved = reservedKeyRefusal(input.key)
+  if (reserved) return { ok: false, response: reserved }
+
+  const title = (input.title ?? subject.title).slice(0, 200)
+  const description = input.description ?? promotedDescription(subject.ref, subject.body)
+
+  try {
+    const promoted = await transaction(async (client) => {
+      const locked = rows<{ project_id: string | null; archived_at: string | null }>(
+        await client.query('select project_id, archived_at from subjects where id = $1 for update', [subject.id]),
+      )[0]
+      if (!locked) throw new PromotionRefused(noSuchSubject(subject.ref))
+      if (locked.project_id) {
+        throw refusal(
+          `${subject.ref} already belongs to ${subject.project?.key ?? 'a project'}; a project is started from a subject that has none.`,
+          { project: subject.project?.key ?? null },
+        )
+      }
+      if (locked.archived_at) throw refusal(`${subject.ref} is archived; restore it before starting a project from it.`)
+
+      const taken = await resolveProject<{ id: string; key: string }>(input.key, 'id, key')
+      if (taken) {
+        throw refusal(
+          taken.project.key === input.key
+            ? `${input.key} is already a project; choose another key.`
+            : `${input.key} was the key of ${taken.project.key} and still resolves to it; choose another key.`,
+          { key: input.key },
+        )
+      }
+
+      const created = rows<Promoted['project']>(
+        await client.query(
+          `insert into projects (owner_user_id, key, title, description)
+           values ($1, $2, $3, $4)
+           returning id, key, title, description`,
+          [actor.userId, input.key, title, description],
+        ),
+      )[0]!
+
+      const target = await promotionStage(client)
+      const stage = target && target.id !== subject.stage.id ? { from: subject.stage.name, to: target.name } : null
+      const now = new Date().toISOString()
+      if (target && stage) {
+        await client.query(
+          `update subjects
+              set project_id = $2, stage_id = $3, concluded_at = $4,
+                  position = (select coalesce(max(position) + 1, 0) from subjects where stage_id = $3)
+            where id = $1`,
+          [
+            subject.id,
+            created.id,
+            target.id,
+            nextConcludedAt({
+              fromCategory: subject.stage.category,
+              toCategory: target.category,
+              concludedAt: subject.concluded_at,
+              now,
+            }),
+          ],
+        )
+      } else {
+        await client.query('update subjects set project_id = $2 where id = $1', [subject.id, created.id])
+      }
+
+      const todos = rows<{ id: string; number: number; key: string; title: string }>(
+        await client.query(
+          `select t.id, t.number, p.key, t.title
+             from tasks t
+             join projects p on p.id = t.project_id
+            where t.subject_id = $1 and t.status not in ('done', 'cancelled')
+            order by t.created_at, t.number
+              for update of t`,
+          [subject.id],
+        ),
+      )
+      const moved: Promoted['moved'] = []
+      for (const todo of todos) {
+        const result = rows<{ number: number; project_key: string }>(
+          await client.query('select number, project_key from move_task($1, $2, $3)', [actor.userId, todo.id, created.id]),
+        )[0]!
+        const from = `${todo.key}-${todo.number}`
+        const to = `${result.project_key}-${result.number}`
+        moved.push({ from, to, title: todo.title })
+        const note = `Moved from ${from} to ${to} when ${subject.ref} was promoted to project ${created.key}.`
+        await client.query(
+          `insert into task_notes (task_id, kind, note, actor_type, actor_id, content_hash)
+           values ($1, 'note', $2, $3, $4, $5)
+           on conflict do nothing`,
+          [todo.id, note, actor.actorType, actor.actorId, noteContentHash('note', note)],
+        )
+      }
+
+      if (stage) {
+        await client.query(
+          `insert into subject_notes (subject_id, kind, note, actor_type, actor_id, user_id, content_hash)
+           values ($1, 'stage', $2, $3, $4, $5, $6)`,
+          [
+            subject.id,
+            stageNoteText(stage.from, stage.to),
+            actor.actorType,
+            actor.actorId,
+            actor.userId,
+            stageNoteHash(stage.from, stage.to, now),
+          ],
+        )
+      }
+      const logged = promotedNote({ key: created.key, title: created.title, moved, stage })
+      await addSubjectNote(actor, subject.id, { note: logged, kind: 'decision' }, noteContentHash('decision', logged), client)
+
+      const about = { ref: subject.ref, title: subject.title }
+      const events: { subject_id: string | null; event: string; data: Record<string, unknown> }[] = [
+        { subject_id: null, event: 'project_created', data: { key: created.key, title: created.title, from: subject.ref } },
+      ]
+      if (target && stage) {
+        events.push({
+          subject_id: subject.id,
+          event: 'subject_stage_changed',
+          data: { ...about, from: stage.from, to: stage.to, category: target.category },
+        })
+      }
+      events.push({
+        subject_id: subject.id,
+        event: 'subject_promoted',
+        data: { ...about, project: created.key, project_title: created.title, moved: moved.length },
+      })
+      for (const event of events) {
+        await client.query(
+          `insert into task_activity_events (owner_user_id, subject_id, project_id, task_id, actor_type, actor_id, event, data)
+           values ($1, $2, $3, null, $4, $5, $6, $7)`,
+          [
+            actor.userId,
+            event.subject_id,
+            created.id,
+            actor.actorType,
+            actor.actorId,
+            event.event,
+            JSON.stringify(actor.host ? { ...event.data, host: actor.host } : event.data),
+          ],
+        )
+      }
+
+      return { project: created, moved, stage }
+    })
+
+    return { ok: true, value: { ...promoted, subject: await reloadSubject(subject.id) } }
+  } catch (error) {
+    if (error instanceof PromotionRefused) return { ok: false, response: error.response }
+    const code = (error as { code?: string }).code
+    if (code === '23505' || code === '23514') {
+      return {
+        ok: false,
+        response: fail('conflict', `${input.key} is not available as a project key; choose another.`, { key: input.key }),
+      }
+    }
+    throw error
+  }
 }
 
 // ---------------------------------------------------------------------------

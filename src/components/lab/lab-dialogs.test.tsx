@@ -2,6 +2,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeleteSubjectDialog } from './delete-subject-dialog'
+import { PromoteSubjectDialog } from './promote-subject-dialog'
 import { useStageMove } from './use-stage-move'
 import type { Stage } from './types'
 
@@ -112,6 +113,74 @@ describe('the Lab’s dialogs', () => {
       expect(onDeleted).not.toHaveBeenCalled()
       expect(document.body.textContent).toContain('has todos now')
       expect(button('Detach todos and delete')).toBeTruthy()
+    })
+  })
+
+  describe('PromoteSubjectDialog', () => {
+    const render = async (props: { openTodos?: number; stageName?: string | null; onPromoted?: (key: string) => void } = {}) => {
+      const onPromoted = props.onPromoted ?? vi.fn()
+      await act(async () =>
+        root.render(
+          <PromoteSubjectDialog
+            subjectRef="LAB-12"
+            subjectTitle="Evaluate pgvector for recall"
+            openTodos={props.openTodos ?? 0}
+            stageName={props.stageName === undefined ? 'implementing' : props.stageName}
+            onClose={() => {}}
+            onPromoted={onPromoted}
+          />,
+        ),
+      )
+      return onPromoted
+    }
+    const inputs = () => [...document.body.querySelectorAll('input')] as HTMLInputElement[]
+
+    it('starts from a key and the title taken from the subject, and says what will move', async () => {
+      await render({ openTodos: 2 })
+      expect(inputs()[0]!.value).toBe('EPR')
+      expect(inputs()[1]!.value).toBe('Evaluate pgvector for recall')
+      expect(document.body.textContent).toContain('2 open todos move into the project')
+      expect(document.body.textContent).toContain('The subject moves to implementing.')
+    })
+
+    it('keeps the button off for a key the server would refuse, and names why', async () => {
+      await render()
+      await change(inputs()[0]!, 'lab')
+      expect(inputs()[0]!.value).toBe('LAB')
+      expect(button('Start project').disabled).toBe(true)
+      expect(document.body.textContent).toContain('reserved')
+
+      await change(inputs()[0]!, 'a')
+      expect(button('Start project').disabled).toBe(true)
+      await change(inputs()[0]!, 'pgv')
+      expect(button('Start project').disabled).toBe(false)
+    })
+
+    it('posts the key and title, then hands the new key on', async () => {
+      mutateMock.mockResolvedValue({ ok: true, data: { project: { key: 'PGV' } } })
+      const onPromoted = await render({ openTodos: 1 })
+      await change(inputs()[0]!, 'pgv')
+      await change(inputs()[1]!, '  pgvector recall ')
+      await act(async () => button('Start project').click())
+      await flush()
+
+      expect(mutateMock).toHaveBeenCalledWith('/api/v1/subjects/LAB-12/promote', {
+        method: 'POST',
+        body: { key: 'PGV', title: 'pgvector recall' },
+      })
+      expect(onPromoted).toHaveBeenCalledWith('PGV')
+    })
+
+    it('shows the server\'s refusal and stays open', async () => {
+      mutateMock.mockResolvedValue({ ok: false, error: 'PGV is already a project; choose another key.', code: 'conflict' })
+      const onPromoted = await render()
+      await change(inputs()[0]!, 'pgv')
+      await act(async () => button('Start project').click())
+      await flush()
+
+      expect(onPromoted).not.toHaveBeenCalled()
+      expect(document.body.querySelector('[role="alert"]')?.textContent).toContain('already a project')
+      expect(button('Start project').disabled).toBe(false)
     })
   })
 

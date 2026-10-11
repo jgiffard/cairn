@@ -120,7 +120,9 @@ const SubjectPage = async ({
                 {subject.ref}
               </span>
               <StageBadge stage={subject.stage} className="text-fg-muted text-ui" />
-              {subject.project ? <ProjectLabel project={subject.project} /> : null}
+              {subject.project ? (
+                <ProjectLabel project={subject.project} href={`/projects/${subject.project.key}`} />
+              ) : null}
               {subject.owner ? (
                 <span className="text-fg-muted flex items-center gap-1.5 text-meta">
                   <Avatar name={subject.owner.name} size={16} />
