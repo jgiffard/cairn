@@ -9,6 +9,18 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Changed
+
+- **The sidebar is in sections** (CAIRN-382): Work (the Lab, when it is on, then All tasks,
+  Board, Search), Memory (Knowledge, Map, Sessions), Health (Activity, Vitals) and Projects,
+  each under a quiet label. The Lab now sits above All tasks, and the full projects page is
+  reached from "All" beside the Projects label.
+- **A project's description is on its page** (CAIRN-382): rendered markdown under the header,
+  folded behind "Show more" when long, and editable in place. It writes through the same
+  `PATCH /api/v1/projects/{id}` as `cairn project describe`, so it records `project_described`.
+- **"From the Lab" on a project page** (CAIRN-382): where the Lab is on, the project's subjects
+  are listed with their stage, each linked to its page.
+
 ## [0.22.1] — 2026-10-11
 
 ### Fixed

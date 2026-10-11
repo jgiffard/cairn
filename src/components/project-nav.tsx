@@ -3,25 +3,23 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useMemo, useState } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ProjectIcon } from '@/components/icons'
 import { Button, Input } from '@/components/ui/control'
 import { useLabEnabled } from '@/components/lab/lab-context'
 import {
-  Activity, BookOpen, Columns3, FlaskConical, FolderKanban, HeartPulse, History, Inbox, Search, Waypoints, X,
+  Activity, BookOpen, Columns3, FlaskConical, HeartPulse, History, Inbox, Search, Waypoints, X,
 } from 'lucide-react'
 
 /**
- * 34 projects is too many for a plain list, so the nav filters.
- * Client-side only — the set is small and already in memory, and a round trip
- * per keystroke would be absurd.
- */
-/**
  * The active entry's marker, drawn once per list and moved rather than drawn
  * on each row, so navigating slides it from the old entry to the new one.
- * Rows are a fixed 1.75rem, so its position is the index and nothing is
- * measured. Hidden when nothing in the list is active.
+ * Rows and section labels are both a fixed 1.75rem, so its position is the
+ * index and nothing is measured. Hidden when nothing in the list is active.
  */
+const ROW = 1.75
+
 const Marker = ({ index }: { index: number }) => (
   <span
     aria-hidden
@@ -31,10 +29,60 @@ const Marker = ({ index }: { index: number }) => (
       'before:bg-accent before:absolute before:inset-y-[0.375rem] before:-left-[2px] before:w-[2px] before:rounded-full',
       index < 0 && 'opacity-0',
     )}
-    style={{ transform: `translateY(${Math.max(index, 0) * 1.75}rem)` }}
+    style={{ transform: `translateY(${Math.max(index, 0) * ROW}rem)` }}
   />
 )
 
+type NavLink = { href: string; label: string; icon: LucideIcon }
+type NavSection = { label: string; links: NavLink[] }
+
+/**
+ * Grouped by what an entry is for: the work, what has been learned, how things
+ * are going. The Lab leads the work, and is drawn only where it is switched
+ * on: off, nothing lab-shaped appears.
+ */
+const sectionsFor = (labEnabled: boolean): NavSection[] => [
+  {
+    label: 'Work',
+    links: [
+      ...(labEnabled ? [{ href: '/lab', label: 'Lab', icon: FlaskConical }] : []),
+      { href: '/', label: 'All tasks', icon: Inbox },
+      { href: '/board', label: 'Board', icon: Columns3 },
+      { href: '/search', label: 'Search', icon: Search },
+    ],
+  },
+  {
+    label: 'Memory',
+    links: [
+      { href: '/knowledge', label: 'Knowledge', icon: BookOpen },
+      // The map had no entry here at all, so the only route to it was a single
+      // unlined word in the corner of the knowledge list. It is the better
+      // answer to "what do we know, and what is joined to nothing"; it should
+      // not be the harder one to find.
+      { href: '/knowledge/graph', label: 'Map', icon: Waypoints },
+      { href: '/sessions', label: 'Sessions', icon: History },
+    ],
+  },
+  {
+    label: 'Health',
+    links: [
+      { href: '/activity', label: 'Activity', icon: Activity },
+      { href: '/vitals', label: 'Vitals', icon: HeartPulse },
+    ],
+  },
+]
+
+const SectionLabel = ({ id, children }: { id: string; children: React.ReactNode }) => (
+  <span id={id} className="text-fg-subtle flex h-[1.75rem] items-end px-2 pb-1 text-meta font-medium">
+    {children}
+  </span>
+)
+
+/**
+ * 34 projects is too many for a plain list, so the nav filters.
+ * Client-side only — the set is small and already in memory, and a round trip
+ * per keystroke would be absurd.
+ */
 export const ProjectNav = ({
   projects,
   onNavigate,
@@ -52,23 +100,7 @@ export const ProjectNav = ({
     return projects.filter((p) => `${p.key} ${p.title}`.toLowerCase().includes(q))
   }, [projects, query])
 
-  const links = [
-    { href: '/', label: 'All tasks', icon: Inbox },
-    { href: '/board', label: 'Board', icon: Columns3 },
-    { href: '/search', label: 'Search', icon: Search },
-    { href: '/knowledge', label: 'Knowledge', icon: BookOpen },
-    // The map had no entry here at all, so the only route to it was a single
-    // unlined word in the corner of the knowledge list. It is the better
-    // answer to "what do we know, and what is joined to nothing"; it should
-    // not be the harder one to find.
-    { href: '/knowledge/graph', label: 'Map', icon: Waypoints },
-    // Only where the Lab is switched on: off, nothing lab-shaped is drawn.
-    ...(labEnabled ? [{ href: '/lab', label: 'Lab', icon: FlaskConical }] : []),
-    { href: '/sessions', label: 'Sessions', icon: History },
-    { href: '/activity', label: 'Activity', icon: Activity },
-    { href: '/vitals', label: 'Vitals', icon: HeartPulse },
-    { href: '/projects', label: 'Projects', icon: FolderKanban },
-  ]
+  const sections = useMemo(() => sectionsFor(labEnabled), [labEnabled])
 
   const isActive = (href: string) =>
     pathname === href ||
@@ -77,108 +109,147 @@ export const ProjectNav = ({
     // be lit at once.
     (href === '/knowledge' && pathname.startsWith('/knowledge/') && pathname !== '/knowledge/graph') ||
     (href === '/lab' && pathname.startsWith('/lab/'))
-  const activeLink = links.findIndex(({ href }) => isActive(href))
+
+  // One marker across every section, so it slides between them. A label is
+  // exactly one row tall, so an entry's place is its count of rows above it.
+  let activeRow = -1
+  let row = 0
+  for (const { links } of sections) {
+    row += 1
+    for (const { href } of links) {
+      if (activeRow < 0 && isActive(href)) activeRow = row
+      row += 1
+    }
+  }
+
   const activeProject = shown.findIndex(
     (p) => pathname === `/projects/${p.key}` || pathname.startsWith(`/projects/${p.key}/`),
   )
+  const allProjectsActive = pathname === '/projects'
 
   return (
-    <nav className="flex min-h-0 flex-1 flex-col px-2">
-      <ul className="relative -mx-0.5 mb-2">
-        <Marker index={activeLink} />
-        {links.map(({ href, label, icon: Icon }) => {
-          const active = isActive(href)
+    <nav aria-label="Sidebar" className="flex min-h-0 flex-1 flex-col px-2">
+      <div className="relative -mx-0.5">
+        <Marker index={activeRow} />
+        {sections.map(({ label, links }) => {
+          const labelId = `nav-section-${label.toLowerCase()}`
           return (
-            <li key={href}>
-              <Link
-                href={href}
-                onClick={onNavigate}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'group relative flex h-[1.75rem] items-center gap-2 rounded-md px-2 text-ui',
-                  'transition-colors duration-100 ease-[var(--ease)]',
-                  // The marker (above) is the fill and the accent edge: a
-                  // raised background alone is a very quiet way to answer
-                  // "where am I" on a sidebar of twenty-odd entries.
-                  active ? 'text-fg' : 'text-fg-muted hover:bg-surface-hover/70 hover:text-fg',
-                )}
-              >
-                <Icon
-                  size={13}
-                  aria-hidden
-                  className={cn(
-                    'transition-[color,transform] duration-[var(--dur-2)] ease-[var(--ease-out)]',
-                    active ? 'text-accent' : 'group-hover:scale-110',
-                  )}
-                />
-                {label}
-              </Link>
-            </li>
+            <div key={label} role="group" aria-labelledby={labelId}>
+              <SectionLabel id={labelId}>{label}</SectionLabel>
+              <ul>
+                {links.map(({ href, label: text, icon: Icon }) => {
+                  const active = isActive(href)
+                  return (
+                    <li key={href}>
+                      <Link
+                        href={href}
+                        onClick={onNavigate}
+                        aria-current={active ? 'page' : undefined}
+                        className={cn(
+                          'group relative flex h-[1.75rem] items-center gap-2 rounded-md px-2 text-ui',
+                          'transition-colors duration-100 ease-[var(--ease)]',
+                          // The marker (above) is the fill and the accent edge: a
+                          // raised background alone is a very quiet way to answer
+                          // "where am I" on a sidebar of twenty-odd entries.
+                          active ? 'text-fg' : 'text-fg-muted hover:bg-surface-hover/70 hover:text-fg',
+                        )}
+                      >
+                        <Icon
+                          size={13}
+                          aria-hidden
+                          className={cn(
+                            'transition-[color,transform] duration-[var(--dur-2)] ease-[var(--ease-out)]',
+                            active ? 'text-accent' : 'group-hover:scale-110',
+                          )}
+                        />
+                        {text}
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
           )
         })}
-      </ul>
+      </div>
 
-      <span className="text-fg-subtle px-2 pb-1 text-meta font-medium">Projects</span>
-
-      {projects.length > 8 && (
-        <div className="relative mb-1">
-          <Search
-            size={13}
-            aria-hidden
-            className="text-fg-subtle pointer-events-none absolute top-1/2 left-2.5 z-10 -translate-y-1/2"
-          />
-          <Input
-            size="sm"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Find a project…"
-            aria-label="Filter projects"
-            className="pr-9 pl-8"
-          />
-          {query && (
-            <Button
-              icon
-              size="sm"
-              variant="ghost"
-              onClick={() => setQuery('')}
-              aria-label="Clear the project filter"
-              className="absolute top-0 right-0"
-            >
-              <X size={13} aria-hidden />
-            </Button>
-          )}
+      <div role="group" aria-labelledby="nav-section-projects" className="flex min-h-0 flex-1 flex-col">
+        <div className="flex items-end justify-between pr-1">
+          <SectionLabel id="nav-section-projects">Projects</SectionLabel>
+          <Link
+            href="/projects"
+            onClick={onNavigate}
+            aria-label="All projects"
+            aria-current={allProjectsActive ? 'page' : undefined}
+            className={cn(
+              'mb-1 rounded px-1 text-meta transition-colors duration-100 ease-[var(--ease)]',
+              allProjectsActive ? 'text-fg' : 'text-fg-subtle hover:text-fg',
+            )}
+          >
+            All
+          </Link>
         </div>
-      )}
 
-      <ul className="relative -mx-0.5 flex-1 overflow-y-auto pb-2">
-        <Marker index={activeProject} />
-        {shown.map((p) => {
-          const href = `/projects/${p.key}`
-          const active = pathname === href || pathname.startsWith(`${href}/`)
-          return (
-            <li key={p.key}>
-              <Link
-                href={href}
-                onClick={onNavigate}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'group relative flex h-[1.75rem] items-center gap-2 rounded-md px-2',
-                  'transition-colors duration-100 ease-[var(--ease)]',
-                  active ? 'text-fg' : 'text-fg-muted hover:bg-surface-hover/70 hover:text-fg',
-                )}
+        {projects.length > 8 && (
+          <div className="relative mb-1">
+            <Search
+              size={13}
+              aria-hidden
+              className="text-fg-subtle pointer-events-none absolute top-1/2 left-2.5 z-10 -translate-y-1/2"
+            />
+            <Input
+              size="sm"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Find a project…"
+              aria-label="Filter projects"
+              className="pr-9 pl-8"
+            />
+            {query && (
+              <Button
+                icon
+                size="sm"
+                variant="ghost"
+                onClick={() => setQuery('')}
+                aria-label="Clear the project filter"
+                className="absolute top-0 right-0"
               >
-                <ProjectIcon size={13} projectKey={p.key} />
-                <span className="truncate text-ui">{p.title}</span>
-                <code className="text-fg-subtle ml-auto shrink-0 text-meta">{p.key}</code>
-              </Link>
-            </li>
-          )
-        })}
-
-        {shown.length === 0 && (
-          <li className="text-fg-subtle px-2 py-2 text-meta">No project matches.</li>
+                <X size={13} aria-hidden />
+              </Button>
+            )}
+          </div>
         )}
-      </ul>
+
+        <ul className="relative -mx-0.5 flex-1 overflow-y-auto pb-2">
+          <Marker index={activeProject} />
+          {shown.map((p) => {
+            const href = `/projects/${p.key}`
+            const active = pathname === href || pathname.startsWith(`${href}/`)
+            return (
+              <li key={p.key}>
+                <Link
+                  href={href}
+                  onClick={onNavigate}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'group relative flex h-[1.75rem] items-center gap-2 rounded-md px-2',
+                    'transition-colors duration-100 ease-[var(--ease)]',
+                    active ? 'text-fg' : 'text-fg-muted hover:bg-surface-hover/70 hover:text-fg',
+                  )}
+                >
+                  <ProjectIcon size={13} projectKey={p.key} />
+                  <span className="truncate text-ui">{p.title}</span>
+                  <code className="text-fg-subtle ml-auto shrink-0 text-meta">{p.key}</code>
+                </Link>
+              </li>
+            )
+          })}
+
+          {shown.length === 0 && (
+            <li className="text-fg-subtle px-2 py-2 text-meta">No project matches.</li>
+          )}
+        </ul>
+      </div>
     </nav>
   )
 }

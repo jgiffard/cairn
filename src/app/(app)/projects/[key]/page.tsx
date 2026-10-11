@@ -18,6 +18,11 @@ import { BrandName } from '@/components/brand'
 import { ProjectMenu } from './project-menu'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { ClosedToggle } from '@/components/closed-toggle'
+import { listSubjects } from '@/lib/api/subjects'
+import { isLabEnabled } from '@/app/(app)/lab/data'
+import { cn } from '@/lib/utils'
+import { ProjectDescription } from './project-description'
+import { FromTheLab } from './from-the-lab'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,11 +70,14 @@ const ProjectPage = async ({
   }
 
   const includeClosed = closed === '1'
-  const [{ tasks, closedHidden, recentlyClosed }, entities, allProjects] = await Promise.all([
+  const [{ tasks, closedHidden, recentlyClosed }, entities, allProjects, labSubjects] = await Promise.all([
     listTasks(project.id, { includeClosed }),
     entitiesForProject(user.id, project.key),
     listProjects(user.id, { includeArchived: true }),
+    // Off, the Lab is not asked at all: nothing lab-shaped is read or drawn.
+    (await isLabEnabled()) ? listSubjects({ project: project.key, limit: 50 }) : [],
   ])
+  const description = project.description ?? ''
 
   const renames = renamesOf(
     formerKeys.filter((row) => row.project_id === project.id),
@@ -151,6 +159,20 @@ const ProjectPage = async ({
       </header>
 
       <RedirectNotice message={arrivedFrom} className="mx-4 mt-3 shrink-0" />
+
+      {/* What the project is, and what the Lab has made of it, above the list
+          rather than in a menu: it was the one thing about a project you
+          could not see from the project. */}
+      <section
+        aria-label="About this project"
+        className={cn(
+          'border-border shrink-0 border-b px-2.5 py-3 md:px-4',
+          labSubjects.length > 0 && 'grid gap-x-8 gap-y-4 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]',
+        )}
+      >
+        <ProjectDescription projectId={project.id} description={description} />
+        <FromTheLab projectKey={project.key} subjects={labSubjects} />
+      </section>
 
       {/* page-scroll-guard: fills the viewport on purpose. ViewSwitch owns the
           scrolling: the list scrolls as one, the board per column. */}
