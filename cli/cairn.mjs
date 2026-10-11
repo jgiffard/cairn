@@ -1089,7 +1089,7 @@ const KNOWN_FLAGS = new Set([
   'adopt', 'agent', 'all', 'all-instances', 'allow-dangling', 'also-project', 'archived', 'assignee', 'body',
   'branch', 'category', 'clear', 'color', 'completed', 'conclusion',
   'confirm', 'cwd', 'dangling', 'default', 'days', 'description', 'detach-todos', 'dir', 'dry-run',
-  'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'external-ref', 'external-url', 'file', 'files', 'folder',
+  'due', 'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'external-ref', 'external-url', 'file', 'files', 'folder',
   'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'history', 'hours', 'id', 'instance',
   'json', 'key', 'kind', 'kinds', 'label', 'learned', 'limit', 'link', 'maintenance', 'max-parents',
   'message', 'mine', 'name', 'next', 'no-checkpoint', 'no-herdr', 'no-hooks', 'no-jobs', 'no-parent',
@@ -1098,7 +1098,7 @@ const KNOWN_FLAGS = new Set([
   'reason', 'related', 'remote', 'repo', 'request', 'resolution', 'runtimes', 'scheduled', 'scope',
   'session', 'show-toplevel', 'slug', 'stage', 'start', 'started', 'status', 'subject', 'summary',
   'superseded', 'superseded-by', 'sweep', 'tag', 'task', 'tasks', 'title', 'to', 'tool-calls',
-  'type', 'undo', 'unused', 'url', 'verified', 'version',
+  'type', 'undo', 'unused', 'unverify', 'url', 'verified', 'version',
 ])
 
 for (let i = 0; i < argv.length; i += 1) {
@@ -2769,6 +2769,46 @@ const externalFlag = (name) => {
   return die(`--${name} needs a value${name === 'external-ref' ? ' (an empty one clears it on update)' : ''}`)
 }
 
+/**
+ * A flag that must carry a value, and a list flag where `none` clears.
+ *
+ * `--label ''` reaches the parser as a bare flag (an empty next argument is
+ * falsy), which `update` read as the value `true`: it sent the label "true".
+ * `--description ''` was dropped by an `if (flags.description)` and reported
+ * success (CAIRN-383). Both are refused now, with the flag named, and a list
+ * is cleared the way `relearn --project none` already clears one.
+ */
+const valueFlag = (name, hint = '') => {
+  const value = flags[name]
+  if (value === undefined) return undefined
+  if (typeof value === 'string' && value !== '') return value
+  return die(`--${name} needs a value${hint}`)
+}
+
+const listFlag = (name) => {
+  const value = valueFlag(name, ': a comma list, or none to clear it')
+  if (value === undefined) return undefined
+  const list = splitList(value)
+  if (list.length === 0) return die(`--${name} needs a value: a comma list, or none to clear it`)
+  return list.length === 1 && list[0].toLowerCase() === 'none' ? [] : list
+}
+
+/** `--due 2026-11-30`, or `none` to clear it on update; null is what the server takes for "no date". */
+const dueFlag = (verb) => {
+  const value = valueFlag('due', ': a date as YYYY-MM-DD' + (verb === 'update' ? ', or none to clear it' : ''))
+  if (value === undefined) return undefined
+  if (value.toLowerCase() === 'none') {
+    if (verb !== 'update') return die('--due none has nothing to clear on a new task: leave --due out')
+    return null
+  }
+  const parsed = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  const real = parsed && new Date(`${value}T00:00:00Z`)
+  if (!real || Number.isNaN(real.getTime()) || real.toISOString().slice(0, 10) !== value) {
+    return die(`--due ${value} is not a date: use YYYY-MM-DD`)
+  }
+  return value
+}
+
 /** The task's page on the server the request went to; BASE is the chosen instance. */
 const taskUrl = (ref) => {
   const m = /^([A-Za-z][A-Za-z0-9]*)-(\d+)$/.exec(ref ?? '')
@@ -2807,7 +2847,8 @@ const HELP = `cairn — agent-first task tracker and shared memory
                [--external-ref KEY]
                                    --mine: what this agent holds now; --assignee: whose it is
     cairn show <ref> [--full]      e.g. CAI-42; a digest unless --full
-    cairn log <ref> [--kind K]     the work log
+    cairn log <ref> [--kind K]     the work log; the last column is the note id
+    cairn comments <ref>           what people said on it (comments cannot be edited)
     cairn projects
     cairn people                   who work can be assigned to
 
@@ -2821,6 +2862,8 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    already holds work here or similar open work
                                    exists; --no-start to only file it)
     cairn update <ref> [--title T] [--status S] [--type T] [--priority P] [--assignee <who>] [--body -]
+    cairn add|update ... --due YYYY-MM-DD      a due date; update --due none clears it
+    cairn add|update ... --label a,b           update replaces the labels; --label none empties them
     cairn add ... --external-ref KEY --external-url URL
                                    where it came from in another tool; filing the same
                                    --external-ref again returns that task, not a second
@@ -2839,7 +2882,8 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn done <ref> --resolution "<what was actually done>" [--kind fixed|verified|answered|…]
     cairn cancel <ref> --resolution "<why it is being dropped>" [--kind wont-fix]
     cairn done <ref> --duplicate-of CAI-31 --resolution "…"   points at the original
-    cairn attach <ref> <file>      |   cairn files <ref>
+    cairn attach <ref> <file>      |   cairn files <ref>   |   cairn detach <ref> <file-id>
+    cairn unnote <ref> <note-id>   withdraw a log line you wrote (a person may remove any)
 
   sub-tasks
     cairn add "<title>" --project K --parent CAI-42   file it under an existing task
@@ -2881,6 +2925,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn project rename <KEY> --key <NEW>       the same, as entities spells it
     cairn project describe <KEY> --body -        replace its description from stdin (markdown,
                                                  checked like a task body); --clear empties it
+    cairn project status <KEY> planning|active|paused|completed|archived
     cairn project archive <KEY>                  hides it; the tasks stay searchable
     cairn project restore <KEY>
     cairn project delete <KEY> --confirm <KEY>   deletes every task in it
@@ -2904,7 +2949,8 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    project, and it refuses if there is none
     cairn entities                 groupings a fact can be true of, and their projects
     cairn entities assign|unassign <key> --project A,B
-    cairn entities rename <key> --key <new> --title "T"
+    cairn entities rename <key> --key <new> --title "T" [--description "…"|none]
+    cairn entities delete <key> --confirm <key>   its facts stay and become global
     cairn recall <ref>             decisions and knowledge that bear on this task, and why
     cairn know [<slug>|<query>]    read it back, or list what applies here
     cairn know --gaps              where the memory has holes
@@ -2918,6 +2964,10 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn relearn <slug> --body -  correct it  [--reason "why"] [--allow-dangling]
                                    --project K | --entity E | --global  re-scope it
                                    (none clears one side: --entity E --project none moves it)
+                                   --title T  retitle it (the slug stays, so [[refs]] hold)
+                                   --label a,b|none  replace its labels
+                                   --superseded-by <slug>|none  take a supersession back
+                                   --unverify  clear the verified mark it was given
                                    --files a,b  the files it is about (replaces those named before)
                                    --related a,b  add them to its Related: line, body or not
     cairn link <slug> <other> [<other>…] [--reason "why"]
@@ -3013,9 +3063,10 @@ const LAB_HELP = `  the lab — exploring and proving ideas before they become w
                                    a completed or dropped stage needs the conclusion:
                                    what the lab concluded, and why
     cairn subject note LAB-12 "<text>"|- [--kind finding|decision|attempt|note|handoff]
-    cairn subject notes LAB-12     people's notes on it; the log is in show
+    cairn subject notes LAB-12     people's notes on it (last column: id); the log is in show
+    cairn subject notes LAB-12 add "<text>"|-  |  edit <id> "<text>"|-  |  delete <id>
     cairn subject tag LAB-12 +x -y
-    cairn subject attach LAB-12 <file>   |   cairn subject files LAB-12
+    cairn subject attach LAB-12 <file>   |   cairn subject files LAB-12   |   cairn subject detach LAB-12 <id>
     cairn subject todo LAB-12 "<title>" [--body -] [--type T] [--priority P] [--no-start]
                                    an ordinary task that belongs to it: in its project,
                                    else the lab's home project
@@ -3481,6 +3532,23 @@ const labOnForHelp = () => {
 }
 
 /** `LAB-12`, `lab-12` or `12`, answered as `LAB-12`; anything else is refused with what it looks like. */
+/**
+ * One row of a list by its id or a unique prefix of it, so a delete names the
+ * thing it was shown and a mistyped id is refused by the CLI rather than
+ * reaching a route that takes any id.
+ */
+const pickById = (rows, wanted, what, listing) => {
+  const id = String(wanted).trim().toLowerCase()
+  const exact = rows.filter((r) => String(r.id).toLowerCase() === id)
+  const found = exact.length ? exact : id.length >= 6 ? rows.filter((r) => String(r.id).toLowerCase().startsWith(id)) : []
+  if (found.length === 1) return found[0]
+  return die(
+    found.length > 1
+      ? `"${wanted}" matches ${found.length} ${what}s: give more of the id (${listing})`
+      : `no ${what} "${wanted}" here (${listing})`,
+  )
+}
+
 const subjectArg = (value, usage) => {
   const raw = String(need(value, usage)).trim()
   const match = SUBJECT_REF.exec(raw)
@@ -4445,6 +4513,9 @@ const commands = {
     const externalRef = externalFlag('external-ref')
     const externalUrl = externalFlag('external-url')
     if (externalRef === null || externalUrl === null) die('--external-ref and --external-url need a value on add')
+    // Likewise: a malformed date or label list is a typo, not a round trip.
+    const due = dueFlag('add')
+    const labels = listFlag('label')
     // Likewise before any request: `none` has nothing to unlink on a new task.
     const subject = flags.subject === undefined ? undefined : subjectFlag(flags.subject, 'add')
 
@@ -4543,7 +4614,8 @@ const commands = {
     if (flags['force-empty']) body.forceEmpty = true
 
     for (const k of ['type', 'status', 'priority']) if (flags[k]) body[k] = flags[k]
-    if (flags.label) body.labels = String(flags.label).split(',')
+    if (labels?.length) body.labels = labels
+    if (due) body.dueDate = due
     if (flags.parent) body.parentRef = flags.parent
     // Omitted, the server assigns it to the human behind this key.
     if (flags.assignee) body.assignee = flags.assignee
@@ -4597,10 +4669,17 @@ const commands = {
   async update() {
     const ref = need(positional[0], 'usage: cairn update <ref> --status <s>')
     const body = {}
-    if (flags.title) body.title = flags.title
-    if (flags.body) body.description = await resolveValue(flags.body)
+    const title = valueFlag('title')
+    if (title !== undefined) body.title = title
+    const text = valueFlag('body', ': text, or - for stdin')
+    if (text !== undefined) body.description = await resolveValue(text)
     for (const k of ['type', 'status', 'priority']) if (flags[k]) body[k] = flags[k]
-    if (flags.label) body.labels = String(flags.label).split(',')
+    // Replaces the set; `none` empties it.
+    const labels = listFlag('label')
+    if (labels !== undefined) body.labels = labels
+    // `none` clears it: the server takes null for "no date".
+    const due = dueFlag('update')
+    if (due !== undefined) body.dueDate = due
     // Passed through so a single update can move to a closing status and say
     // how in one call — without it the API rightly refuses the move.
     if (flags.resolution) body.resolution = await resolveValue(flags.resolution)
@@ -4720,9 +4799,25 @@ const commands = {
           by: n.actor_id,
           at: localStamp(n.created_at),
           note: truncate(n.note, 90),
+          // Last, so a reader keyed on the header never sees it move. It is
+          // what `cairn unnote` takes.
+          id: n.id,
         })),
-      columns: ['kind', 'by', 'at', 'note'],
+      columns: ['kind', 'by', 'at', 'note', 'id'],
     })
+  },
+
+  /**
+   * Withdraw a work-log line you wrote. The server lets an agent remove only
+   * its own, one at a time; a person in the web app may remove any.
+   */
+  async unnote() {
+    const usage = 'usage: cairn unnote <ref> <note-id>   (ids: cairn log <ref>)'
+    const ref = need(positional[0], usage)
+    const id = need(positional[1], usage)
+    const notes = asList(await request('GET', `/api/v1/tasks/${ref}/notes`), 'notes')
+    const note = pickById(notes, id, 'note', `cairn log ${ref}`)
+    emit(await request('DELETE', `/api/v1/tasks/${ref}/notes/${note.id}`))
   },
 
   async comment() {
@@ -4731,12 +4826,41 @@ const commands = {
     emit(await request('POST', `/api/v1/tasks/${ref}/comments`, { content }))
   },
 
+  /**
+   * What people said on the task. The CLI could write a comment and never read
+   * one, so a person's comment in the web app was invisible to an agent
+   * (CAIRN-383). Comments are not editable: the API has no way to.
+   */
+  async comments() {
+    const ref = need(positional[0], 'usage: cairn comments <ref>')
+    const list = asList(await request('GET', `/api/v1/tasks/${ref}/comments`), 'comments')
+    emit(list, {
+      lines: (d) =>
+        d.length === 0
+          ? [`no comments on ${ref}`]
+          : d.flatMap((c) => [
+              `${localStamp(c.created_at)}  ${c.actor_id ?? ''}  ${c.id}`,
+              ...indent(String(c.content ?? ''), '    '),
+            ]),
+    })
+  },
+
   async attach() {
     const ref = need(positional[0], 'usage: cairn attach <ref> <file>')
     const file = need(positional[1], 'a file path is required')
     const size = statSync(file).size
     process.stderr.write(`uploading ${basename(file)} (${size} bytes, ${mimeOf(file)})\n`)
     emit(await upload(`/api/v1/tasks/${ref}/attachments`, file))
+  },
+
+  /** Removes one file from a task, by the id `cairn files` prints. */
+  async detach() {
+    const usage = 'usage: cairn detach <ref> <file-id>   (ids: cairn files <ref>)'
+    const ref = need(positional[0], usage)
+    const id = need(positional[1], usage)
+    const files = asList(await request('GET', `/api/v1/tasks/${ref}/attachments`), 'files')
+    const file = pickById(files, id, 'file', `cairn files ${ref}`)
+    emit(await request('DELETE', `/api/v1/attachments/${file.id}`))
   },
 
   async files() {
@@ -4878,7 +5002,7 @@ const commands = {
   async project() {
     const sub = need(
       positional[0],
-      'usage: cairn project <create|rename|rekey|archive|restore|delete|handoff> <KEY> [...]',
+      'usage: cairn project <create|rename|rekey|describe|status|archive|restore|delete|handoff> <KEY> [...]',
     )
     const key = need(positional[1], 'a project key is required')
 
@@ -4978,6 +5102,19 @@ const commands = {
       emit(await request('PATCH', `/api/v1/projects/${key}`, { description }))
       return
     }
+    /**
+     * Any of the five states the web app's project list offers. `archive` and
+     * `restore` are two of them with their own names; planning, paused and
+     * completed had no CLI path (CAIRN-383).
+     */
+    if (sub === 'status') {
+      const states = ['planning', 'active', 'paused', 'completed', 'archived']
+      const usage = `usage: cairn project status <KEY> ${states.join('|')}`
+      const wanted = String(need(positional[2], usage)).toLowerCase()
+      if (!states.includes(wanted)) die(`"${wanted}" is not a project status.\n${usage}`)
+      emit(await request('PATCH', `/api/v1/projects/${key}`, { status: wanted }))
+      return
+    }
     if (sub === 'archive' || sub === 'restore') {
       emit(await request('PATCH', `/api/v1/projects/${key}`, {
         status: sub === 'archive' ? 'archived' : 'active',
@@ -5029,7 +5166,7 @@ const commands = {
       emit(await request('DELETE', `/api/v1/projects/${key}?confirm=${encodeURIComponent(key)}`))
       return
     }
-    die(`unknown subcommand "${sub}" — expected create, rename, rekey, describe, archive, restore, delete or handoff`)
+    die(`unknown subcommand "${sub}" — expected create, rename, rekey, describe, status, archive, restore, delete or handoff`)
   },
 
   /**
@@ -5041,7 +5178,7 @@ const commands = {
   async subject() {
     const verb = positional[0]
     const usage =
-      'usage: cairn subject add|list|show|edit|stage|note|notes|tag|attach|files|todo|archive|restore|delete|mentions …  (cairn help)'
+      'usage: cairn subject add|list|show|edit|stage|note|notes|tag|attach|files|detach|todo|archive|restore|delete|mentions …  (cairn help)'
 
     if (verb === 'add') {
       const title = need(
@@ -5129,7 +5266,24 @@ const commands = {
     if (verb === 'notes') {
       // People's notes (the cards on the subject page), not the work log: read
       // them here, and write what you found to the log with `note`.
-      const ref = subjectArg(positional[1], 'usage: cairn subject notes LAB-12')
+      const notesUsage = 'usage: cairn subject notes LAB-12 [add "<text>"|- | edit <id> "<text>"|- | delete <id>]'
+      const ref = subjectArg(positional[1], notesUsage)
+      const sub = positional[2]
+      if (sub === 'add') {
+        const body = await resolveValue(need(positional[3], notesUsage))
+        return emit(await request('POST', `/api/v1/subjects/${ref}/human-notes`, { body }))
+      }
+      if (sub === 'edit' || sub === 'delete') {
+        const id = need(positional[3], notesUsage)
+        const noteIn = asList(await request('GET', `/api/v1/subjects/${ref}/human-notes`), 'notes')
+        const note = pickById(noteIn, id, 'note', `cairn subject notes ${ref}`)
+        if (sub === 'delete') {
+          return emit(await request('DELETE', `/api/v1/subjects/${ref}/human-notes/${note.id}`))
+        }
+        const body = await resolveValue(need(positional[4], notesUsage))
+        return emit(await request('PATCH', `/api/v1/subjects/${ref}/human-notes/${note.id}`, { body }))
+      }
+      if (sub !== undefined) die(`unknown notes verb "${sub}"\n${notesUsage}`)
       const list = asList(await request('GET', `/api/v1/subjects/${ref}/human-notes`), 'notes')
       return emit(list, {
         lines: (d) =>
@@ -5137,7 +5291,8 @@ const commands = {
             ? [`no notes from people on ${ref}`]
             : d.flatMap((n) => [
                 `${localStamp(n.created_at)}  ${n.author?.name ?? n.actor_id ?? ''}` +
-                  `${n.updated_at && n.updated_at !== n.created_at ? `  (edited ${localStamp(n.updated_at)})` : ''}`,
+                  `${n.updated_at && n.updated_at !== n.created_at ? `  (edited ${localStamp(n.updated_at)})` : ''}` +
+                  `  ${n.id}`,
                 ...indent(String(n.body ?? ''), '    '),
               ]),
       })
@@ -5181,6 +5336,15 @@ const commands = {
           })),
         columns: ['id', 'name', 'type', 'bytes', 'by', 'url'],
       })
+    }
+
+    if (verb === 'detach') {
+      const usage = 'usage: cairn subject detach LAB-12 <file-id>   (ids: cairn subject files LAB-12)'
+      const ref = subjectArg(positional[1], usage)
+      const id = need(positional[2], usage)
+      const held = asList(await request('GET', `/api/v1/subjects/${ref}/attachments`), 'files')
+      const file = pickById(held, id, 'file', `cairn subject files ${ref}`)
+      return emit(await request('DELETE', `/api/v1/subjects/${ref}/attachments/${file.id}`))
     }
 
     if (verb === 'todo') {
@@ -5992,11 +6156,18 @@ const commands = {
   },
 
   async relearn() {
-    const slug = need(positional[0], 'usage: cairn relearn <slug> [--body -] [--title T]')
+    const slug = need(positional[0], 'usage: cairn relearn <slug> [--body -] [--title T] [--label a,b|none] [--superseded-by <slug>|none] [--unverify]')
     const patch = {}
     if (flags.body !== undefined) patch.body = await resolveValue(flags.body)
-    if (flags.title) patch.title = flags.title
-    if (flags.label) patch.labels = splitList(flags.label)
+    const title = valueFlag('title')
+    if (title !== undefined) patch.title = title
+    // Replaces the set; `none` empties it.
+    const labels = listFlag('label')
+    if (labels !== undefined) patch.labels = labels
+    // `none` takes a wrong supersession back, which `unlearn --superseded-by`
+    // could only ever set.
+    const successor = valueFlag('superseded-by', ': a slug, or none to take a supersession back')
+    if (successor !== undefined) patch.supersededBy = successor.toLowerCase() === 'none' ? null : successor
     // A PATCH only touches the side it is given, so `--entity X` adds an entity
     // and leaves the project in place — and moving a fact from a project to an
     // entity needed a way to clear one side. `none` is that way, as for `cairn
@@ -6030,7 +6201,9 @@ const commands = {
       patch.projects = []
       patch.entities = []
     }
+    if (flags.verified && flags.unverify) die('--verified and --unverify say opposite things: pass one')
     if (flags.verified) patch.verified = true
+    if (flags.unverify) patch.verified = false
     // PATCH runs the same [[reference]] check as the write, so relearn needs
     // the same way past it. Without this the flag parses — it is in the global
     // KNOWN_FLAGS — and is silently dropped, which is the exact thing that set
@@ -6122,10 +6295,32 @@ const commands = {
     if (verb === 'rename') {
       const key = need(positional[0], 'usage: cairn entities rename <key> [--key <new>] [--title "T"]')
       const patch = { key }
-      if (flags.key) patch.newKey = flags.key
-      if (flags.title) patch.title = flags.title
-      if (flags.description) patch.description = flags.description
+      const newKey = valueFlag('key')
+      if (newKey !== undefined) patch.newKey = newKey
+      const title = valueFlag('title')
+      if (title !== undefined) patch.title = title
+      // `none` empties it: the description is optional text, and an empty
+      // argument used to be dropped without a word (CAIRN-383).
+      const description = valueFlag('description', ': text, or none to clear it')
+      if (description !== undefined) patch.description = description.toLowerCase() === 'none' ? '' : description
       return emit(await request('PATCH', '/api/v1/entities', patch))
+    }
+
+    /**
+     * Deleting one is what the settings page offers. Facts filed against it
+     * stay and become global, so the key is typed back, as for a project.
+     */
+    if (verb === 'delete') {
+      const key = need(positional[0], 'usage: cairn entities delete <key> --confirm <key>')
+      if (String(flags.confirm ?? '').toLowerCase() !== String(key).toLowerCase()) {
+        const known = (await request('GET', '/api/v1/entities')).results?.find((e) => e.key === String(key).toLowerCase())
+        die(
+          `This deletes the entity ${key}${known ? ` and unlinks its ${known.projects.length} project(s)` : ''}; ` +
+            `facts filed against it stay and become global.\n` +
+            `Re-run with --confirm ${key} if that is what you want.`,
+        )
+      }
+      return emit(await request('DELETE', `/api/v1/entities?key=${encodeURIComponent(key)}`))
     }
 
     if (verb === 'assign' || verb === 'unassign') {
@@ -6141,7 +6336,7 @@ const commands = {
       )
     }
 
-    if (verb) die(`unknown entities verb "${verb}" — try: add, rename, assign, unassign`)
+    if (verb) die(`unknown entities verb "${verb}" — try: add, rename, assign, unassign, delete`)
 
     const data = await request('GET', '/api/v1/entities')
     emit(data, {

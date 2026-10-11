@@ -9,8 +9,23 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **Every field the API can change has a CLI path** (CAIRN-383). `--due YYYY-MM-DD|none` on
+  `add` and `update`; `cairn comments <ref>` reads a task's comments (the CLI could write them
+  and never read them); `cairn unnote <ref> <id>` and `cairn detach <ref> <id>` withdraw a
+  log line or a file, and `log` prints note ids as a last column; `cairn subject notes LAB-n
+  add|edit|delete` and `cairn subject detach`; `cairn project status <KEY> planning|active|
+  paused|completed|archived`; `cairn entities delete <key> --confirm <key>`; and
+  `relearn --superseded-by none`, `--unverify` and `--label none` undo what `relearn` and
+  `unlearn` could only set. `relearn --title` was already there and is now in `--help`.
+
 ### Fixed
 
+- `update --label ''`, `--title ''` and `entities rename --description ''` no longer send the
+  label "true" or vanish: an empty value is refused naming the flag, and `none` clears a list.
+- Project and entity titles and descriptions are checked for credentials like every other
+  free-text write; a session still records, with the credential redacted (CAIRN-322).
 - `cairn setup` no longer writes an older CLI over a newer one (CAIRN-381). It installs the
   CLI that is running it, and a setup waiting minutes on a browser approval (for a second
   instance, say) could land after the agent-files job had updated `~/.local/bin/cairn`,

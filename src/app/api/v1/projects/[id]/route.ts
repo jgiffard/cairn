@@ -109,6 +109,7 @@ const recordProjectChanges = async (
 
 export const PATCH = route<{ id: string }, z.infer<typeof updateProject>>({
   schema: updateProject,
+  secretFields: ['title', 'description'],
   handler: async ({ actor, params, body }) => {
     const resolved = await resolve(params.id)
     if (!resolved) return fail('not_found', `No project ${params.id}.`)
