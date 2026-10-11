@@ -39,7 +39,7 @@ cairn ideas                             # the planned subjects: what the lab has
    project.
 4. **Log on the subject** with `subject note … --kind finding|decision|attempt`; **dead
    ends are `attempt`** ("tried HNSW at m=16, recall 0.71"). A stage move writes its own log
-   line: do not narrate it. People's cards on it are `subject notes LAB-12` (read-only here).
+   line: do not narrate it. People's cards on it are `subject notes LAB-12`; read them, and `add|edit <id>|delete <id>` only on a human's say-so.
 5. **Conclude.** **Entering a completed or dropped stage requires a conclusion**: what the
    lab concluded, and why. `rejected` with a clear reason is a result, not a failure: it is
    what stops the next agent re-evaluating the same thing. Without it the server answers
