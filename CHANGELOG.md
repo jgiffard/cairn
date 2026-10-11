@@ -9,16 +9,10 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.22.2] — 2026-10-11
+
 ### Added
 
-- **Every field the API can change has a CLI path** (CAIRN-383). `--due YYYY-MM-DD|none` on
-  `add` and `update`; `cairn comments <ref>` reads a task's comments (the CLI could write them
-  and never read them); `cairn unnote <ref> <id>` and `cairn detach <ref> <id>` withdraw a
-  log line or a file, and `log` prints note ids as a last column; `cairn subject notes LAB-n
-  add|edit|delete` and `cairn subject detach`; `cairn project status <KEY> planning|active|
-  paused|completed|archived`; `cairn entities delete <key> --confirm <key>`; and
-  `relearn --superseded-by none`, `--unverify` and `--label none` undo what `relearn` and
-  `unlearn` could only set. `relearn --title` was already there and is now in `--help`.
 - **The Lab lifecycle** (CAIRN-384; `docs/lab.md`, "The lifecycle").
   - **`under construction`**, a first stage for a subject whose write-up is still being
     written: the default for `cairn idea` and new subjects, before `to explore`. Migration 079
@@ -30,6 +24,23 @@ out under **Breaking** with what to do about it.
     (closed ones stay), moves the subject to `implementing`, and logs a `decision` note and a
     `subject_promoted` event (079, validated by 080).
   - The subject page's project chip links to the project.
+- **Every field the API can change has a CLI path** (CAIRN-383). `--due YYYY-MM-DD|none` on
+  `add` and `update`; `cairn comments <ref>` reads a task's comments (the CLI could write them
+  and never read them); `cairn unnote <ref> <id>` and `cairn detach <ref> <id>` withdraw a
+  log line or a file, and `log` prints note ids as a last column; `cairn subject notes LAB-n
+  add|edit|delete` and `cairn subject detach`; `cairn project status <KEY> planning|active|
+  paused|completed|archived`; `cairn entities delete <key> --confirm <key>`; and
+  `relearn --superseded-by none`, `--unverify` and `--label none` undo what `relearn` and
+  `unlearn` could only set. `relearn --title` was already there and is now in `--help`.
+- **`scripts/move-projects.mjs` moves projects between instances** (CAIRN-385, CAIRN-389;
+  `docs/move-projects.md`). Tasks keep their ids and numbers, and notes, comments,
+  attachments, events, dependencies, sessions, file touches and project-scoped knowledge go
+  with them. Dry run by default: the whole move is run on both databases, checked, then rolled
+  back; `--apply` writes it, one transaction per side, after the checks on both sides pass.
+  Lab hand-off mirrors of a moving task are merged into the real task. It runs in either
+  direction (`--from-name`, `--to-name` and `--task` name the sides in the notes it writes),
+  and a source user with no account on the target stops the run only when a moving row names
+  them.
 
 ### Fixed
 
@@ -54,6 +65,13 @@ out under **Breaking** with what to do about it.
   `PATCH /api/v1/projects/{id}` as `cairn project describe`, so it records `project_described`.
 - **"From the Lab" on a project page** (CAIRN-382): where the Lab is on, the project's subjects
   are listed with their stage, each linked to its page.
+- **Light mode has stepped grounds** (CAIRN-388). It read as one flat white sheet. The page
+  ground is now a cool off-white, raised surfaces and hovers sit a step below it, and cards stay
+  white. Long-form reading panes (the task page, a subject's write-up, knowledge articles,
+  session detail) are white through a new `--surface-read`; in dark mode they render as before.
+  Hairlines hold 1.15:1 on every ground, text holds 4.5:1 on the deepest, and status, type,
+  priority and code colours and a custom brand accent are tuned against it. Dark mode is
+  unchanged.
 
 ## [0.22.1] — 2026-10-11
 
@@ -2095,7 +2113,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.22.1...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.22.2...HEAD
+[0.22.2]: https://github.com/montytorr/cairn/compare/v0.22.1...v0.22.2
 [0.22.1]: https://github.com/montytorr/cairn/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/montytorr/cairn/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/montytorr/cairn/compare/v0.20.3...v0.21.0
