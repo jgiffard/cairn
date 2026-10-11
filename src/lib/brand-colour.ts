@@ -28,12 +28,16 @@ export const STOCK_MARK = '#7b86e8'
 
 const WHITE = '#ffffff'
 const LIGHT_GROUND = '#ffffff'
+// The deepest light ground an accent can sit on (--surface-raised and
+// --surface-hover in globals.css), not only the white of a panel: a brand that
+// clears 4.5 on white and falls to 4.1 on a hovered row is not readable.
+const LIGHT_FLOOR = '#e6e9ef'
 const DARK_GROUND = '#08090a'
 const DARK_TEXT = '#0d0e10'
 
 /**
  * Text and links carry the accent, so the light variant has to be readable
- * text on white: 4.5. The dark one is held a little higher, 5.5, which is
+ * text on every light ground, the deepest included: 4.5. The dark one is held a little higher, 5.5, which is
  * where the stock #7b86e8 sits against its ground — a brand should not come
  * out dimmer than the default it replaces.
  */
@@ -128,7 +132,7 @@ const onFill = (fill: string) => (contrast(WHITE, fill) >= 3 ? WHITE : DARK_TEXT
 
 export const paletteFor = (hex: string): Palette => {
   const base = hex.toLowerCase()
-  const light = clear(base, -1, LIGHT_GROUND, LIGHT_MIN)
+  const light = clear(base, -1, LIGHT_FLOOR, LIGHT_MIN)
   const dark = clear(base, 1, DARK_GROUND, DARK_MIN)
   return {
     light: { accent: light, accentFg: onFill(light), accentSubtle: mix(light, LIGHT_GROUND, 0.88), ring: light },
