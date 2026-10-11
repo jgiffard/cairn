@@ -14,7 +14,8 @@ import { spawn } from 'node:child_process'
  * - the scheduled command names `release`, never a branch;
  * - `release` means the tag of the version the instance reports at
  *   /api/v1/health, and not knowing that version writes nothing at all;
- * - from a remote source the job never rewrites its own two scripts;
+ * - its own two scripts come from that same tag, verified and swapped in
+ *   (agent-files-selfsync.test.ts holds the self-update contract);
  * - a checkout named by `cairn setup` (CAIRN_SETUP_SOURCE) is what gets
  *   scheduled, and `--runtimes` keeps a runtime nobody set up untouched.
  *
@@ -81,7 +82,9 @@ const serve = (health: Release | ((path: string) => Release)) =>
       const file = /^\/raw\/v[^/]+\/(.+)$/.exec(path)?.[1]
       if (file && !answer.missing?.includes(file)) {
         res.writeHead(200)
-        return res.end(`pinned:${path}`)
+        // The maintenance scripts are run, so what stands in for them has to be
+        // a script; the marker is the comment, and the program does nothing.
+        return res.end(file.startsWith('scripts/') ? `#!/usr/bin/env node\n// pinned:${path}\n` : `pinned:${path}`)
       }
       res.writeHead(404)
       res.end('not found')
@@ -139,20 +142,25 @@ describe.skipIf(SYSTEM_TARGETS)('sync-agent-files --source release', () => {
     expect(fetched.every((path) => path.startsWith('/raw/v1.2.3/'))).toBe(true)
   })
 
-  it('never rewrites its own two scripts from a remote source', async () => {
+  it('takes its own two scripts from the same tag, and reports them as drift under --check', async () => {
     const { base, requests } = await serve({ version: '1.2.3' })
     const home = await machine(base)
 
-    const result = await sync(home, ['--source', 'release', '--repo', `${base}/raw`, '--check'])
+    const checked = await sync(home, ['--source', 'release', '--repo', `${base}/raw`, '--check'])
+    expect(checked.code, checked.stdout).toBe(1)
+    expect(checked.stdout).toMatch(/DRIFT\s+\S*sync-agent-files\.mjs/)
+    expect(await readFile(join(home, '.cairn/maintenance/sync-agent-files.mjs'), 'utf8')).toBe('old sync')
+
     const written = await sync(home, ['--source', 'release', '--repo', `${base}/raw`])
 
     expect(written.code, written.stdout).toBe(0)
-    expect(await readFile(join(home, '.cairn/maintenance/sync-agent-files.mjs'), 'utf8')).toBe('old sync')
-    expect(await readFile(join(home, '.cairn/maintenance/install-cron.mjs'), 'utf8')).toBe('old installer')
-    expect(written.stdout).toContain('updated by `cairn setup`, never from a remote source')
-    // Not reported as drift either: a skipped file is not a stale one.
-    expect(result.stdout).not.toMatch(/DRIFT\s+\S*maintenance/)
-    expect(requests.some((path) => path.includes('scripts/'))).toBe(false)
+    expect(await readFile(join(home, '.cairn/maintenance/sync-agent-files.mjs'), 'utf8')).toContain(
+      'pinned:/raw/v1.2.3/scripts/sync-agent-files.mjs',
+    )
+    expect(await readFile(join(home, '.cairn/maintenance/install-cron.mjs'), 'utf8')).toContain(
+      'pinned:/raw/v1.2.3/scripts/install-cron.mjs',
+    )
+    expect(requests.filter((path) => path.includes('scripts/')).every((path) => path.startsWith('/raw/v1.2.3/'))).toBe(true)
   })
 
   it('reads the pre-#110 default URL as release, unless the job says --unpinned', async () => {

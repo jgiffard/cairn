@@ -76,7 +76,8 @@ const serve = () =>
         const file = /^\/raw\/v[^/]+\/(.+)$/.exec(path)?.[1]
         if (file) {
           res.writeHead(200)
-          return res.end(`pinned:${path}`)
+          // The maintenance scripts are verified as scripts before they are written.
+          return res.end(file.startsWith('scripts/') ? `#!/usr/bin/env node\n// pinned:${path}\n` : `pinned:${path}`)
         }
         res.writeHead(404)
         res.end('not found')

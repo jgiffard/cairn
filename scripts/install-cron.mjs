@@ -677,10 +677,10 @@ if (RUN) {
  * out to a branch. On the server this directory was made by hand; doing it here
  * is what makes `--install` work on a machine that has never had it.
  *
- * It is also, now, how those two scripts are UPDATED. The scheduled sync no
- * longer replaces itself from the network (#110), so the copies at the default
- * location are refreshed here, from the tree this installer runs from — the
- * release `cairn setup` just unpacked, or a checkout — whenever they differ. A
+ * It is also how those two scripts are bridged to a release the scheduled sync
+ * cannot reach on its own: a copy that predates the sync's self-update (CAIRN-390)
+ * is refreshed here, from the tree this installer runs from — the release
+ * `cairn setup` just unpacked, or a checkout — whenever they differ. A
  * script named by CAIRN_SYNC_SCRIPT is the operator's own and is only ever
  * placed where it is missing, as before.
  */

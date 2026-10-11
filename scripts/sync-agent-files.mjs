@@ -23,14 +23,32 @@
  * What this writes is code every agent session on the machine then runs, with
  * that user's rights, so where it comes from is the whole security question
  * (issue #110). A scheduled run syncs from the release the connected instance
- * reports (`--source release`), never from a branch that any push can move,
- * and it never replaces itself from the network. See `resolveSource` below.
+ * reports (`--source release`), never from a branch that any push can move.
+ *
+ * That includes its own two scripts. They used to be left to `cairn setup`, so
+ * a machine whose copy predated an artefact never learned the artefact existed
+ * (`lab.md`, missing on the Mac from 0.22.0 until setup was run again, CAIRN-390).
+ * They are now fetched and verified like everything else, swapped in atomically,
+ * and the run is repeated once by the new copy, which is the one that knows the
+ * new artefacts. See `verifyScript` and the end of this file.
  */
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, chownSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import {
+  chmodSync,
+  chownSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
+import { basename, dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -98,7 +116,9 @@ const ARTEFACTS = [
     // working tree that can be moved or checked out to a branch, and that copy
     // then goes stale exactly like every other copy here did.
     //
-    // `self`: never replaced from a remote source — see REMOTE below.
+    // `self`: a script, not data. It is verified as one before it is written
+    // (`verifyScript`), and a failure to update it is loud rather than a
+    // refusal of the whole run (`selfProblems`).
     name: 'maintenance',
     file: 'scripts/sync-agent-files.mjs',
     mode: 0o755,
@@ -491,24 +511,69 @@ const resolveSource = async () => {
 
 const SOURCE = await resolveSource()
 
-/**
- * The network is not trusted with the repairer itself.
- *
- * A script that rewrites its own code from a URL on a timer cannot be audited
- * once it is installed: whatever was reviewed is gone by the next slot. So from
- * a remote source the two maintenance scripts are never written — they change
- * when `cairn setup` runs, which places them from the release it installs, or
- * when the source is a tree on disk (a checkout, or the deploy's own tree),
- * which somebody put there on purpose.
- */
 const REMOTE = /^https?:\/\//.test(SOURCE)
 console.log(`source    ${SOURCE}`)
+
+/**
+ * Set by the run that swapped this script, for the run it starts, and by
+ * nobody else. The new copy leaves the maintenance scripts alone rather than
+ * fetching them a second time: one swap per run, so a source that answers
+ * differently on every fetch cannot turn this into a loop.
+ */
+const REEXEC = process.env.CAIRN_SYNC_REEXEC === '1'
 
 const readSource = async (file) => {
   if (!REMOTE) return readFileSync(join(SOURCE, file))
   const response = await fetchWithRetry(`${SOURCE.replace(/\/+$/, '')}/${file}`)
   if (!response.ok) throw new Error(`${file} returned ${response.status}`)
   return Buffer.from(await response.arrayBuffer())
+}
+
+/**
+ * What a maintenance script has to be before it may replace the one that is
+ * running: a node program that parses. Null when it is, otherwise why not.
+ *
+ * Where it came from is settled before it gets here — the tag of the release
+ * the instance reports, over https, by the same code and from the same place
+ * as the CLI and the hooks that every session on this machine already runs
+ * from it (#110). There is no second channel to check a script against, so
+ * this does not claim to authenticate one. It stops what the transport cannot:
+ * a mirror that answers 200 for a path it does not have, a wrong or truncated
+ * file, a release whose script does not parse and would leave the machine
+ * with no repairer at all.
+ */
+const verifyScript = (buffer) => {
+  if (buffer.length === 0 || buffer.length > 2_000_000) return `is ${buffer.length} bytes`
+  if (!buffer.subarray(0, 64).toString('utf8').startsWith('#!/usr/bin/env node')) return 'is not a node script'
+  const directory = mkdtempSync(join(tmpdir(), 'cairn-sync-verify-'))
+  try {
+    const file = join(directory, 'script.mjs')
+    writeFileSync(file, buffer)
+    const parsed = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8', timeout: 20_000 })
+    if (parsed.status === 0) return null
+    const why = String(parsed.stderr ?? '').split('\n').find((line) => /Error/.test(line))
+    return `does not parse (${why?.trim() ?? parsed.error?.code ?? `exit ${parsed.status}`})`
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Trouble with the maintenance scripts, kept apart from the run's refusals.
+ *
+ * Every other file is all-or-none (below), because a machine on two releases
+ * at once is what that rule is for. A script that cannot be fetched or does
+ * not verify is different: nothing is half-installed, the copy on disk is the
+ * old one and still works, and refusing the CLI, the skill and the hooks
+ * because the repairer's own update failed would only make a stale machine
+ * staler. So the rest is synced and the run exits 1 saying why, every time,
+ * until it is fixed — which is what a job that cannot update itself should
+ * look like in a log (CAIRN-390).
+ */
+const selfProblems = []
+const selfProblem = (artefact, why) => {
+  selfProblems.push(`${artefact.name}: ${artefact.file} ${why}`)
+  process.exitCode = 1
 }
 
 /**
@@ -519,21 +584,67 @@ const readSource = async (file) => {
  */
 const sources = new Map()
 for (const artefact of ARTEFACTS) {
-  if (REMOTE && artefact.self) continue
+  if (artefact.self && REEXEC) continue
   try {
-    sources.set(artefact.name, await readSource(artefact.file))
+    const content = await readSource(artefact.file)
+    const rejected = artefact.self ? verifyScript(content) : null
+    if (rejected) selfProblem(artefact, `from ${SOURCE} ${rejected}`)
+    else sources.set(artefact.name, content)
   } catch (error) {
-    refuse(`could not read ${artefact.file} from ${SOURCE} (${error.cause?.code ?? error.code ?? error.message})`)
+    const why = `${error.cause?.code ?? error.code ?? error.message}`
+    if (artefact.self) selfProblem(artefact, `could not be read from ${SOURCE} (${why})`)
+    else refuse(`could not read ${artefact.file} from ${SOURCE} (${why})`)
+  }
+}
+
+/**
+ * Written beside the file it replaces and renamed over it, so a reader — the
+ * scheduler starting the next run, an agent running the CLI — sees the old
+ * file or the new one and never half of either, and a run that dies halfway
+ * leaves the old copy.
+ *
+ * The owner of a file that is there is kept: a root-run job must not hand a
+ * user's script to root. So is the mode, for the scripts (`keepMode`), which
+ * are run by whoever owns them and must not lose their execute bit or gain a
+ * wider one. Where the directory refuses a new file but the file itself can be
+ * written, it is written in place, as every write here was before.
+ */
+const install = (path, content, mode, keepMode) => {
+  const present = existsSync(path)
+  // Through a symlink, not over it: the link is somebody's arrangement.
+  const real = present ? realpathSync(path) : path
+  if (!present) mkdirSync(dirname(real), { recursive: true })
+  const reference = statSync(present ? real : dirname(path))
+  const finalMode = present && keepMode ? reference.mode & 0o7777 : mode
+  const extension = extname(real)
+  const temporary = join(dirname(real), `.${basename(real, extension)}.${process.pid}.tmp${extension}`)
+  try {
+    writeFileSync(temporary, content)
+    chmodSync(temporary, finalMode)
+    // A file that existed keeps its owner; a new one takes its directory's.
+    if (process.getuid?.() === 0) chownSync(temporary, reference.uid, reference.gid)
+    if (hash(readFileSync(temporary)) !== hash(content)) throw new Error('the temporary copy does not match')
+    renameSync(temporary, real)
+  } catch (error) {
+    rmSync(temporary, { force: true })
+    if (!present || !['EACCES', 'EPERM', 'EROFS'].includes(error.code)) throw error
+    writeFileSync(real, content)
+    chmodSync(real, finalMode)
   }
 }
 
 const repaired = []
+const replacedSelf = []
 let drifted = 0
 
 for (const artefact of ARTEFACTS) {
   if (!sources.has(artefact.name)) {
     console.log(`\n${artefact.name}  ${artefact.file}`)
-    console.log('  skipped   (updated by `cairn setup`, never from a remote source)')
+    console.log(
+      REEXEC && artefact.self
+        ? '  skipped   (refreshed by the run that started this one)'
+        : '  NOT UPDATED  see SELF-UPDATE FAILED below',
+    )
     continue
   }
   const source = sources.get(artefact.name)
@@ -572,20 +683,13 @@ for (const artefact of ARTEFACTS) {
     }
 
     try {
-      mkdirSync(dirname(target.path), { recursive: true })
-      writeFileSync(target.path, source)
-      chmodSync(target.path, artefact.mode)
-      // Run as root, a file this creates in someone's home would be root's,
-      // and that person's own installer could no longer replace it. A file
-      // that existed keeps its owner; a new one takes its directory's.
-      if (!present && process.getuid?.() === 0) {
-        const { uid, gid } = statSync(dirname(target.path))
-        chownSync(target.path, uid, gid)
-      }
+      install(target.path, source, artefact.mode, artefact.self)
       repaired.push(`${artefact.name}: ${target.path} (was ${state})`)
       console.log(`  updated   ${target.path}  ${state} -> ${canonical}`)
+      if (artefact.name === 'maintenance') replacedSelf.push(target.path)
     } catch (error) {
       console.log(`  FAILED    ${target.path}  (${error.code ?? error.message})`)
+      if (artefact.self) selfProblem(artefact, `was not replaced at ${target.path} (${error.code ?? error.message})`)
     }
   }
 }
@@ -625,7 +729,60 @@ if (NOTIFY && repaired.length > 0) {
   }
 }
 
+/**
+ * Said last, in one place, so a run that could not update its own scripts is
+ * not a quiet line in the middle of a long log. The exit status was set where
+ * each problem was found.
+ */
+if (selfProblems.length > 0) {
+  console.log('\nSELF-UPDATE FAILED: the maintenance scripts on this machine were not brought up to date.')
+  for (const problem of selfProblems) console.log(`  ${problem}`)
+  console.log('The copies on disk are unchanged and keep running; artefacts they do not know about are not installed.')
+  console.log('Re-run `cairn setup` here to place them, or fix the cause above.')
+}
+
 if (CHECK && drifted > 0) {
   console.log(`\n${drifted} cop${drifted === 1 ? 'y is' : 'ies are'} out of date — run without --check`)
   process.exit(1)
+}
+
+/**
+ * The script that just ran was written before the release it syncs, so it
+ * installed what it knew of and nothing else. Its replacement is the one that
+ * knows the artefacts the release added, so it runs once more, from the same
+ * resolved release — `--source <that tag>`, not another round of asking the
+ * instances, which on a laptop off the VPN is a minute and a half of retries
+ * for the one that does not answer.
+ *
+ * Only when the copy that ran is the copy that was replaced; a checkout run by
+ * hand is not, and has nothing to learn. The flag stops the child from doing
+ * this itself.
+ */
+const running = (() => {
+  try {
+    return realpathSync(process.argv[1])
+  } catch {
+    return null
+  }
+})()
+const swapped = replacedSelf.some((path) => {
+  try {
+    return realpathSync(path) === running
+  } catch {
+    return false
+  }
+})
+if (swapped && !CHECK && !REEXEC) {
+  const args = process.argv.slice(2)
+  const at = args.indexOf('--source')
+  if (at !== -1) args[at + 1] = SOURCE
+  console.log(`\nre-running ${running} (updated) to install what this release added`)
+  const child = spawnSync(process.execPath, [running, ...args], {
+    stdio: 'inherit',
+    env: { ...process.env, CAIRN_SYNC_REEXEC: '1' },
+  })
+  if (child.error || child.status === null) {
+    console.log(`SELF-UPDATE FAILED: the updated script could not be run (${child.error?.code ?? child.signal ?? 'unknown'})`)
+  }
+  process.exit(child.status || process.exitCode || (child.error || child.status === null ? 1 : 0))
 }
