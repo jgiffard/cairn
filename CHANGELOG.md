@@ -9,6 +9,23 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`cairn setup` places the release the instances serve** (CAIRN-394). It placed the release of
+  the CLI running it, so a 0.22.2 CLI beside 0.22.3 servers reinstalled the 0.22.2 scripts and
+  called them current. Setup now reads `/api/v1/health` of the instance it is connecting and of
+  every instance in `~/.cairn/instances.json` (the newest answering one wins, as the
+  agent-files job resolves `--source release`; one that cannot be asked is skipped), downloads
+  that release if the machine does not have it, and hands over to its own CLI with the same
+  arguments, so the scripts, skill and hooks come from the release that knows them. It never
+  goes to an older release than the running CLI. `CAIRN_SETUP_SOURCE` still pins a checkout.
+- **`cairn setup` no longer writes a second CLI where `cairn` already resolves** (CAIRN-387).
+  When the `cairn` on PATH is `/usr/local/bin/cairn`, which the agent-files job keeps current,
+  and there is no `~/.local/bin/cairn` yet, setup skips that step and names the copy it found,
+  rather than leaving a stray one that shadows the managed one and goes stale. An existing
+  `~/.local/bin/cairn` is still updated. `CAIRN_SETUP_MANAGED_CLI` (colon-separated paths)
+  overrides the list of managed copies, for tests.
+
 ## [0.22.3] — 2026-10-11
 
 ### Fixed

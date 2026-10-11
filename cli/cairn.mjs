@@ -3287,6 +3287,49 @@ const deriveInstanceName = (url) => {
 /** Filesystem signals for a runtime being on this machine, independent of what process is running this. */
 const SETUP_RUNTIME_DIRS = { 'claude-code': join(HOME, '.claude'), codex: join(HOME, '.codex') }
 const onSetupPath = (bin) => (process.env.PATH ?? '').split(':').some((dir) => dir && existsSync(join(dir, bin)))
+/** The first `bin` a shell with this PATH would run, or null. The PATH is a parameter so tests need not trust the host's. */
+const whichOnPath = (bin, pathEnv = process.env.PATH ?? '') => {
+  for (const dir of pathEnv.split(':')) {
+    if (!dir) continue
+    const candidate = join(dir, bin)
+    try {
+      const stat = statSync(candidate)
+      if (stat.isFile() && (stat.mode & 0o111) !== 0) return candidate
+    } catch { /* not here */ }
+  }
+  return null
+}
+
+/** Copies of the CLI the agent-files job keeps current besides ~/.local/bin/cairn (scripts/sync-agent-files.mjs). */
+const managedCliPaths = () => (process.env.CAIRN_SETUP_MANAGED_CLI ?? '/usr/local/bin/cairn').split(':').filter(Boolean)
+
+const SETUP_RELEASE = /^\d{1,4}\.\d{1,4}\.\d{1,6}$/
+
+/**
+ * The release the instances this machine talks to serve, as the agent-files job
+ * resolves `--source release`: the newest of the answering ones, an instance
+ * that cannot be asked (a company instance off its VPN) left out.
+ */
+const serverRelease = async (answered) => {
+  const urls = new Map(answered)
+  for (const instance of Object.values(readInstances()?.instances ?? {})) {
+    const u = trimUrl(instance.url)
+    if (!urls.has(u)) urls.set(u, null)
+  }
+  const versions = await Promise.all([...urls].map(async ([u, version]) => {
+    if (version) return version
+    try {
+      const res = await fetch(`${u}/api/v1/health`, { signal: AbortSignal.timeout(5000) })
+      return res.ok ? (await res.json())?.data?.version : null
+    } catch {
+      return null
+    }
+  }))
+  return versions
+    .filter((v) => typeof v === 'string' && SETUP_RELEASE.test(v))
+    .reduce((best, v) => (!best || compareReleases(v, best) > 0 ? v : best), null)
+}
+
 const detectSetupRuntimes = () => {
   const found = []
   if (existsSync(SETUP_RUNTIME_DIRS['claude-code'])) found.push('claude-code')
@@ -6866,25 +6909,36 @@ const commands = {
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(setupRepo) || setupRepo.includes('..') || /(^|\/)\.(\/|$)/.test(setupRepo)) {
       die(`CAIRN_REPO=${JSON.stringify(setupRepo)} is not <owner>/<name>`)
     }
-    const releaseDir = localSource || join(CAIRN_DIR, 'releases', VERSION)
+    // The release the instances serve, not the one this CLI happens to be: a CLI
+    // behind its servers would otherwise place the old scripts and call them
+    // current (CAIRN-394). Never an older release than this CLI (CAIRN-381).
+    let wantVersion = VERSION
+    if (!localSource) {
+      const served = await serverRelease([[url, serverInfo?.version]])
+      if (served && compareReleases(served, VERSION) > 0) wantVersion = served
+    }
+    const releaseDir = localSource || join(CAIRN_DIR, 'releases', wantVersion)
     const releaseParts = ['scripts', 'hooks', 'skills', 'cli']
     const haveRelease = releaseParts.every((p) => existsSync(join(releaseDir, p)))
+    if (wantVersion !== VERSION) {
+      line(`! release   the instances serve v${wantVersion}, this CLI is ${VERSION} — continuing with v${wantVersion}`)
+    }
     if (localSource) {
       if (!haveRelease) die(`CAIRN_SETUP_SOURCE=${localSource} is missing one of ${releaseParts.join(', ')}`)
       line(`– source    ${localSource} (CAIRN_SETUP_SOURCE)`)
     } else if (haveRelease) {
-      line(`– release   v${VERSION} already downloaded (~/.cairn/releases/${VERSION})`)
+      line(`– release   v${wantVersion} already downloaded (~/.cairn/releases/${wantVersion})`)
     } else if (dry) {
-      line(`! release   would download v${VERSION} from github.com/${setupRepo}`)
+      line(`! release   would download v${wantVersion} from github.com/${setupRepo}`)
     } else {
-      const tarUrl = `https://codeload.github.com/${setupRepo}/tar.gz/refs/tags/v${VERSION}`
+      const tarUrl = `https://codeload.github.com/${setupRepo}/tar.gz/refs/tags/v${wantVersion}`
       let res
       try {
         res = await fetch(tarUrl)
       } catch (error) {
         die(`cairn setup: could not download ${tarUrl} (${error.message})`)
       }
-      if (!res.ok) die(`cairn setup: could not download ${tarUrl} (${res.status}) — is v${VERSION} released yet?`)
+      if (!res.ok) die(`cairn setup: could not download ${tarUrl} (${res.status}) — is v${wantVersion} released yet?`)
       mkdirSync(releaseDir, { recursive: true })
       const buf = Buffer.from(await res.arrayBuffer())
       const members = releaseParts.flatMap((p) => [`*/${p}`])
@@ -6899,9 +6953,22 @@ const commands = {
         die(`cairn setup: tar could not extract the release (${extract.stderr?.toString().trim() || extract.status})`)
       }
       if (!releaseParts.every((p) => existsSync(join(releaseDir, p)))) {
-        die(`cairn setup: v${VERSION}'s release archive is missing one of ${releaseParts.join(', ')}`)
+        die(`cairn setup: v${wantVersion}'s release archive is missing one of ${releaseParts.join(', ')}`)
       }
-      line(`✓ release   v${VERSION} -> ~/.cairn/releases/${VERSION}`)
+      line(`✓ release   v${wantVersion} -> ~/.cairn/releases/${wantVersion}`)
+    }
+
+    // Hand over to that release's own CLI, which knows its own scripts, flags
+    // and steps. The keys are paired by now, so it only re-checks them. The
+    // marker stops a release that still reports an older VERSION looping.
+    const handoverCli = join(releaseDir, 'cli', 'cairn.mjs')
+    if (wantVersion !== VERSION && existsSync(handoverCli) && !process.env.CAIRN_SETUP_HANDOVER) {
+      line(`→ handover  ${tilde(handoverCli)}`)
+      const handover = spawnSync(process.execPath, [handoverCli, ...process.argv.slice(2)], {
+        stdio: 'inherit',
+        env: { ...process.env, CAIRN_SETUP_HANDOVER: wantVersion },
+      })
+      process.exit(handover.status ?? 1)
     }
 
     // A dry run that has never downloaded a release yet has nothing on disk to
@@ -6926,7 +6993,16 @@ const commands = {
       // updates the file under it, and a machine's CLI is shared by every instance
       // (CAIRN-381). Never write an older one over a newer one.
       const installedVersion = installedCli ? /^const VERSION = '([^']+)'/m.exec(installedCli.toString('utf8'))?.[1] : null
-      if (installedVersion && compareReleases(installedVersion, VERSION) > 0) {
+      // `cairn` already resolves to a copy the agent-files job keeps current, in
+      // another directory: a second one here would only shadow it (when
+      // ~/.local/bin comes first on PATH) and go stale (CAIRN-387).
+      const resolved = whichOnPath('cairn')
+      const resolvedReal = resolved ? (() => { try { return realpathSync(resolved) } catch { return resolved } })() : null
+      const managedElsewhere = !installedCli && resolved && resolvedReal !== cliTarget &&
+        managedCliPaths().some((p) => p === resolved || p === resolvedReal)
+      if (managedElsewhere) {
+        line(`– cli       \`cairn\` already runs ${resolved}, which the agent-files job keeps current — not writing ${tilde(cliTarget)}`)
+      } else if (installedVersion && compareReleases(installedVersion, VERSION) > 0) {
         line(`– cli       ${tilde(cliTarget)} is ${installedVersion}, newer than this setup (${VERSION}) — kept`)
       } else if (!cliChanged) {
         line(`– cli       ${tilde(cliTarget)} (${VERSION}) — unchanged`)

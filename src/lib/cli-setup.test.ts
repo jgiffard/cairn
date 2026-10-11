@@ -43,6 +43,8 @@ type ConnectState = {
   denyRuntimes?: string[]
   /** Every POST /connect body the CLI sent, in order. */
   requests?: { runtimes: string[]; host: string }[]
+  /** The release /api/v1/health reports. */
+  version?: string
 }
 
 /** A fake Cairn server: health, people (key validity), connect, connect/poll. */
@@ -58,7 +60,7 @@ const serve = (state: ConnectState = {}) =>
           res.writeHead(code, { 'content-type': 'application/json' })
           res.end(JSON.stringify({ success: code < 400, data }))
         }
-        if (req.url === '/api/v1/health') return json({ version: '0.10.1', build: 'test' })
+        if (req.url === '/api/v1/health') return json({ version: state.version ?? '0.10.1', build: 'test' })
         if (req.url === '/api/v1/people') {
           const auth = req.headers.authorization ?? ''
           return auth === 'Bearer sk_valid' ? json([]) : json(null, 401)
@@ -108,8 +110,9 @@ const run = (args: string[], HOME: string, extraEnv: Record<string, string> = {}
   const env = { ...process.env }
   for (const name of Object.keys(env)) if (RUNTIME_MARKERS.test(name)) delete env[name]
   return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-    const child = spawn('node', [CLI, ...args], {
-      env: { ...env, HOME, CAIRN_SETUP_SOURCE: REPO, ...extraEnv },
+    const child = spawn(process.execPath, [CLI, ...args], {
+      // PATH and the managed-copy list are fixed so this host's own cairn never decides a result.
+      env: { ...env, PATH: '/usr/bin:/bin', CAIRN_SETUP_MANAGED_CLI: '/nonexistent/bin/cairn', HOME, CAIRN_SETUP_SOURCE: REPO, ...extraEnv },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let stdout = ''
@@ -610,6 +613,137 @@ describe('cairn setup — the installed cli', () => {
     expect(code).toBe(0)
     expect(stdout).toContain('✓ cli       ~/.local/bin/cairn')
     expect(await readFile(target, 'utf8')).toBe(await readFile(CLI, 'utf8'))
+  })
+})
+
+/**
+ * CAIRN-387: where `cairn` already resolves to a copy the agent-files job keeps
+ * current, in another directory, setup must not leave a second one in
+ * ~/.local/bin to shadow it. The PATH and the list of managed copies are both
+ * the test's own.
+ */
+describe('cairn setup — a cairn that already resolves elsewhere', () => {
+  const args = (base: string, ...extra: string[]) =>
+    ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs', ...extra]
+  const managedCopy = async (HOME: string) => {
+    const dir = join(HOME, 'usr-local-bin')
+    await mkdir(dir, { recursive: true })
+    const file = join(dir, 'cairn')
+    await writeFile(file, "#!/usr/bin/env node\nconst VERSION = '0.0.1'\n", { mode: 0o755 })
+    return { dir, file }
+  }
+
+  it('writes no second copy and names the one it is skipping', async () => {
+    const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
+    const HOME = await home()
+    const { dir, file } = await managedCopy(HOME)
+    const { code, stdout } = await run(args(base), HOME, { PATH: `${dir}:/usr/bin:/bin`, CAIRN_SETUP_MANAGED_CLI: file })
+    expect(code).toBe(0)
+    expect(stdout).toContain(`already runs ${file}`)
+    expect(stdout).toContain('not writing ~/.local/bin/cairn')
+    expect(existsSync(join(HOME, '.local', 'bin', 'cairn'))).toBe(false)
+    expect(await readFile(file, 'utf8')).toContain("'0.0.1'")
+  })
+
+  it('says the same in a dry run', async () => {
+    const base = await serve()
+    const HOME = await home()
+    const { dir, file } = await managedCopy(HOME)
+    const { code, stdout } = await run(
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--dry-run'],
+      HOME,
+      { PATH: `${dir}:/usr/bin:/bin`, CAIRN_SETUP_MANAGED_CLI: file },
+    )
+    expect(code).toBe(0)
+    expect(stdout).toContain('not writing ~/.local/bin/cairn')
+    expect(stdout).not.toContain('would write ~/.local/bin/cairn')
+  })
+
+  it('still writes ~/.local/bin/cairn when the cairn on PATH is not one the job manages', async () => {
+    const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
+    const HOME = await home()
+    const { dir } = await managedCopy(HOME)
+    const { code, stdout } = await run(args(base), HOME, { PATH: `${dir}:/usr/bin:/bin` })
+    expect(code).toBe(0)
+    expect(stdout).toContain('✓ cli       ~/.local/bin/cairn')
+    expect(existsSync(join(HOME, '.local', 'bin', 'cairn'))).toBe(true)
+  })
+
+  it('keeps updating a ~/.local/bin copy that is already there', async () => {
+    const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
+    const HOME = await home()
+    const { dir, file } = await managedCopy(HOME)
+    const target = join(HOME, '.local', 'bin', 'cairn')
+    await mkdir(join(HOME, '.local', 'bin'), { recursive: true })
+    await writeFile(target, "#!/usr/bin/env node\nconst VERSION = '0.0.1'\n", { mode: 0o755 })
+    const { code, stdout } = await run(args(base), HOME, { PATH: `${dir}:/usr/bin:/bin`, CAIRN_SETUP_MANAGED_CLI: file })
+    expect(code).toBe(0)
+    expect(stdout).toContain('✓ cli       ~/.local/bin/cairn')
+    expect(await readFile(target, 'utf8')).toBe(await readFile(CLI, 'utf8'))
+  })
+})
+
+/**
+ * CAIRN-394: the release setup places is the one the instances serve. A CLI
+ * behind its servers hands over to that release's own CLI rather than placing
+ * its old scripts. The release is pre-staged under ~/.cairn/releases so nothing
+ * is downloaded; its cli is a stub that records how it was called.
+ */
+describe('cairn setup — the release the instances serve', () => {
+  const stage = async (HOME: string, version: string) => {
+    const dir = join(HOME, '.cairn', 'releases', version)
+    for (const part of ['scripts', 'hooks', 'skills']) await mkdir(join(dir, part), { recursive: true })
+    await mkdir(join(dir, 'cli'), { recursive: true })
+    const record = join(HOME, 'handover.json')
+    await writeFile(
+      join(dir, 'cli', 'cairn.mjs'),
+      `import { writeFileSync } from 'node:fs'
+writeFileSync(${JSON.stringify(record)}, JSON.stringify({ argv: process.argv.slice(2), handover: process.env.CAIRN_SETUP_HANDOVER }))
+console.log('stub setup ran')
+`,
+    )
+    return record
+  }
+  const noSource = { CAIRN_SETUP_SOURCE: '' }
+
+  it('hands over to the served release when this cli is behind it', async () => {
+    const base = await serve({ status: 'approved', version: '99.1.0', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
+    const HOME = await home()
+    const record = await stage(HOME, '99.1.0')
+    const argv = ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs']
+    const { code, stdout } = await run(argv, HOME, noSource)
+    expect(code).toBe(0)
+    expect(stdout).toMatch(/! release\s+the instances serve v99\.1\.0, this CLI is \d+\.\d+\.\d+ — continuing with v99\.1\.0/)
+    expect(stdout).toContain('stub setup ran')
+    expect(JSON.parse(await readFile(record, 'utf8'))).toEqual({ argv, handover: '99.1.0' })
+    // The old CLI placed nothing of its own.
+    expect(existsSync(join(HOME, '.local', 'bin', 'cairn'))).toBe(false)
+    expect(existsSync(join(HOME, '.claude', 'skills', 'cairn', 'SKILL.md'))).toBe(false)
+  })
+
+  it('does not hand over when the instances serve an older release than this cli', async () => {
+    const base = await serve({ status: 'approved', version: '0.0.1', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
+    const HOME = await home()
+    const record = await stage(HOME, '0.0.1')
+    // A dry run, so no release is fetched: it plans this cli's own, never the older served one.
+    const { code, stdout } = await run(['setup', '--url', base, '--runtimes', 'claude-code', '--dry-run'], HOME, noSource)
+    expect(code).toBe(0)
+    expect(stdout).not.toContain('the instances serve')
+    expect(stdout).toMatch(/would download v(?!0\.0\.1\b)\d+\.\d+\.\d+/)
+    expect(existsSync(record)).toBe(false)
+  })
+
+  it('does not hand over again from a release that was itself handed over to', async () => {
+    const base = await serve({ status: 'approved', version: '99.1.0', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
+    const HOME = await home()
+    const record = await stage(HOME, '99.1.0')
+    const { stdout } = await run(
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'],
+      HOME,
+      { ...noSource, CAIRN_SETUP_HANDOVER: '99.1.0' },
+    )
+    expect(stdout).not.toContain('stub setup ran')
+    expect(existsSync(record)).toBe(false)
   })
 })
 
