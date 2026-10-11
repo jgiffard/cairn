@@ -698,6 +698,11 @@ never detected: `hermes` on PATH gets a line saying how to add it
 | hooks | tagged hook entries, per runtime set up; the Herdr pane-title plugin when `herdr` is on PATH | `~/.claude/settings.json`, `~/.codex/hooks.json`, OpenClaw's hook link, `hermes config` if named; `~/.cairn/hooks` | `--no-hooks`, `--no-herdr` | delete the entries naming `~/.cairn/hooks`; `herdr plugin unlink cairn.pane-title` |
 | jobs | `agent-files` (below); `reconcile` and `vitals` with `--maintenance`; `openclaw-sessions` with OpenClaw | a LaunchAgent on macOS, root's or your crontab on Linux | `--no-jobs` | `node ~/.cairn/releases/<version>/scripts/install-cron.mjs --remove --only agent-files` |
 
+Setup places **the release your instances serve**, not the release of the CLI running it: when
+a server is ahead of this CLI, it downloads that release and continues with its CLI. It also
+writes no second `~/.local/bin/cairn` where `cairn` already resolves to `/usr/local/bin/cairn`
+(the job keeps that one current); it says which copy it found instead.
+
 What it never does: wire a runtime it did not set up (Hermes included), edit Herdr's
 `config.toml`, follow a branch (the job syncs the release your instance runs), or replace the
 job's own scripts from the network. Every line it prints starts with `✓` (done), `–`
