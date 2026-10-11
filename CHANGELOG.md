@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.22.3] — 2026-10-11
+
 ### Fixed
 
 - **The agent-files job updates its own scripts** (CAIRN-390). It ran
@@ -2144,7 +2146,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.22.2...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.22.3...HEAD
+[0.22.3]: https://github.com/montytorr/cairn/compare/v0.22.2...v0.22.3
 [0.22.2]: https://github.com/montytorr/cairn/compare/v0.22.1...v0.22.2
 [0.22.1]: https://github.com/montytorr/cairn/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/montytorr/cairn/compare/v0.21.0...v0.22.0
