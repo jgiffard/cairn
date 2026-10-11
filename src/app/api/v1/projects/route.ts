@@ -48,6 +48,7 @@ export const GET = route({
 
 export const POST = route({
   schema: createProject,
+  secretFields: ['title', 'description'],
   handler: async ({ actor, body }) => {
     // LAB-12 is a Lab subject on every instance (docs/lab.md).
     const reserved = reservedKeyRefusal(body.key)

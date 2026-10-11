@@ -52,6 +52,7 @@ export const GET = route({
 
 export const POST = route({
   schema: entityCreate,
+  secretFields: ['title', 'description'],
   handler: async ({ actor, body }) => {
     const { data, error } = await admin()
       .from('entities')
@@ -108,6 +109,7 @@ const entityPatch = z.object({
  *  assigning one project should not silently unassign thirty others. */
 export const PATCH = route({
   schema: entityPatch,
+  secretFields: ['title', 'description'],
   handler: async ({ body }) => {
     const { data: entity } = await admin()
       .from('entities')
