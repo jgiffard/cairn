@@ -57,7 +57,7 @@ const patch = async (ref: string, body: unknown) => {
 
 const stored = async (ref: string) =>
   (await pool().query<{ description: string | null }>('select description from tasks where id = $1', [taskIds[ref]]))
-    .rows[0].description
+    .rows[0]?.description ?? null
 
 beforeAll(async () => {
   auth.actor = {
