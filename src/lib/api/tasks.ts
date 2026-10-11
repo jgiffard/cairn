@@ -21,6 +21,10 @@ export const TASK_FIELDS =
   'subject_id, handoff_tracker, handoff_ref, handoff_url, handoff_status, handoff_synced_at, ' +
   'project:projects!project_id!inner(id, key, title, status)'
 
+/** What a comment read, create and edit all return. */
+export const COMMENT_FIELDS =
+  'id, content, comment_type, actor_type, actor_id, created_at, edited_at'
+
 /** Terse columns for list/search output. See the CLI's output discipline. */
 export const TASK_LIST_FIELDS =
   'id, number, title, type, status, priority, labels, assignee_user_id, claimed_by, claimed_session, claimed_at, heartbeat_at, attempt, ownership_version, checkpoint_version, ' +

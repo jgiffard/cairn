@@ -171,6 +171,46 @@ describe('comments and the work log', () => {
     expect(stdout).toContain('Thanks.')
   })
 
+  it('marks an edited comment and shows its id', async () => {
+    const base = await serve({
+      'GET /api/v1/tasks/CIVIC-1/comments': [
+        { id: 'c1', content: 'x', actor_id: 'Cal', created_at: '2026-10-11T08:00:00Z', edited_at: '2026-10-11T09:00:00Z' },
+        { id: 'c2', content: 'y', actor_id: 'Cal', created_at: '2026-10-11T08:05:00Z', edited_at: null },
+      ],
+    }, [])
+    const lines = (await run(['comments', 'CIVIC-1'], base)).stdout.split('\n')
+    expect(lines.find((l) => l.endsWith('c1'))).toContain('(edited)')
+    expect(lines.find((l) => l.endsWith('c2'))).not.toContain('(edited)')
+  })
+
+  it('comment edit patches the comment by id or prefix, and plain comment still posts', async () => {
+    const id = 'aaaaaaaa-0000-4000-8000-000000000001'
+    const seen: Seen[] = []
+    const base = await serve({
+      'GET /api/v1/tasks/CIVIC-1/comments': [{ id, content: 'old' }],
+      [`PATCH /api/v1/tasks/CIVIC-1/comments/${id}`]: { id, content: 'new', edited_at: '2026-10-11T09:00:00Z' },
+      'POST /api/v1/tasks/CIVIC-1/comments': { id: 'new-one' },
+    }, seen)
+
+    expect((await run(['comment', 'edit', 'CIVIC-1', id.slice(0, 8), 'new'], base)).code).toBe(0)
+    expect(seen.find((s) => s.method === 'PATCH')?.body).toEqual({ content: 'new' })
+
+    seen.length = 0
+    expect((await run(['comment', 'CIVIC-1', 'hello'], base)).code).toBe(0)
+    expect(writes(seen).map((s) => [s.method, s.path, s.body])).toEqual([
+      ['POST', '/api/v1/tasks/CIVIC-1/comments', { content: 'hello' }],
+    ])
+  })
+
+  it('comment edit refuses an id the task does not have, without writing', async () => {
+    const seen: Seen[] = []
+    const base = await serve({ 'GET /api/v1/tasks/CIVIC-1/comments': [{ id: 'aaaaaaaa-0000-4000-8000-000000000001' }] }, seen)
+    const miss = await run(['comment', 'edit', 'CIVIC-1', '99999999-0000-4000-8000-000000000000', 'x'], base)
+    expect(miss.code).not.toBe(0)
+    expect(miss.stderr).toContain('cairn comments CIVIC-1')
+    expect(writes(seen)).toEqual([])
+  })
+
   it('says so when there are none', async () => {
     const base = await serve({ 'GET /api/v1/tasks/CIVIC-1/comments': [] }, [])
     expect((await run(['comments', 'CIVIC-1'], base)).stdout).toContain('no comments on CIVIC-1')

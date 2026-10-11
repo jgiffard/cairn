@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
-import { findTask, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { COMMENT_FIELDS, findTask, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +16,7 @@ export const GET = route<{ ref: string }>({
 
     const { data, error } = await admin()
       .from('task_comments')
-      .select('id, content, comment_type, actor_type, actor_id, created_at')
+      .select(COMMENT_FIELDS)
       .eq('task_id', task.id)
       .order('created_at')
 
@@ -46,7 +46,7 @@ export const POST = route<{ ref: string }, z.infer<typeof createComment>>({
         content: body.content,
         mutation_id: mutationId,
       }, { onConflict: 'task_id,mutation_id', ignoreDuplicates: true })
-      .select('id, content, comment_type, actor_type, actor_id, created_at')
+      .select(COMMENT_FIELDS)
       .maybeSingle()
 
     if (error) return fail('internal_error', error.message)

@@ -426,6 +426,7 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn commit <ref> <sha>` · `cairn push <ref> <sha>` | Record delivery evidence in the task history |
 | `cairn run <ref> "<command>" --status passed\|failed\|skipped` | Record a command result in the task history |
 | `cairn comment <ref> "…"` | Leave something for the human |
+| `cairn comment edit <ref> <id> "…"` | Rewrite a comment you wrote (ids: `cairn comments <ref>`); the server refuses anyone else's, and the comment shows an "edited" marker |
 | `cairn attach <ref> <file>` · `cairn files <ref>` | Attachments |
 | **Claims** | |
 | `cairn claim <ref>` | Take it. **Exit code 9** means another agent holds it |
@@ -486,7 +487,7 @@ schemas the routes validate against, so it cannot drift. Browsable at `/api-docs
 /projects/{id}/repos            the repositories a project claims
 /tasks/{ref}                    read (?view=digest), update (incl. assignee), close, delete
 /tasks/{ref}/notes  /notes/{id} the work log
-/tasks/{ref}/comments           for the human
+/tasks/{ref}/comments  /comments/{id}  for the human; PATCH edits your own
 /tasks/{ref}/activity           read history; POST git/run delivery evidence
 /tasks/{ref}/mentions  /recall  where it is named; what bears on it
 /tasks/{ref}/children           sub-tasks

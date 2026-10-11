@@ -48,6 +48,7 @@ export type ApiError =
   | 'stage_in_use'
   | 'subject_has_todos'
   | 'handed_off'
+  | 'not_author'
 
 const STATUS: Record<ApiError, number> = {
   unauthorized: 401,
@@ -67,6 +68,8 @@ const STATUS: Record<ApiError, number> = {
   stage_in_use: 409,
   subject_has_todos: 409,
   handed_off: 409,
+  // Someone else's comment: forbidden, but named, so a caller can tell it from a role refusal.
+  not_author: 403,
 }
 
 export const ok = <T>(data: T, init?: ResponseInit) =>

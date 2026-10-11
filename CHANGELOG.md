@@ -9,6 +9,16 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **A comment's author can edit it** (CAIRN-391). `PATCH /api/v1/tasks/{ref}/comments/{id}`
+  with `{ content }`: only the author (same actor type and id) may, anyone else gets 403
+  `not_author`, an unknown id 404, and an archived task is refused as `POST` is. Comments
+  carry `edited_at` (migration 081, nullable), the edit is recorded as `comment_edited`
+  (081, validated by 082), and the task page edits inline with an "edited" marker.
+  `cairn comment edit <ref> <id> "<text>"` (ids and an "edited" marker in `cairn comments`).
+  Deleting a comment is still not possible.
+
 ## [0.22.2] — 2026-10-11
 
 ### Added

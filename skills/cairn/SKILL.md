@@ -53,8 +53,8 @@ with `--no-start`.
 - **Reading a file answers it** — Cairn knows what happened to the code, not what it says.
   `check` first only if the subject has a past (a recurring failure, a decision, a try).
 - **Throwaway exploration** — until you change something or learn something durable.
-- **A fact that expires** ("staging is three commits behind") — a note, or nothing.
-- **Narrating your bookkeeping** — notes are for the next agent, not a progress log.
+- **A fact that expires** — a note, or nothing.
+- **Narrating your bookkeeping** — a note is not a progress log.
 
 A session that files nothing is fine: sessions are recorded regardless. The failure is a
 session that changed or ruled something out and left no trace.
@@ -93,7 +93,7 @@ They record; none executes anything. "I fixed it" cannot be checked; `run_result
 exit 1` can. Repeats dedupe, so retrying is safe. Name another task's ref in a
 `decision` or `finding` note when your work constrains it — it shows under that task's
 `mentionedIn`; there the bare ref is the link. To the human in chat, cite
-`[ACME-42](url)` with the `url` a command returned. `cairn comment` addresses the human.
+`[ACME-42](url)` with the `url` a command returned. `cairn comment` addresses the human; `cairn comment edit <ref> <id> "…"` fixes your own.
 
 ## Filing, and the body
 

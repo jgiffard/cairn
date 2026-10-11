@@ -2848,7 +2848,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    --mine: what this agent holds now; --assignee: whose it is
     cairn show <ref> [--full]      e.g. CAI-42; a digest unless --full
     cairn log <ref> [--kind K]     the work log; the last column is the note id
-    cairn comments <ref>           what people said on it (comments cannot be edited)
+    cairn comments <ref>           what people said on it, with ids and an edited marker
     cairn projects
     cairn people                   who work can be assigned to
 
@@ -2878,7 +2878,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    these three RECORD what you already did;
                                    none of them runs anything. Recording the
                                    same commit twice is one line, not two.
-    cairn comment <ref> "<text>"
+    cairn comment <ref> "<text>"   |   cairn comment edit <ref> <id> "<text>"   (your own only)
     cairn done <ref> --resolution "<what was actually done>" [--kind fixed|verified|answered|…]
     cairn cancel <ref> --resolution "<why it is being dropped>" [--kind wont-fix]
     cairn done <ref> --duplicate-of CAI-31 --resolution "…"   points at the original
@@ -4823,8 +4823,23 @@ const commands = {
     emit(await request('DELETE', `/api/v1/tasks/${ref}/notes/${note.id}`))
   },
 
+  /**
+   * `cairn comment edit <ref> <id> "<text>"` rewrites a comment you wrote; the
+   * server refuses anyone else's. "edit" is never a ref, so `cairn comment
+   * <ref> "<text>"` is untouched.
+   */
   async comment() {
-    const ref = need(positional[0], 'usage: cairn comment <ref> "<text>"')
+    if (positional[0] === 'edit') {
+      const usage = 'usage: cairn comment edit <ref> <comment-id> "<text>"   (ids: cairn comments <ref>)'
+      const ref = need(positional[1], usage)
+      const wanted = need(positional[2], usage)
+      const content = await resolveValue(need(positional[3], 'a comment body is required'))
+      const list = asList(await request('GET', `/api/v1/tasks/${ref}/comments`), 'comments')
+      const comment = pickById(list, wanted, 'comment', `cairn comments ${ref}`)
+      emit(await request('PATCH', `/api/v1/tasks/${ref}/comments/${comment.id}`, { content }))
+      return
+    }
+    const ref = need(positional[0], 'usage: cairn comment <ref> "<text>"   |   cairn comment edit <ref> <id> "<text>"')
     const content = await resolveValue(need(positional[1], 'a comment body is required'))
     emit(await request('POST', `/api/v1/tasks/${ref}/comments`, { content }))
   },
@@ -4832,7 +4847,7 @@ const commands = {
   /**
    * What people said on the task. The CLI could write a comment and never read
    * one, so a person's comment in the web app was invisible to an agent
-   * (CAIRN-383). Comments are not editable: the API has no way to.
+   * (CAIRN-383). The id is what `comment edit` takes; an edited one says so.
    */
   async comments() {
     const ref = need(positional[0], 'usage: cairn comments <ref>')
@@ -4842,7 +4857,7 @@ const commands = {
         d.length === 0
           ? [`no comments on ${ref}`]
           : d.flatMap((c) => [
-              `${localStamp(c.created_at)}  ${c.actor_id ?? ''}  ${c.id}`,
+              `${localStamp(c.created_at)}  ${c.actor_id ?? ''}${c.edited_at ? '  (edited)' : ''}  ${c.id}`,
               ...indent(String(c.content ?? ''), '    '),
             ]),
     })
