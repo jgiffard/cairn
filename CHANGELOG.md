@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.22.5] — 2026-10-12
+
 ### Fixed
 
 - **`cairn note --body` writes the note**, and so does `cairn subject note`. They take the text from `--body <text|->` as well as the positional, and refuse both at once; a missing text now names the three forms. `cairn checkpoint --body` is refused with a pointer to `--summary` instead of being ignored (CAIRN-397).
