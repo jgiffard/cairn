@@ -7,11 +7,20 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined
 
 const stage = { id: 's', name: 'Exploring', color: '#4f7cff', category: 'active' } as never
 
+const promotedStage = { id: 'p', name: 'promoted', color: '#5f7d8c', category: 'completed' } as never
+
 const subject = (number: number, title = `Subject ${number}`) => ({
   number,
   ref: `LAB-${number}`,
   title,
   stage,
+  archived_at: null,
+})
+
+const promoted = (number: number, title = `Subject ${number}`) => ({
+  ...subject(number, title),
+  stage: promotedStage,
+  archived_at: '2026-10-12T10:00:00.000Z',
 })
 
 describe('the project description', () => {
@@ -72,6 +81,15 @@ describe('From the Lab', () => {
     const html = renderToStaticMarkup(<FromTheLab projectKey="AC" subjects={subjects} />)
     expect(html.match(/href="\/lab\/subjects\//g)).toHaveLength(FROM_THE_LAB_SHOWN)
     expect(html).toContain('3 more in the Lab')
-    expect(html).toContain('href="/lab?project=AC"')
+    expect(html).toContain('href="/lab?project=AC&amp;archived=include"')
+  })
+
+  it('lists a promoted subject as history: archived, linked, after the live ones', () => {
+    const html = renderToStaticMarkup(
+      <FromTheLab projectKey="PGV" subjects={[promoted(7, 'Evaluate pgvector'), subject(9, 'Still exploring')]} />,
+    )
+    expect(html).toContain('href="/lab/subjects/7"')
+    expect(html).toContain('LAB-7: promoted, archived')
+    expect(html.indexOf('LAB-9')).toBeLessThan(html.indexOf('LAB-7'))
   })
 })

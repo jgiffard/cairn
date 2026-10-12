@@ -23,6 +23,11 @@ const MIGRATION_LOCK = 7_261_693
 
 export const migrate = async (url, { dir = join(process.cwd(), 'migrations'), log = console.log } = {}) => {
   const client = new pg.Client({ connectionString: url })
+  // A migration that leaves something for an administrator says so in a NOTICE
+  // (084). Postgres's own "already exists, skipping" notices are noise.
+  client.on('notice', (notice) => {
+    if (!/, skipping$/.test(notice.message ?? '')) log(`notice: ${notice.message}`)
+  })
   await client.connect()
   try {
     // Session-level: released when the connection closes, however this ends.

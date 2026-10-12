@@ -48,7 +48,7 @@ afterAll(async () => {
 })
 
 describe('the Lab migrations', () => {
-  it('reserve LAB on an instance that has no LAB project, and seed the stages, under construction first', async () => {
+  it('reserve LAB on an instance that has no LAB project, and seed the stages: under construction first, promoted last, no delivery stages', async () => {
     const client = await freshDatabase()
     await apply(client, await migrationFiles())
 
@@ -61,11 +61,7 @@ describe('the Lab migrations', () => {
       'exploring:active',
       'done:completed',
       'rejected:dropped',
-      'to implement:planned',
-      'implementing:active',
-      'internal testing:active',
-      'ready for rollout:active',
-      'rolled out:completed',
+      'promoted:completed',
     ])
     expect((await client.query('select enabled from lab_settings')).rows).toEqual([{ enabled: false }])
   })

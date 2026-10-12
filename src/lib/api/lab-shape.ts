@@ -113,6 +113,38 @@ export const stageNoteHash = (from: string, to: string, at: string) => hash32(`s
 // Promoting a subject to a project
 // ---------------------------------------------------------------------------
 
+/**
+ * Where a promoted subject ends (CAIRN-408): a completed stage, so promoting
+ * concludes it. Created by migration 084 and, if an administrator removed it,
+ * again by the first promotion.
+ */
+export const PROMOTED_STAGE = { name: 'promoted', category: 'completed', color: '#5f7d8c' } as const
+
+/**
+ * Croft's delivery stages, retired by 084 wherever no live subject uses them:
+ * delivery is a project's tasks, not a column on the Lab board. The briefing
+ * leaves them out of its counts where they are still there.
+ */
+export const DELIVERY_STAGES = ['to implement', 'implementing', 'internal testing', 'ready for rollout', 'rolled out'] as const
+
+/** The conclusion promotion records: the subject's answer is the project. */
+export const promotedConclusion = (key: string, title: string) => `Promoted to project ${key} (${title})`
+
+/**
+ * The refusal for a subject filed into, or linked to, an existing project:
+ * work for a project is a task. A subject is an idea without a project, and
+ * gets one only by being promoted.
+ */
+export const subjectProjectRefusal = (key: string, title?: string) =>
+  fail(
+    'validation_failed',
+    `${key} is already a project: work for it is a task, never a Lab subject. File it with ` +
+      `cairn add "${title?.trim().replaceAll('"', '\\"') || '<title>'}" --project ${key} (or a parent task with children: ` +
+      `cairn add "<child>" --project ${key} --parent ${key}-<n>). A subject is an idea without a project; ` +
+      `promote it (cairn subject promote LAB-<n> --key KEY) when it becomes one.`,
+    { field: 'project', project: key },
+  )
+
 const PROMOTED_DESCRIPTION_LIMIT = 2_000
 
 /**
@@ -156,7 +188,7 @@ export const promotedNote = (input: {
         .map((m) => `${m.from} → ${m.to}`)
         .join(', ')}.`
     : ' It had no open todos to move.'
-  return `Promoted to project ${input.key} (${input.title}).${todos}${input.stage ? ` Stage: ${input.stage.to}.` : ''}`
+  return `Promoted to project ${input.key} (${input.title}).${todos}${input.stage ? ` Stage: ${input.stage.to}.` : ''} Concluded and archived: its work is the project's tasks.`
 }
 
 // ---------------------------------------------------------------------------

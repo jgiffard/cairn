@@ -10,11 +10,13 @@ import {
   normalizeHandoffStatus,
   noteContentHash,
   parseSubjectRef,
+  promotedConclusion,
   promotedDescription,
   promotedNote,
   refuseHandedOff,
   reservedKeyRefusal,
   stageNoteHash,
+  subjectProjectRefusal,
   subjectRefQuery,
   withHandoff,
 } from './lab-shape'
@@ -199,11 +201,31 @@ describe('promoting a subject', () => {
           { from: 'LT-4', to: 'PGV-1' },
           { from: 'LT-5', to: 'PGV-2' },
         ],
-        stage: { from: 'exploring', to: 'implementing' },
+        stage: { from: 'exploring', to: 'promoted' },
       }),
-    ).toBe('Promoted to project PGV (pgvector). 2 open todos moved: LT-4 → PGV-1, LT-5 → PGV-2. Stage: implementing.')
-    expect(promotedNote({ key: 'PGV', title: 'pgvector', moved: [], stage: null })).toBe(
-      'Promoted to project PGV (pgvector). It had no open todos to move.',
+    ).toBe(
+      'Promoted to project PGV (pgvector). 2 open todos moved: LT-4 → PGV-1, LT-5 → PGV-2. Stage: promoted. ' +
+        "Concluded and archived: its work is the project's tasks.",
     )
+    expect(promotedNote({ key: 'PGV', title: 'pgvector', moved: [], stage: null })).toBe(
+      "Promoted to project PGV (pgvector). It had no open todos to move. Concluded and archived: its work is the project's tasks.",
+    )
+  })
+
+  it('records the project as the conclusion', () => {
+    expect(promotedConclusion('PGV', 'pgvector recall')).toBe('Promoted to project PGV (pgvector recall)')
+  })
+})
+
+describe('a subject is never filed into a project (CAIRN-408)', () => {
+  it('refuses with validation_failed and says it is a task, with the command to file it', async () => {
+    const response = subjectProjectRefusal('DROVE', 'Borrow the "herd" view')
+    expect(response.status).toBe(400)
+    const body = (await response.json()) as { code: string; error: string; field: string; project: string }
+    expect(body).toMatchObject({ code: 'validation_failed', field: 'project', project: 'DROVE' })
+    expect(body.error).toContain('work for it is a task, never a Lab subject')
+    expect(body.error).toContain('cairn add "Borrow the \\"herd\\" view" --project DROVE')
+    expect(body.error).toContain('--parent DROVE-<n>')
+    expect(body.error).toContain('cairn subject promote')
   })
 })

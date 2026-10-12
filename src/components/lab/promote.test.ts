@@ -1,14 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canPromote, keyProblem, promotionStage, suggestProjectKey } from './promote'
-import type { Stage } from './types'
-
-const stage = (name: string, category: Stage['category'], position: number): Stage => ({
-  id: name,
-  name,
-  category,
-  color: '#8a8792',
-  position,
-})
+import { canPromote, keyProblem, suggestProjectKey } from './promote'
 
 describe('suggestProjectKey', () => {
   it.each([
@@ -37,20 +28,6 @@ describe('keyProblem', () => {
     expect(keyProblem('A')).toMatch(/2–10/)
     expect(keyProblem('1AB')).toMatch(/starting with a letter/)
     expect(keyProblem('LAB')).toMatch(/reserved/)
-  })
-})
-
-describe('promotionStage', () => {
-  it('prefers implementing, else the first active stage, else none', () => {
-    const board = [
-      stage('to explore', 'planned', 0),
-      stage('exploring', 'active', 1),
-      stage('Implementing', 'active', 5),
-      stage('done', 'completed', 2),
-    ]
-    expect(promotionStage(board)?.name).toBe('Implementing')
-    expect(promotionStage(board.filter((s) => s.name !== 'Implementing'))?.name).toBe('exploring')
-    expect(promotionStage(board.filter((s) => s.category !== 'active'))).toBeNull()
   })
 })
 

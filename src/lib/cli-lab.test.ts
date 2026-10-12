@@ -412,13 +412,13 @@ describe('cairn subject tag, todo, archive and delete', () => {
 
 describe('cairn subject promote', () => {
   const promoted = {
-    subject: { ...subject, ref: 'LAB-12', stage: { ...stage, name: 'implementing' } },
+    subject: { ...subject, ref: 'LAB-12', stage: { ...stage, name: 'promoted', category: 'completed' }, archived_at: '2026-10-12T10:00:00.000Z' },
     project: { id: 'p-9', key: 'PGV', title: 'Evaluate pgvector for recall', description: null },
     moved: [
       { from: 'LT-4', to: 'PGV-1', title: 'Benchmark 1M rows' },
       { from: 'LT-5', to: 'PGV-2', title: 'Tune m and ef' },
     ],
-    stage: { from: 'exploring', to: 'implementing' },
+    stage: { from: 'exploring', to: 'promoted' },
   }
 
   it('posts the key upper-cased and the title, and says what moved', async () => {
@@ -432,7 +432,8 @@ describe('cairn subject promote', () => {
       body: { key: 'PGV', title: 'pgvector recall' },
     })
     expect(out.stdout).toContain('PGV')
-    expect(out.stdout).toContain('exploring → implementing')
+    expect(out.stdout).toContain('exploring → promoted')
+    expect(out.stderr).toContain('LAB-12 is concluded (promoted) and archived')
     expect(out.stderr).toContain('LT-4 → PGV-1')
     expect(out.stderr).toContain('LT-5 → PGV-2')
   })
@@ -454,6 +455,41 @@ describe('cairn subject promote', () => {
     const out = await run(['subject', 'promote', 'LAB-12', '--key', 'LAB'], await base())
     expect(out.code).toBe(1)
     expect(out.stderr).toContain('reserved')
+  })
+})
+
+describe('a subject in an existing project (CAIRN-408)', () => {
+  const refusal = {
+    status: 400,
+    fail: {
+      error:
+        'DROVE is already a project: work for it is a task, never a Lab subject. File it with cairn add "x" --project DROVE ' +
+        '(or a parent task with children: cairn add "<child>" --project DROVE --parent DROVE-<n>).',
+      code: 'validation_failed',
+      field: 'project',
+      project: 'DROVE',
+    },
+  }
+
+  it.each([
+    ['idea', ['idea', 'x', '--project', 'DROVE'], 'POST /api/v1/subjects'],
+    ['subject add', ['subject', 'add', 'x', '--project', 'DROVE'], 'POST /api/v1/subjects'],
+    ['subject edit', ['subject', 'edit', 'LAB-12', '--project', 'DROVE'], 'PATCH /api/v1/subjects/LAB-12'],
+  ])('%s exits non-zero with the server\'s task hint', async (_, args, call) => {
+    const { seen, base } = serve(() => refusal)
+    const out = await run(args, await base())
+    expect(out.code).toBe(1)
+    expect(out.stderr).toContain('work for it is a task, never a Lab subject')
+    expect(out.stderr).toContain('cairn add "x" --project DROVE')
+    expect(seen.map((s) => `${s.method} ${s.path}`)).toEqual([call])
+    expect(seen[0]!.body).toMatchObject({ project: 'DROVE' })
+  })
+
+  it('edit --project none still unlinks', async () => {
+    const { seen, base } = serve(() => subject)
+    const out = await run(['subject', 'edit', 'LAB-12', '--project', 'none'], await base())
+    expect(out.code).toBe(0)
+    expect(seen[0]!.body).toEqual({ project: null })
   })
 })
 
@@ -628,20 +664,28 @@ describe('the briefing', () => {
     lab: {
       stages: [
         { id: 'a', name: 'to explore', category: 'planned', position: 0, count: 12 },
-        { id: 'b', name: 'exploring', category: 'active', position: 1, count: 0 },
+        { id: 'b', name: 'exploring', category: 'active', position: 1, count: 2 },
         { id: 'c', name: 'implementing', category: 'active', position: 5, count: 5 },
+        { id: 'e', name: 'Internal testing', category: 'active', position: 6, count: 1 },
         { id: 'd', name: 'done', category: 'completed', position: 2, count: 30 },
       ],
-      mine: [{ ...subject, todos: { open: 5, done: 0 }, stage: { ...stage, name: 'implementing' } }],
+      mine: [
+        { ...subject, todos: { open: 5, done: 0 }, stage: { ...stage, name: 'exploring' } },
+        { ...subject, ref: 'LAB-22', title: 'Own e-signature product', todos: { open: 2, done: 0 }, stage: { ...stage, name: 'implementing' } },
+      ],
     },
   }
 
-  it('renders stage counts and the caller\'s subjects, without the finished ones', async () => {
+  it('renders exploration stage counts and the caller\'s subjects, without the finished or delivery ones', async () => {
     const { base } = serve(() => context)
     const out = await run(['context', '--cwd', '/tmp'], await base())
-    expect(out.stdout).toContain('Lab: 12 to explore · 5 implementing')
+    expect(out.stdout).toContain('Lab: 12 to explore · 2 exploring\n')
     expect(out.stdout).not.toContain('30 done')
-    expect(out.stdout).toContain('LAB-12  implementing  Evaluate pgvector for recall -- 5 todos')
+    // A board that still has Croft's delivery stages: they are project work, not counted.
+    expect(out.stdout).not.toMatch(/implementing|internal testing/i)
+    expect(out.stdout).not.toContain('LAB-22')
+    expect(out.stdout).toContain('LAB-12  exploring  Evaluate pgvector for recall -- 5 todos')
+    expect(out.stdout).toContain('Work for an existing project is a task (cairn add "<title>" --project KEY), never a subject.')
     // What an agent needs to know on a Lab instance, in the block it reads.
     expect(out.stdout).toContain('An idea is a subject (cairn idea "<title>")')
     expect(out.stdout).toContain('its todos are tasks (cairn subject todo LAB-n)')
@@ -667,7 +711,7 @@ describe('the briefing', () => {
 
   it('--json is the response, untouched', async () => {
     const out = await run(['context', '--cwd', '/tmp', '--json'], await serve(() => context).base())
-    expect(JSON.parse(out.stdout).lab.stages).toHaveLength(4)
+    expect(JSON.parse(out.stdout).lab.stages).toHaveLength(5)
   })
 })
 

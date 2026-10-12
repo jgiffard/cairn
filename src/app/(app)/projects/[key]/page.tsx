@@ -75,7 +75,7 @@ const ProjectPage = async ({
     entitiesForProject(user.id, project.key),
     listProjects(user.id, { includeArchived: true }),
     // Off, the Lab is not asked at all: nothing lab-shaped is read or drawn.
-    (await isLabEnabled()) ? listSubjects({ project: project.key, limit: 50 }) : [],
+    (await isLabEnabled()) ? listSubjects({ project: project.key, archived: 'include', limit: 50 }) : [],
   ])
   const description = project.description ?? ''
 

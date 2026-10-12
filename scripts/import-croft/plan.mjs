@@ -23,6 +23,14 @@ const TRACKER = /^[a-z][a-z0-9-]{1,31}$/
 const LOG_KINDS = new Set(['note', 'finding', 'decision', 'attempt', 'handoff', 'stage'])
 const ENDED = new Set(['done', 'cancelled'])
 
+/**
+ * Croft's delivery stages, retired by migration 084 (CAIRN-408): delivery is a
+ * project's tasks. Where the target no longer has one, its subjects land in
+ * `promoted`, concluded and archived, instead of bringing the stage back.
+ */
+export const DELIVERY_STAGES = new Set(['to implement', 'implementing', 'internal testing', 'ready for rollout', 'rolled out'])
+export const PROMOTED_STAGE = 'promoted'
+
 /** Croft's `visibility` log kind recorded who could see a subject; the Lab has no such thing. */
 const KIND_MAP = { visibility: 'note' }
 
@@ -176,9 +184,16 @@ export const buildPlan = ({ croft, target, options }) => {
   const stageInserts = []
   const stageUpdates = []
   const targetStages = new Map(target.stages.map((s) => [s.name.toLowerCase(), s]))
+  const promotedStage = targetStages.get(PROMOTED_STAGE)
+  /** Croft stage id → its name, for the delivery stages mapped to `promoted`. */
+  const delivered = new Map()
   for (const s of croft.stages) {
     const hit = targetStages.get(s.name.toLowerCase())
-    if (hit) {
+    if (!hit && promotedStage && DELIVERY_STAGES.has(s.name.toLowerCase())) {
+      stageMap.set(s.id, promotedStage.id)
+      delivered.set(s.id, s.name)
+      stages.push({ name: s.name, action: 'map', detail: `-> ${promotedStage.name}; its subjects are archived` })
+    } else if (hit) {
       stageMap.set(s.id, hit.id)
       const differs = []
       if (hit.category !== s.category) differs.push(`category ${hit.category} -> ${s.category}`)
@@ -391,23 +406,48 @@ export const buildPlan = ({ croft, target, options }) => {
   }
 
   // --- subject rows ----------------------------------------------------
-  const subjectRows = croft.subjects.map((s) => ({
-    id: s.id,
-    number: s.number,
-    title: text('subjects', `LAB-${s.number}`, 'title', s.title),
-    body: text('subjects', `LAB-${s.number}`, 'body', s.body),
-    stage_id: stageMap.get(s.stage_id),
-    owner_user_id: userOf(s.owner_user_id),
-    project_id: s.project_id && projectMap.has(s.project_id) ? s.project_id : null,
-    conclusion: text('subjects', `LAB-${s.number}`, 'conclusion', s.conclusion),
-    concluded_at: s.concluded_at,
-    position: s.position,
-    actor_type: s.actor_type,
-    actor_id: s.actor_id,
-    created_at: s.created_at,
-    updated_at: s.updated_at,
-    archived_at: s.archived_at,
-  }))
+  const projectTitles = new Map(projectRows.map((p) => [p.id, p.title]))
+  const subjectRows = croft.subjects.map((s) => {
+    const projectId = s.project_id && projectMap.has(s.project_id) ? s.project_id : null
+    const conclusion = text('subjects', `LAB-${s.number}`, 'conclusion', s.conclusion)
+    const row = {
+      id: s.id,
+      number: s.number,
+      title: text('subjects', `LAB-${s.number}`, 'title', s.title),
+      body: text('subjects', `LAB-${s.number}`, 'body', s.body),
+      stage_id: stageMap.get(s.stage_id),
+      owner_user_id: userOf(s.owner_user_id),
+      project_id: projectId,
+      conclusion,
+      concluded_at: s.concluded_at,
+      position: s.position,
+      actor_type: s.actor_type,
+      actor_id: s.actor_id,
+      created_at: s.created_at,
+      updated_at: s.updated_at,
+      archived_at: s.archived_at,
+    }
+    const stageName = delivered.get(s.stage_id)
+    if (!stageName) return row
+    // In a delivery stage the target retired: concluded as promoted, off the board.
+    return {
+      ...row,
+      conclusion: conclusion?.trim()
+        ? conclusion
+        : projectId
+          ? `Promoted to project ${projectMap.get(projectId).key} (${projectTitles.get(projectId)})`
+          : `Was in ${stageName} in Croft, a delivery stage this Lab no longer has (CAIRN-408).`,
+      concluded_at: s.concluded_at ?? s.archived_at ?? s.updated_at,
+      archived_at: s.archived_at ?? s.updated_at,
+    }
+  })
+  const promotedSubjects = croft.subjects.filter((s) => delivered.has(s.stage_id)).length
+  if (promotedSubjects) {
+    notes.push(
+      `${promotedSubjects} subject(s) in Croft's delivery stages (${[...new Set(delivered.values())].join(', ')}) go to ` +
+        `${promotedStage.name}, concluded and archived: the target retired those stages (migration 084)`,
+    )
+  }
   for (const s of croft.subjects) {
     if (!stageMap.has(s.stage_id)) err(`S-${s.number} is in a stage that is not in Croft's stage list`)
     if (s.project_id && !projectMap.has(s.project_id)) {
@@ -685,7 +725,7 @@ export const buildPlan = ({ croft, target, options }) => {
   const counts = {
     app_users: { source: croft.users.length, insert: userRows.length, reuse: croft.users.length - userRows.length },
     user_profiles: { source: croft.profiles.length, insert: profileRows.length },
-    lab_stages: { source: croft.stages.length, insert: stageInserts.length, update: stageUpdates.length, reuse: croft.stages.length - stageInserts.length - stageUpdates.length },
+    lab_stages: { source: croft.stages.length, insert: stageInserts.length, update: stageUpdates.length, map: delivered.size, reuse: croft.stages.length - stageInserts.length - stageUpdates.length - delivered.size },
     lab_tags: { source: croft.tags.length, insert: tagRows.length, reuse: croft.tags.length - tagRows.length },
     projects: { source: croft.labProjects.length, insert: projectRows.length },
     subjects: { source: croft.subjects.length, insert: subjectRows.length },

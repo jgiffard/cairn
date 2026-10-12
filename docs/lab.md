@@ -19,11 +19,15 @@ words, as task routes already are.
 ## The lifecycle
 
 ```
-idea ─────────────────────────────────────────►  project
-under construction → to explore → exploring ──┬─► promote: a project with the subject's
- (write-up being written)   (ready to look at)│    open todos as its tasks, subject linked
+idea ───────────────────────────────────────────► project (its tasks are the work)
+under construction → to explore → exploring ──┬─► promoted: a project with the subject's open
+ (write-up being written)   (ready to look at)│   todos as its tasks; subject concluded, archived
                                               └─► done | rejected: concluded, kept as the answer
 ```
+
+**Work for an existing project is a task (or a parent task with children), never a Lab
+subject. A subject is an idea without a project; promote it when it becomes one.** The Lab
+does not track delivery: once there is a project, there are only tasks.
 
 1. **File it.** A new subject (`cairn idea`, `POST /subjects`) lands in the first `planned`
    stage by position. On a default board that is **`under construction`**: the write-up is still
@@ -35,10 +39,16 @@ under construction → to explore → exploring ──┬─► promote: a proje
      searchable as the answer.
    - **Promote** it to a project ([Promoting a subject](#promoting-a-subject)): the subject is
      linked to a new project, its **open** todos move into it and become that project's tasks,
-     and it moves to `implementing`. From then on its work is the project's tasks; the subject
-     stays as the "why".
-4. A subject with a project is listed on that project's page under "From the Lab", and its
-   project chip links to the project.
+     and the subject is **concluded**: it moves to the completed stage `promoted` with the
+     conclusion "Promoted to project KEY (title)" and is archived, off the board and still
+     searchable as the "why". From then on the work is only the project's tasks.
+4. **A subject is never filed into, or linked to, an existing project** (CAIRN-408). That work
+   is a task: `cairn add "<title>" --project KEY`, or a parent task with children. `POST
+   /subjects` and `PATCH /subjects/{ref}` with a `project` are refused with 400
+   `validation_failed` saying so; a project is linked only by promoting.
+5. The project page's "From the Lab" lists the subjects promoted into it, as history
+   (archived, read-only, each linked to its page). A subject linked before CAIRN-408 is
+   listed first, with its stage, until it is unlinked or concluded.
 
 Work that is committed but belongs to another instance or a repository leaves with a
 [hand-off](#hand-off), not a promotion.
@@ -150,6 +160,33 @@ Seeded once, in order, by 071 (on conflict nothing):
 | 7 | ready for rollout | active | `#4f8c86` |
 | 8 | rolled out | completed | `#4e7f5a` |
 
+Croft's delivery stages (`to implement`, `implementing`, `internal testing`, `ready for
+rollout`, `rolled out`) are retired by **084** (CAIRN-408): delivery is a project's tasks,
+not a Lab column. A new instance's board is:
+
+| position | name | category | color |
+|---|---|---|---|
+| 0 | under construction | planned | `#7d8590` |
+| 1 | to explore | planned | `#8a8792` |
+| 2 | exploring | active | `#6b7fa6` |
+| 3 | done | completed | `#5f8a63` |
+| 4 | rejected | dropped | `#a0685f` |
+| 5 | promoted | completed | `#5f7d8c` |
+
+**`promoted`** (084) is where promotion ends a subject. It is `completed`, so entering it needs
+a conclusion (promotion writes one). 084 adds it last on every board that has no stage of that
+name (any case), and sets an existing one's category to `completed`. If an administrator
+removes it, the next promotion creates it again, last.
+
+**The delivery stages on an existing board:** 084 deletes each one that no live (unarchived)
+subject is in. Archived subjects in such a stage move to `promoted` first, keeping their
+conclusion or getting one (`Promoted to project KEY (title)` when they have a project, else
+`Was in <stage> when the Lab's delivery stages were retired (migration 084).`), with the usual
+`stage` log line. A delivery stage that still holds a live subject is **kept**, and named in a
+NOTICE the migration runner prints (`notice: Lab: delivery stages kept, …`). Those subjects
+are project work: move it to tasks, conclude or archive the subjects, then remove the empty
+stage (`cairn lab stages remove "<name>"`). The briefing never counts a delivery stage.
+
 **`under construction`** (CAIRN-384, migration 079) is the first stage of a default board:
 category `planned`, color `#7d8590`, position 0, the other nine shifted down by one. It is seeded
 **only where the stages are still exactly the nine above, untouched** (same names, categories,
@@ -209,7 +246,7 @@ tag_id)` is the join, cascading on both sides; adding or removing a tag touches 
 | `body` | text null, ≤ 200 000 | the write-up, markdown, anyone edits; weight B |
 | `stage_id` | uuid → `lab_stages` **on delete restrict** | a stage in use cannot be deleted |
 | `owner_user_id` | uuid → `app_users` on delete set null | |
-| `project_id` | uuid → `projects` **on delete set null** | optional, a real Cairn project |
+| `project_id` | uuid → `projects` **on delete set null** | set only by promotion (CAIRN-408); older subjects may carry one |
 | `conclusion` | text null, ≤ 20 000 | weight A: it is the recorded answer |
 | `concluded_at` | timestamptz null | set entering a completed/dropped stage, cleared leaving |
 | `position` | int | order within a stage |
@@ -375,7 +412,7 @@ Errors: 400 `validation_failed` naming the unknown stage, tag or project and lis
   "stage": "exploring",                    // optional, name or id; default: first planned stage
   "tags": ["search"],                      // optional, curated names
   "owner": "me",                           // optional; default the caller's human; null = nobody
-  "project": "CAIRN",                      // optional, key or id; null/omitted = none
+  "project": null,                         // null/omitted only: an existing project is refused
   "conclusion": "…",                       // required only when filing into completed/dropped
   "number": 12 }                           // optional, admin only (the importer)
 ```
@@ -384,6 +421,17 @@ Errors: 400 `validation_failed` naming the unknown stage, tag or project and lis
 Errors: 400 `validation_failed` (unknown stage, tag, owner or archived/unknown project; `number`
 from a non-admin is 403 `forbidden`); 400 **`conclusion_required`** `{ stage, category }`;
 409 `conflict` (`number` already taken).
+
+**A `project` naming an existing live project is refused** (CAIRN-408): 400
+`validation_failed` `{ field: "project", project: "DROVE" }`, and nothing is created:
+
+```json
+{ "success": false, "code": "validation_failed", "field": "project", "project": "DROVE",
+  "error": "DROVE is already a project: work for it is a task, never a Lab subject. File it with cairn add \"<title>\" --project DROVE (or a parent task with children: cairn add \"<child>\" --project DROVE --parent DROVE-<n>). A subject is an idea without a project; promote it (cairn subject promote LAB-<n> --key KEY) when it becomes one." }
+```
+
+The same refusal reaches `cairn idea --project`, `cairn subject add --project` and the MCP
+`cairn_subject_add`. File a task instead (`POST /projects/{id}/tasks`).
 
 `cairn idea "<title>"` is this route with no stage.
 
@@ -416,7 +464,10 @@ Rules:
   event `{ ref, title, from, to, category }` in the same transaction.
 - `archived: true` sets `archived_at` (off the board, still searchable and addressable) and
   writes `subject_archived`; `false` clears it and writes `subject_restored`.
-- Changing `project` does not move existing todos; new todos go to the new project.
+- `project: null` unlinks the subject (todos stay where they are). Setting a project is refused
+  with the same 400 `validation_failed` as on create (`cairn subject edit --project KEY`
+  included); naming the project the subject already has changes nothing. Reads never refuse a
+  subject linked before CAIRN-408.
 
 → `Subject`. Errors: 400 `validation_failed`, 400 `conclusion_required`, 404 `not_found`.
 
@@ -445,7 +496,8 @@ In **one transaction**:
    heading, leading headings dropped, cut at about 2 000 characters), then a blank line and
    `From LAB-12.`; with no write-up it is only `From LAB-12.`. An explicit `description` is used
    as sent.
-2. **Links the subject** (`project`). A subject that has a project, or is archived, is refused.
+2. **Links the subject** (`project`), the only way a subject gets one. A subject that has a
+   project, or is archived, is refused.
 3. **Moves its open todos** (`status` not `done` or `cancelled`, those with `subject_id` = this
    subject) into the project with Cairn's task move (`move_task`, 012/047): each takes the next
    number of the new project, in the order it was filed, and keeps a task note
@@ -456,14 +508,17 @@ In **one transaction**:
    written elsewhere that names it goes stale. The mapping is kept in three places: the `moved[]`
    of the response, the subject's `decision` log note (`LT-4 → PGV-1, …`) and a note on each
    moved task (`Moved from LT-4 to PGV-1 …`); the subject's own todos list shows the new refs.
-4. **Sets the stage** to the first `active` stage named `implementing` (any case), else the first
-   `active` stage by position; if there is none the stage is left. A move writes the usual
-   `stage` log note and `subject_stage_changed` event; no move (already there) writes neither.
+4. **Concludes the subject** (CAIRN-408): it moves to the `promoted` stage (completed; created
+   last on the board if an administrator removed it), its conclusion becomes `Promoted to
+   project PGV (pgvector recall)`, `concluded_at` is set, and it is **archived**: off the board,
+   still searchable and addressable, listed on the project's page as history. A move writes
+   the usual `stage` log note and `subject_stage_changed` event; no move (already there)
+   writes neither.
 5. **Writes a `decision` log note** (`Promoted to project PGV (pgvector recall). 2 open todos
-   moved: LT-4 → PGV-1, LT-5 → PGV-2. Stage: implementing.`) and the events **`project_created`**
-   (`{ key, title, from: "LAB-12" }`), `subject_stage_changed` when the stage moved, and
-   **`subject_promoted`** (`{ ref, title, project, project_title, moved }`, with the subject and
-   the new project).
+   moved: LT-4 → PGV-1, LT-5 → PGV-2. Stage: promoted. Concluded and archived: its work is the
+   project's tasks.`) and the events **`project_created`** (`{ key, title, from: "LAB-12" }`),
+   `subject_stage_changed` when the stage moved, **`subject_promoted`** (`{ ref, title, project,
+   project_title, moved }`, with the subject and the new project) and `subject_archived`.
 
 A refusal or failure at any step rolls the whole transaction back: no project, no moved todo.
 
@@ -474,7 +529,7 @@ Errors: 400 `validation_failed` (key shape, `LAB`; `field: "key"`); 403 `forbidd
 still resolves; the subject already has a project; it is archived).
 
 CLI: `cairn subject promote LAB-12 --key PGV [--title T]`. Web: **Start a project** in the
-subject page's rail, with a confirmation dialog.
+subject page's rail, with a confirmation dialog. There is no MCP tool for it.
 
 #### Log: `/api/v1/subjects/{ref}/notes`
 
@@ -537,7 +592,8 @@ mentions this subject, newest first (`limit?` 1–100, default 20).
 
 - A todo is an ordinary task with `subject_id` set. Every task verb works on it unchanged.
 - **Where a new todo is filed:** the subject's project when it has one (and it is not
-  archived); otherwise the instance's **Lab home project**.
+  archived; only a subject linked before CAIRN-408 is live with one); otherwise the
+  instance's **Lab home project**.
 - **The home project** is `lab_settings.home_project_id`. When unset, the first todo creates it
   as an ordinary project keyed **`LT`** ("Lab todos"), owned by the caller, and records it.
   If `LT` is already taken by an unrelated project, nothing is guessed: the todo is refused with
@@ -698,9 +754,13 @@ The CLI uses them when `cairn handoff` is given no `--to`.
 lab?: {
   stages: Array<Stage & { count: number }>   // live (not archived) subjects per stage, every stage, by position
   mine: SubjectSummary[]                      // ≤ 3: live subjects the caller's human owns in an
-                                              // active or planned stage, active first, then most recently updated
+                                              // active or planned stage, active first, then most recently updated;
+                                              // never one in a delivery stage a board still keeps
 }
 ```
+
+The CLI's session-start line counts only exploration stages: planned and active stages with
+subjects in them, delivery stages left out (`Lab: 12 to explore · 2 exploring`).
 
 ## Mentions and links
 
@@ -717,6 +777,7 @@ lab?: {
 |---|---|---|
 | `lab_disabled` | 404 | any Lab route while the Lab is off |
 | `conclusion_required` | 400 | entering or staying in a completed/dropped stage without a conclusion |
+| `validation_failed` | 400 | (CAIRN-408) a subject filed into, or linked to, an existing project: `{ field: "project", project }`, the message names `cairn add` |
 | `stage_in_use` | 409 | deleting a stage that holds subjects |
 | `subject_has_todos` | 409 | deleting a subject with todos, without `todos=detach` |
 | `handed_off` | 409 | a status change on a task whose hand-off is open |
@@ -733,6 +794,7 @@ lab?: {
 | `076_lab_validate_checks.sql` | validates what 071 and 072 added `NOT VALID` |
 | `079_lab_lifecycle.sql` | `under construction`, seeded first only on an untouched default board; `subject_promoted` in the event list (`NOT VALID`, with every earlier kind restated from 077) |
 | `080_validate_subject_promoted.sql` | validates what 079 added `NOT VALID` |
+| `084_lab_promoted_stage.sql` | `promoted` (completed) on every board; the delivery stages deleted where no live subject is in them, their archived subjects moved to `promoted`; kept ones named in a NOTICE (CAIRN-408) |
 
 The constraints 071 and 072 add on `tasks`, `projects` and `task_activity_events` (the
 `subject_id` foreign key, the hand-off checks, the event list) are added `NOT VALID`: enforced
@@ -756,7 +818,7 @@ Tables and columns (all in `public`):
 | table | columns the importer sets |
 |---|---|
 | `lab_settings` | `id = true`, `enabled`, `home_project_id` (upsert on `id`) |
-| `lab_stages` | `id`, `name`, `category`, `color`, `position`, `created_at` (071 seeds Croft's nine: match on `lower(name)` rather than inserting duplicates; 079 also seeds `under construction` at position 0, which the import leaves alone, so it ties with Croft's first stage until an administrator orders it first) |
+| `lab_stages` | `id`, `name`, `category`, `color`, `position`, `created_at` (match on `lower(name)` rather than inserting duplicates; 079 seeds `under construction` at position 0, which the import leaves alone, so it ties with Croft's first stage until an administrator orders it first; see the delivery stages below) |
 | `lab_tags` | `id`, `name` (lower-case), `color`, `position`, `created_at` |
 | `subjects` | `id`, **`number`**, `title`, `body`, `stage_id`, `owner_user_id`, `project_id`, `conclusion`, `concluded_at`, `position`, `actor_type`, `actor_id`, `created_at`, `updated_at`, `archived_at` |
 | `subject_tags` | `subject_id`, `tag_id` |
@@ -765,6 +827,16 @@ Tables and columns (all in `public`):
 | `subject_attachments` | `subject_id`, `filename`, `mime_type`, `size_bytes`, `storage_path`, `sha256`, `uploaded_by`, `user_id`, `created_at` (copy the bytes to the store first) |
 | `tasks` | the usual task columns plus `subject_id` and `handoff_tracker`, `handoff_ref`, `handoff_url`, `handoff_status`, `handoff_synced_at` |
 | `projects` | the usual columns plus `handoff_tracker`, `handoff_target` |
+
+**Croft's delivery stages are mapped to `promoted`, not brought back** (CAIRN-408). A target
+migrated through 084 has no `to implement`, `implementing`, `internal testing`, `ready for
+rollout` or `rolled out`. The importer (`scripts/import-croft/plan.mjs`) does not insert them:
+a Croft subject in one lands in `promoted`, **archived** (`archived_at` = its own, else its
+`updated_at`), concluded (`concluded_at` likewise) and with its conclusion, or else
+`Promoted to project KEY (title)` when it has a lab project, or `Was in <stage> in Croft, a
+delivery stage this Lab no longer has (CAIRN-408).` The plan shows those stages as `map` and
+notes how many subjects moved. A target that still has a delivery stage (084 kept it for a
+live subject) reuses it as before.
 
 Trigger side effects the importer must expect:
 

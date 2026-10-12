@@ -8,15 +8,22 @@ Lab changes. If a Lab verb answers `lab_disabled`, it is off here: use tasks.
 
 Anything being **explored or proved** before it becomes committed work is a **subject**
 (`LAB-12`): a technology to evaluate, a proof of concept, an idea. It has a markdown
-write-up, a log, tags, an owner, optionally a project, a **stage** and, in the end, a
-**conclusion**. Its **todos** are ordinary tasks: every task verb works on them unchanged.
+write-up, a log, tags, an owner, a **stage** and, in the end, a **conclusion**. Its
+**todos** are ordinary tasks: every task verb works on them unchanged.
+
+**Work for an existing project is a task (or a parent task with children), never a Lab
+subject. A subject is an idea without a project; promote it when it becomes one.**
+"Evaluate what to borrow for DROVE" is DROVE's task: `cairn add "<title>" --project DROVE`.
+The server refuses a subject filed into, or linked to, a project (`validation_failed`, with
+that command in the message); `--project none` still unlinks an old one.
 
 An idea is a subject in a `planned` stage. There is no separate idea object.
 
 **idea** (`under construction` → `to explore`) → **exploring** → **promote to a project**, or
 **conclude** as `done` or `rejected`. A new subject starts `under construction`: the write-up
 is still being written. Move it to `to explore` when it is ready to be looked at. Promoting
-makes it a project and its open todos the project's tasks.
+makes it a project, its open todos the project's tasks, and concludes the subject
+(`promoted`, archived). There are no delivery stages: delivery is the project's tasks.
 
 ## The lifecycle
 
@@ -24,11 +31,11 @@ makes it a project and its open todos the project's tasks.
 cairn check "pgvector for recall"       # subjects come back too (--kinds subject narrows)
 cairn idea "pgvector for recall" --tag search --body -   # first planned stage (under construction)
 cairn subject stage LAB-12 "to explore"                  # the write-up is ready to be looked at
-cairn subject add "pgvector for recall" --stage exploring --project ACME --body -
+cairn subject add "pgvector for recall" --stage exploring --body -
 cairn subject todo LAB-12 "benchmark 1M rows" --body -   # an ordinary task of the subject
 cairn subject note LAB-12 - --kind finding|decision|attempt
 cairn subject stage LAB-12 rejected --conclusion -       # a closing stage needs the answer
-cairn subject promote LAB-12 --key PGV [--title T]       # the answer is "build it": a project
+cairn subject promote LAB-12 --key PGV [--title T]       # "build it": a project; the subject ends
 cairn subject show LAB-12 [--full]      # conclusion, todos, write-up, log (cairn show LAB-12 too)
 cairn subject list [--stage S] [--category planned] [--tag t] [--mine] [--project K]
 cairn ideas                             # the planned subjects: what the lab has not started
@@ -55,10 +62,11 @@ cairn ideas                             # the planned subjects: what the lab has
 6. **Or promote.** When the answer is "build it", `subject promote LAB-12 --key KEY` starts
    a project from it, in one step: the subject is linked to the new project, its **open**
    todos move in (each takes a new ref, `LT-4` → `KEY-1`, and notes the old one; closed todos
-   stay) and the subject moves to `implementing`, with a `decision` line in its log. The
-   owner or an administrator does it; the key is 2-10 letters or digits and `LAB` is reserved.
-   Log the decision (why now, what it is) on the subject first, then promote: from then on
-   the work is the project's tasks, and the subject is the "why" behind them.
+   stay), and the subject is **concluded**: stage `promoted`, conclusion "Promoted to project
+   KEY (title)", archived, with a `decision` line in its log. The owner or an administrator
+   does it; the key is 2-10 letters or digits and `LAB` is reserved. Log the decision (why
+   now, what it is) on the subject first, then promote: from then on the work is the
+   project's tasks only, and the archived subject, still searchable, is the "why".
 
 Bodies, notes and conclusions are markdown (`##` headings, lists, paths in backticks); a
 wall of text is refused, and so are secrets.

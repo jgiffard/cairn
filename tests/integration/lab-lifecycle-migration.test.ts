@@ -34,12 +34,16 @@ const apply = async (client: Client, names: string[]) => {
   for (const file of names) await client.query(await readFile(join(process.cwd(), 'migrations', file), 'utf8'))
 }
 
-/** An instance migrated up to, not including, the lifecycle migration. */
+/**
+ * An instance migrated up to, not including, the lifecycle migration. `rest`
+ * stops before 084, which retires the delivery stages these boards still have
+ * (lab-promoted-migration.test.ts).
+ */
 const before079 = async () => {
   const client = await freshDatabase()
   const all = await files()
   await apply(client, all.filter((f) => f < '079_'))
-  return { client, rest: all.filter((f) => f >= '079_') }
+  return { client, rest: all.filter((f) => f >= '079_' && f < '084_') }
 }
 
 const board = async (client: Client) =>

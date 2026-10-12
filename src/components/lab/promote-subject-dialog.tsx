@@ -14,7 +14,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 /**
  * Starts a project from a subject. The dialog says what will move before it
  * does: the open todos change ref (they take numbers from the new project),
- * closed ones stay, and the subject moves to the project's working stage.
+ * closed ones stay, and the subject is concluded as promoted and archived:
+ * from then on the work is the project's tasks.
  *
  * `onClose` must be stable (the Escape listener is bound to it).
  */
@@ -22,15 +23,12 @@ export const PromoteSubjectDialog = ({
   subjectRef,
   subjectTitle,
   openTodos,
-  stageName,
   onClose,
   onPromoted,
 }: {
   subjectRef: string
   subjectTitle: string
   openTodos: number
-  /** The stage promotion will move it to; null when the board has no active stage. */
-  stageName: string | null
   onClose: () => void
   onPromoted: (key: string) => void
 }) => {
@@ -86,11 +84,11 @@ export const PromoteSubjectDialog = ({
         </h2>
         <div id="promote-subject-body" className="text-fg-muted mt-2 flex flex-col gap-2 text-ui leading-relaxed">
           <p>
-            Creates the project and links {subjectRef} to it.
+            Creates the project from {subjectRef}.
             {openTodos > 0
               ? ` Its ${plural(openTodos, 'open todo')} move${openTodos === 1 ? 's' : ''} into the project and take new refs; closed todos stay where they are.`
               : ' It has no open todos to move.'}
-            {stageName ? ` The subject moves to ${stageName}.` : ''}
+            {` ${subjectRef} is then concluded as promoted and archived: off the board, still searchable as the why.`}
           </p>
         </div>
 

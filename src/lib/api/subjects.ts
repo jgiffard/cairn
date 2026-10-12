@@ -22,15 +22,19 @@ import {
 import {
   conclusionMissing,
   conclusionRequired,
+  DELIVERY_STAGES,
   isConcluding,
   nextConcludedAt,
   noteContentHash,
   parseSubjectRef,
+  PROMOTED_STAGE,
+  promotedConclusion,
   promotedDescription,
   promotedNote,
   reservedKeyRefusal,
   stageNoteHash,
   stageNoteText,
+  subjectProjectRefusal,
   subjectRef,
   type SubjectNoteKind,
 } from './lab-shape'
@@ -258,11 +262,19 @@ const resolveOwner = async (owner: string | null | undefined, actor: Actor): Pro
     : { ok: false, response: fail(person.code === 'not_found' ? 'validation_failed' : person.code, person.error, { field: 'owner' }) }
 }
 
-/** `undefined` → leave it; `null` → none; anything else → that live project, or a refusal. */
-const resolveSubjectProject = async (ref: string | null | undefined): Promise<Outcome<string | null | undefined>> => {
+/**
+ * `undefined` → leave it; `null` → none. A project is never set here (CAIRN-408):
+ * work for an existing project is a task, and a subject gets its project only by
+ * being promoted. Naming the project it already has changes nothing.
+ */
+const resolveSubjectProject = async (
+  ref: string | null | undefined,
+  context: { title?: string; current?: string | null } = {},
+): Promise<Outcome<string | null | undefined>> => {
   if (ref === undefined || ref === null) return { ok: true, value: ref }
   const found = await resolveProject<{ id: string; key: string; status: string }>(ref, 'id, key, status')
   if (!found) return { ok: false, response: fail('validation_failed', `No project ${ref}.`, { field: 'project' }) }
+  if (context.current && found.project.id === context.current) return { ok: true, value: undefined }
   if (found.project.status === 'archived') {
     return {
       ok: false,
@@ -271,7 +283,7 @@ const resolveSubjectProject = async (ref: string | null | undefined): Promise<Ou
       }),
     }
   }
-  return { ok: true, value: found.project.id }
+  return { ok: false, response: subjectProjectRefusal(found.project.key, context.title) }
 }
 
 const setTags = async (client: PoolClient, subjectId: string, tags: Tag[]) => {
@@ -330,7 +342,7 @@ export const createSubject = async (actor: Actor, input: CreateSubjectInput): Pr
   const { tags, unknown } = await findTags(input.tags ?? [])
   if (unknown.length) return { ok: false, response: await unknownTags(unknown) }
 
-  const project = await resolveSubjectProject(input.project)
+  const project = await resolveSubjectProject(input.project, { title: input.title })
   if (!project.ok) return project
 
   const owner = await resolveOwner(input.owner, actor)
@@ -424,7 +436,10 @@ export const updateSubject = async (actor: Actor, subject: Subject, patch: Updat
     tags = found.tags
   }
 
-  const project = await resolveSubjectProject(patch.project)
+  const project = await resolveSubjectProject(patch.project, {
+    title: patch.title ?? subject.title,
+    current: subject.project?.id ?? null,
+  })
   if (!project.ok) return project
 
   let ownerId: string | null | undefined
@@ -660,23 +675,36 @@ export type Promoted = {
   project: { id: string; key: string; title: string; description: string | null }
   /** Each open todo that moved, by its old and new ref, in the order they were filed. */
   moved: { from: string; to: string; title: string }[]
-  /** Null when the subject was already in the stage promotion picks (or the board has no active stage). */
+  /** The move to `promoted`; null when the subject was already there. */
   stage: { from: string; to: string } | null
 }
 
 /** The owner of the subject, or an administrator: the same people who may delete it. */
 export const canPromoteSubject = canDeleteSubject
 
-/** The stage a promoted subject moves to: `implementing`, else the first active stage, else none. */
-const promotionStage = async (db: Db): Promise<Stage | null> =>
-  rows<Stage>(
-    await db.query(
-      `select id, name, category, color, position from lab_stages
-        where category = 'active'
-        order by (lower(name) = 'implementing') desc, position, name
-        limit 1`,
-    ),
-  )[0] ?? null
+/**
+ * The stage a promoted subject ends in: `promoted` (084 seeds it), created
+ * last on the board when an administrator has removed it.
+ */
+const promotionStage = async (db: Db): Promise<Stage> => {
+  const find = async () =>
+    rows<Stage>(
+      await db.query(`select id, name, category, color, position from lab_stages where lower(name) = $1`, [
+        PROMOTED_STAGE.name,
+      ]),
+    )[0]
+  const found = await find()
+  if (found) return found
+  await db.query(
+    `insert into lab_stages (name, category, color, position)
+     select $1, $2, $3, coalesce(max(position) + 1, 0) from lab_stages
+     on conflict do nothing`,
+    [PROMOTED_STAGE.name, PROMOTED_STAGE.category, PROMOTED_STAGE.color],
+  )
+  const created = await find()
+  if (!created) throw new Error('the promoted stage could not be created')
+  return created
+}
 
 /** Thrown inside the transaction so a refusal after the first write rolls all of it back. */
 class PromotionRefused extends Error {
@@ -692,7 +720,9 @@ const refusal = (message: string, extra: Record<string, unknown> = {}) =>
  * Starts a project from a subject, in one transaction: the project, the link,
  * the subject's open todos moved into it (Cairn's own task move, so each takes
  * a number from the new project and keeps a note of where it came from), the
- * stage, the log and the events.
+ * log and the events. Promoting concludes the subject (CAIRN-408): it moves to
+ * `promoted` with the project as its conclusion and is archived, off the board
+ * and still searchable as the why. From then on the work is the project's tasks.
  *
  * Closed todos stay where they were: they are the exploration's history.
  */
@@ -747,29 +777,28 @@ export const promoteSubject = async (
       )[0]!
 
       const target = await promotionStage(client)
-      const stage = target && target.id !== subject.stage.id ? { from: subject.stage.name, to: target.name } : null
+      const stage = target.id !== subject.stage.id ? { from: subject.stage.name, to: target.name } : null
       const now = new Date().toISOString()
-      if (target && stage) {
-        await client.query(
-          `update subjects
-              set project_id = $2, stage_id = $3, concluded_at = $4,
-                  position = (select coalesce(max(position) + 1, 0) from subjects where stage_id = $3)
-            where id = $1`,
-          [
-            subject.id,
-            created.id,
-            target.id,
-            nextConcludedAt({
-              fromCategory: subject.stage.category,
-              toCategory: target.category,
-              concludedAt: subject.concluded_at,
-              now,
-            }),
-          ],
-        )
-      } else {
-        await client.query('update subjects set project_id = $2 where id = $1', [subject.id, created.id])
-      }
+      await client.query(
+        `update subjects
+            set project_id = $2, stage_id = $3, conclusion = $4, concluded_at = $5, archived_at = $6,
+                position = case when stage_id = $3 then position
+                                else (select coalesce(max(position) + 1, 0) from subjects where stage_id = $3) end
+          where id = $1`,
+        [
+          subject.id,
+          created.id,
+          target.id,
+          promotedConclusion(created.key, created.title),
+          nextConcludedAt({
+            fromCategory: subject.stage.category,
+            toCategory: target.category,
+            concludedAt: subject.concluded_at,
+            now,
+          }),
+          now,
+        ],
+      )
 
       const todos = rows<{ id: string; number: number; key: string; title: string }>(
         await client.query(
@@ -820,18 +849,21 @@ export const promoteSubject = async (
       const events: { subject_id: string | null; event: string; data: Record<string, unknown> }[] = [
         { subject_id: null, event: 'project_created', data: { key: created.key, title: created.title, from: subject.ref } },
       ]
-      if (target && stage) {
+      if (stage) {
         events.push({
           subject_id: subject.id,
           event: 'subject_stage_changed',
           data: { ...about, from: stage.from, to: stage.to, category: target.category },
         })
       }
-      events.push({
-        subject_id: subject.id,
-        event: 'subject_promoted',
-        data: { ...about, project: created.key, project_title: created.title, moved: moved.length },
-      })
+      events.push(
+        {
+          subject_id: subject.id,
+          event: 'subject_promoted',
+          data: { ...about, project: created.key, project_title: created.title, moved: moved.length },
+        },
+        { subject_id: subject.id, event: 'subject_archived', data: about },
+      )
       for (const event of events) {
         await client.query(
           `insert into task_activity_events (owner_user_id, subject_id, project_id, task_id, actor_type, actor_id, event, data)
@@ -1042,7 +1074,11 @@ export type LabBrief = {
   mine: SubjectSummary[]
 }
 
-/** How full each stage is, and at most three live subjects the caller's human owns — active before planned. */
+/**
+ * How full each stage is, and at most three live subjects the caller's human
+ * owns — active before planned, never in a delivery stage a board still keeps
+ * (delivery is a project's tasks, not exploration).
+ */
 export const labBrief = async (userId: string): Promise<LabBrief> => {
   const stages = rows<Stage & { count: number }>(
     await pool().query(
@@ -1059,9 +1095,10 @@ export const labBrief = async (userId: string): Promise<LabBrief> => {
         where s.archived_at is null
           and s.owner_user_id = $1
           and st.category in ('active', 'planned')
+          and lower(st.name) <> all($2::text[])
         order by (st.category = 'active') desc, s.updated_at desc
         limit 3`,
-      [userId],
+      [userId, DELIVERY_STAGES],
     ),
   ).map(toSummary)
   return { stages, mine }

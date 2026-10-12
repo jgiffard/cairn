@@ -9,6 +9,18 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Breaking
+
+- **A Lab subject can no longer be filed into, or linked to, an existing project** (CAIRN-408). `POST /api/v1/subjects` and `PATCH /api/v1/subjects/{ref}` with a `project` naming a live project answer 400 `validation_failed` (`{ field: "project", project }`), and so do `cairn idea --project`, `cairn subject add --project`, `cairn subject edit --project` and the MCP `cairn_subject_add`. Work for an existing project is a task: file it with `cairn add "<title>" --project KEY` (or a parent task with children, `--parent KEY-n`), as the refusal says. A subject gets a project only by being promoted. `project: null` (`--project none`) still unlinks, and subjects linked before this release read as before.
+
+### Changed
+
+- **Promoting a subject concludes it** (CAIRN-408). `POST /subjects/{ref}/promote` and `cairn subject promote` still create the project and move the open todos in, then move the subject to the completed stage `promoted` (created if missing) with the conclusion "Promoted to project KEY (title)", and archive it: off the board, still searchable as the why. It no longer moves to `implementing`. The log line and `subject_promoted` stay; `subject_archived` is written too.
+- **Migration 084** adds `promoted` to every Lab board and deletes Croft's delivery stages (`to implement`, `implementing`, `internal testing`, `ready for rollout`, `rolled out`) wherever no live subject is in them; archived subjects in them move to `promoted`. A delivery stage that still holds a live subject is kept and named in a NOTICE, which the migration runner now prints: move that work to tasks, conclude or archive the subjects, then `cairn lab stages remove "<name>"`. A new instance's board is under construction, to explore, exploring, done, rejected, promoted. The Croft importer maps those stages to `promoted` (subjects archived, concluded) instead of recreating them.
+- The session-start Lab line counts only exploration stages (`Lab: 12 to explore · 2 exploring`); delivery-stage counts and subjects are gone from it, and it says work for a project is a task.
+- The project page's "From the Lab" lists the subjects promoted into it as history (archived, linked). The subject page no longer offers a project to pick; an old link can still be removed.
+- The skill, `AGENTS.md`, the CLI help and `docs/lab.md` say: work for an existing project is a task (or a parent task with children), never a Lab subject; a subject is an idea without a project, promoted when it becomes one.
+
 ## [0.23.0] — 2026-10-12
 
 - **Cairn is now MIT licensed** (it was the Sustainable Use Licence). `LICENSE-MIT-HISTORY` is gone, and `package.json` says `MIT` (CAIRN-406). 0.23.0 and later are MIT; 0.6.0 to 0.22.6 were released under the Sustainable Use Licence and keep the terms they shipped with. Nothing in an install changes.

@@ -535,6 +535,8 @@ const TOOLS = [
     description:
       'File a subject: something the lab should explore or prove. With no stage it is an ' +
       'idea, in the first planned stage. Its todos are ordinary tasks (cairn_subject_todo). ' +
+      'Work for an existing project is a task (cairn_add, or a parent task with children), ' +
+      'never a Lab subject: a subject is an idea without a project. ' +
       'Check first (cairn_check, cairn_subject_list): do not file what the lab concluded.',
     inputSchema: {
       type: 'object',
@@ -544,7 +546,10 @@ const TOOLS = [
         stage: { type: 'string', description: 'A stage name; omit for an idea.' },
         tags: { type: 'array', items: { type: 'string' }, description: 'Curated tag names.' },
         owner: { type: 'string', description: '"me", an email, a name or an id; "none" for nobody.' },
-        project: { type: 'string', description: 'A project key it belongs to, or "none".' },
+        project: {
+          type: 'string',
+          description: 'Leave out. An existing project is refused: its work is a task (cairn_add). A subject gets a project only by being promoted.',
+        },
         conclusion: {
           type: 'string',
           description: 'Required only when filing straight into a completed or dropped stage.',
