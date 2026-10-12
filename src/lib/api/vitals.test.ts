@@ -80,6 +80,88 @@ describe('assess', () => {
     expect(codes(v)).toContain('agent-silent')
   })
 
+  /**
+   * CAIRN-409: CAIRN-385 moved history written as `· monty.torr@gmail.com` to
+   * croft, where that account is called Cal, and the old label was reported
+   * silent while the new one wrote all day.
+   */
+  describe('judges a writer by who they are, not what they are called', () => {
+    const cal = 'u-cal'
+    const mael = 'u-mael'
+
+    it('does not read a relabel as silence', () => {
+      // Given 2672 writes last week as label A and 300 today as label B, same user and runtime
+      const v = healthy({
+        agents: [
+          { agent: 'claude-code · monty.torr@gmail.com', actorType: 'agent', userId: cal, lastSeenAt: '2026-10-11T06:33:00Z', recent: 0, baseline: 2672 },
+          { agent: 'claude-code · Cal', actorType: 'agent', userId: cal, lastSeenAt: '2026-10-12T14:50:00Z', recent: 300, baseline: 0 },
+        ],
+      })
+      // When vitals is assessed
+      // Then nobody is called silent
+      expect(codes(v)).not.toContain('agent-silent')
+    })
+
+    it('still flags one person gone quiet while another writes on the same runtime', () => {
+      // Given user X wrote on claude-code last week and not today, while user Y writes today
+      const v = healthy({
+        agents: [
+          { agent: 'claude-code · Mael', actorType: 'agent', userId: mael, lastSeenAt: '2026-10-09T08:00:00Z', recent: 0, baseline: 400 },
+          { agent: 'claude-code · Cal', actorType: 'agent', userId: cal, lastSeenAt: '2026-10-12T14:50:00Z', recent: 300, baseline: 2000 },
+        ],
+      })
+      // When vitals is assessed
+      const silent = assess(v).filter((f) => f.code === 'agent-silent')
+      // Then X, and only X, is flagged
+      expect(silent).toHaveLength(1)
+      expect(silent[0]?.message).toMatch(/^claude-code · Mael has written nothing in 24h, against 400/)
+    })
+
+    it('names the label the writer was last seen under', () => {
+      // Given one writer under two labels, silent today under both
+      const v = healthy({
+        agents: [
+          { agent: 'codex · monty.torr@gmail.com', actorType: 'agent', userId: cal, lastSeenAt: '2026-10-08T10:00:00Z', recent: 0, baseline: 500 },
+          { agent: 'codex · Cal', actorType: 'agent', userId: cal, lastSeenAt: '2026-10-11T09:00:00Z', recent: 0, baseline: 30 },
+        ],
+      })
+      // When vitals is assessed
+      const silent = assess(v).filter((f) => f.code === 'agent-silent')
+      // Then it is one warning, under the current label, against the summed week
+      expect(silent).toHaveLength(1)
+      expect(silent[0]?.message).toMatch(/^codex · Cal has written nothing in 24h, against 530 /)
+    })
+
+    it('keeps the old behaviour on a server that sends no identity', () => {
+      // Given the payload of a server older than 083: no userId, no lastSeenAt
+      const v = healthy({
+        agents: [
+          { agent: 'claude-code · monty.torr@gmail.com', actorType: 'agent', recent: 0, baseline: 2672 },
+          { agent: 'claude-code · Cal', actorType: 'agent', recent: 300, baseline: 0 },
+        ],
+      })
+      // When vitals is assessed
+      const silent = assess(v).filter((f) => f.code === 'agent-silent')
+      // Then each label is its own actor, exactly as before
+      expect(silent).toHaveLength(1)
+      expect(silent[0]?.message).toContain('claude-code · monty.torr@gmail.com')
+    })
+
+    it('does not merge a person with a runtime of theirs', () => {
+      // Given the same user as a person in the web UI and as a runtime
+      const v = healthy({
+        agents: [
+          { agent: 'Cal', actorType: 'human', userId: cal, lastSeenAt: '2026-10-12T14:00:00Z', recent: 5, baseline: 90 },
+          { agent: 'openclaw · Cal', actorType: 'agent', userId: cal, lastSeenAt: '2026-10-10T14:00:00Z', recent: 0, baseline: 900 },
+        ],
+      })
+      // Then the runtime is still flagged
+      expect(assess(v).filter((f) => f.code === 'agent-silent').map((f) => f.message)).toEqual([
+        expect.stringMatching(/^openclaw · Cal /),
+      ])
+    })
+  })
+
   it('counts work that was closed with no trace that anyone was on it', () => {
     // CAIRN-135 measured 36% and nothing has recomputed it since.
     const v = healthy({ tasks: { opened: 4, closed: 8, stalled: 1, held: 2, closedWithoutTrace: 3 } })
@@ -513,6 +595,37 @@ describe('assessSignals', () => {
           [{ agent: 'codex · Other', actorType: 'agent', recent: 5, baseline: 5 }],
         ),
       ).toHaveLength(1)
+    })
+
+    /** CAIRN-409, as croft showed it on 2026-10-12. */
+    it('does not call a label gone while the same person writes that runtime under another', () => {
+      // Given openclaw · Cal last seen 10-03, the same user's openclaw writing last week under the
+      // email, and Mael's claude-code silent with nobody of his writing it
+      const gone = absentAgentsStillGone(
+        [
+          { agent: 'claude-code · Mael', userId: 'u-mael', lastSeenAt: hoursAgo(246) },
+          { agent: 'openclaw · Cal', userId: 'u-cal', lastSeenAt: hoursAgo(224) },
+        ],
+        [
+          { agent: 'openclaw · monty.torr@gmail.com', actorType: 'agent', userId: 'u-cal', recent: 0, baseline: 13 },
+          { agent: 'claude-code · Cal', actorType: 'agent', userId: 'u-cal', recent: 1243, baseline: 277 },
+        ],
+      )
+      // Then only Mael is gone
+      expect(gone.map((a) => a.agent)).toEqual(['claude-code · Mael'])
+    })
+
+    it('names one person\'s gone runtime once, under its latest label', () => {
+      // Given one user's codex absent under two labels
+      const gone = absentAgentsStillGone(
+        [
+          { agent: 'codex · dev@x', userId: 'u-dev', lastSeenAt: hoursAgo(600) },
+          { agent: 'codex · Dev', userId: 'u-dev', lastSeenAt: hoursAgo(400) },
+        ],
+        [],
+      )
+      // Then it is one line, under the label it was last seen with
+      expect(gone.map((a) => a.agent)).toEqual(['codex · Dev'])
     })
   })
 

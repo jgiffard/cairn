@@ -51,7 +51,16 @@ export type Vitals = {
   knowledgeWritten: number
   // actorType is optional because a server that predates migration 050 does
   // not send it. Absent means "assume runtime" — see the check below.
-  agents: { agent: string; actorType?: string; recent: number; baseline: number }[]
+  // userId and lastSeenAt are optional for the same reason, from 083: without
+  // them a label is its own identity, which is what it was before.
+  agents: {
+    agent: string
+    actorType?: string
+    userId?: string | null
+    lastSeenAt?: string | null
+    recent: number
+    baseline: number
+  }[]
   /**
    * What cairn_vitals cannot see: claim liveness, the reaper, the summariser
    * and session volume per runtime and host, knowledge verification. From
@@ -104,7 +113,7 @@ export type VitalsSignals = {
     lastReleaseAt: string | null
     maintenanceLastWriteAt: string | null
   }
-  absentAgents: { agent: string; lastSeenAt: string }[]
+  absentAgents: { agent: string; userId?: string | null; lastSeenAt: string }[]
   knowledge: {
     current: number
     neverVerified: number
@@ -210,7 +219,9 @@ export const assess = (v: Vitals): Finding[] => {
   // (which can run Codex underneath it) and Claude Code continue writing.
   // Keep this as a qualified warning, not an alarm: silence is a prompt to
   // verify runtime usage, never proof that hooks or keys are broken.
-  for (const agent of v.agents) {
+  //
+  // Judged per writer, not per label (CAIRN-409): a relabel is not silence.
+  for (const agent of writersByIdentity(v.agents)) {
     // A person is not a runtime that has gone quiet. The owner of an instance
     // appears in this list because he clicks things in the web UI, and telling
     // him his hooks may be broken is both wrong and the kind of wrong that
@@ -348,6 +359,48 @@ const pct = (n: number, d: number) => `${Math.round((n / d) * 100)}%`
  */
 export const runtimeOfActor = (actorId: string) => (actorId.split(' · ')[0] ?? actorId).trim()
 
+type Writer = Pick<Vitals['agents'][number], 'agent' | 'actorType' | 'userId'>
+
+/**
+ * Who a row was written by: the user and the runtime, which a label only
+ * names. `<runtime> · <display name>` changes whenever the name does, so one
+ * person's claude-code can be two labels in a week (CAIRN-409: CAIRN-385
+ * moved history written as `· monty.torr@gmail.com` to an instance where that
+ * account is called Cal).
+ *
+ * With no userId (a server older than 083, or an event with no owner), the
+ * label is the identity, which is what it was before.
+ */
+const identityOf = (w: Writer) =>
+  w.userId
+    ? `${w.actorType ?? 'agent'}\u0000${w.actorType === 'human' ? '' : runtimeOfActor(w.agent)}\u0000${w.userId}`
+    : `label\u0000${w.actorType ?? ''}\u0000${w.agent}`
+
+const seenAt = (iso: string | null | undefined) => {
+  const at = iso ? Date.parse(iso) : Number.NaN
+  return Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at
+}
+
+/**
+ * The agent rows merged per writer, counts summed, named by the label that
+ * writer was most recently seen under.
+ */
+export const writersByIdentity = (agents: Vitals['agents']): Vitals['agents'] => {
+  const groups = new Map<string, Vitals['agents']>()
+  for (const a of agents) {
+    const key = identityOf(a)
+    groups.set(key, [...(groups.get(key) ?? []), a])
+  }
+  return [...groups.values()].map((rows) => {
+    const latest = rows.reduce((best, r) => (seenAt(r.lastSeenAt) > seenAt(best.lastSeenAt) ? r : best))
+    return {
+      ...latest,
+      recent: rows.reduce((n, r) => n + r.recent, 0),
+      baseline: rows.reduce((n, r) => n + r.baseline, 0),
+    }
+  })
+}
+
 /**
  * CAIRN-354: `claude-code` (bare, last seen 2026-09-15) was reported as gone
  * while `claude-code · monty.torr@gmail.com` — the same runtime under the label
@@ -358,17 +411,30 @@ export const runtimeOfActor = (actorId: string) => (actorId.split(' · ')[0] ?? 
  * carried their owner. A qualified label that has gone quiet is still said even
  * while another owner's copy of the same runtime writes, because in a shared
  * workspace that is exactly the silence worth hearing about.
+ *
+ * CAIRN-409: unless it is the same person. With a userId from 083, a label is
+ * not gone while its user's copy of the runtime writes under another one, and
+ * one person's runtime is one line, under the label it was last seen with.
  */
 export const absentAgentsStillGone = (
   absent: VitalsSignals['absentAgents'],
   agents: Vitals['agents'],
 ) => {
-  const writing = new Set(
-    agents
-      .filter((a) => a.actorType !== 'human' && (a.recent > 0 || a.baseline > 0))
-      .map((a) => runtimeOfActor(a.agent)),
+  const active = agents.filter((a) => a.actorType !== 'human' && (a.recent > 0 || a.baseline > 0))
+  const writing = new Set(active.map((a) => runtimeOfActor(a.agent)))
+  const writers = new Set(active.filter((a) => a.userId).map(identityOf))
+  const gone = absent.filter(
+    (a) =>
+      !(a.userId && writers.has(identityOf(a))) &&
+      (a.agent.includes(' · ') || !writing.has(runtimeOfActor(a.agent))),
   )
-  return absent.filter((a) => a.agent.includes(' · ') || !writing.has(runtimeOfActor(a.agent)))
+  const latest = new Map<string, VitalsSignals['absentAgents'][number]>()
+  for (const a of gone) {
+    const key = identityOf(a)
+    const seen = latest.get(key)
+    if (!seen || seenAt(a.lastSeenAt) > seenAt(seen.lastSeenAt)) latest.set(key, a)
+  }
+  return gone.filter((a) => latest.get(identityOf(a)) === a)
 }
 
 /**
