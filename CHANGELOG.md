@@ -9,9 +9,13 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-10-12
+
 ### Breaking
 
 - **A Lab subject can no longer be filed into, or linked to, an existing project** (CAIRN-408). `POST /api/v1/subjects` and `PATCH /api/v1/subjects/{ref}` with a `project` naming a live project answer 400 `validation_failed` (`{ field: "project", project }`), and so do `cairn idea --project`, `cairn subject add --project`, `cairn subject edit --project` and the MCP `cairn_subject_add`. Work for an existing project is a task: file it with `cairn add "<title>" --project KEY` (or a parent task with children, `--parent KEY-n`), as the refusal says. A subject gets a project only by being promoted. `project: null` (`--project none`) still unlinks, and subjects linked before this release read as before.
+  - **If you call the API, CLI or MCP to put work into a project:** a script that sends `project` on `POST`/`PATCH /subjects`, or runs `cairn idea|subject add|subject edit --project KEY`, now fails with that 400. Switch it to `cairn add "<title>" --project KEY` (or `--parent KEY-n` under a parent task), or `POST /api/v1/projects/{id}/tasks`.
+  - **Migration 084 removes Croft's delivery stages** (`to implement`, `implementing`, `internal testing`, `ready for rollout`, `rolled out`) from every Lab board. Any of them that still holds a live subject is kept, and a NOTICE in the deploy log names it. Move that work to tasks, then run `cairn lab stages remove "<name>"`.
 
 ### Changed
 
@@ -2210,7 +2214,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/montytorr/cairn/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/montytorr/cairn/compare/v0.22.6...v0.23.0
 [0.22.6]: https://github.com/montytorr/cairn/compare/v0.22.5...v0.22.6
 [0.22.5]: https://github.com/montytorr/cairn/compare/v0.22.4...v0.22.5
