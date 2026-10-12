@@ -156,3 +156,77 @@ describe('cairn_vitals', () => {
     }
   }, 120_000)
 })
+
+/**
+ * CAIRN-409 (migration 083): a label names a writer, it is not one. CAIRN-385
+ * moved history written as `claude-code · monty.torr@gmail.com` to croft, where
+ * that account is called Cal, and the old label read as a silent runtime. What
+ * a unit test cannot see is that both lists actually carry the writer.
+ */
+describe('cairn_vitals and cairn_vitals_signals carry the writer', () => {
+  it('stamps every label with its user and when it was last seen', async () => {
+    const client = await freshDatabase()
+    try {
+      const cal = randomUUID()
+      const mael = randomUUID()
+      const project = randomUUID()
+      const task = randomUUID()
+      for (const id of [cal, mael]) {
+        await client.query('insert into app_users (id,email,encrypted_password) values ($1,$2,$3)', [
+          id,
+          `${id}@test`,
+          'x',
+        ])
+      }
+      await client.query(
+        `insert into projects (id,owner_user_id,key,title) values ($1,$2,'VIT','Vitals')`,
+        [project, cal],
+      )
+      await client.query(
+        `insert into tasks (id,project_id,number,title,status,type,actor_id)
+         values ($1,$2,1,'a task','doing','chore','seed')`,
+        [task, project],
+      )
+
+      const write = (owner: string, actorId: string, hoursAgo: number) =>
+        client.query(
+          `insert into task_activity_events (owner_user_id,task_id,actor_type,actor_id,event,created_at)
+           values ($1,$2,'agent',$3,'status_changed', now() - make_interval(hours => $4))`,
+          [owner, task, actorId, hoursAgo],
+        )
+
+      await write(cal, 'claude-code · monty.torr@gmail.com', 72)
+      await write(cal, 'claude-code · monty.torr@gmail.com', 30)
+      await write(cal, 'claude-code · Cal', 1)
+      // seen before the week before, and not since
+      await write(cal, 'openclaw · Cal', 24 * 10)
+      await write(mael, 'claude-code · Mael', 24 * 10)
+
+      const { rows } = await client.query('select cairn_vitals($1, 24) as v', [cal])
+      const agents = (rows[0].v.agents ?? []) as {
+        agent: string
+        userId: string | null
+        lastSeenAt: string
+        recent: number
+        baseline: number
+      }[]
+      const byName = new Map(agents.map((a) => [a.agent, a]))
+      // Each label is still its own row, for "Who wrote"; both carry the same user.
+      expect(byName.get('claude-code · monty.torr@gmail.com')).toMatchObject({ userId: cal, recent: 0, baseline: 2 })
+      expect(byName.get('claude-code · Cal')).toMatchObject({ userId: cal, recent: 1, baseline: 0 })
+      const seen = (name: string) => Date.parse(byName.get(name)?.lastSeenAt ?? '')
+      expect(seen('claude-code · Cal')).toBeGreaterThan(seen('claude-code · monty.torr@gmail.com'))
+
+      const signals = await client.query('select cairn_vitals_signals($1, 24) as v', [cal])
+      const absent = (signals.rows[0].v.absentAgents ?? []) as { agent: string; userId: string | null }[]
+      expect(absent).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ agent: 'openclaw · Cal', userId: cal }),
+          expect.objectContaining({ agent: 'claude-code · Mael', userId: mael }),
+        ]),
+      )
+    } finally {
+      await client.end()
+    }
+  }, 120_000)
+})

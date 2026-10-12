@@ -9,6 +9,10 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Vitals no longer reports a relabelled runtime as silent.** `agent-silent` and the "Not heard from" list now group writes by runtime and user instead of by the actor label. A label is `<runtime> · <display name>` and changes when the name does: CAIRN-385 moved history written as `· monty.torr@gmail.com` to croft, where that account is called Cal, so croft reported `claude-code` and `codex` as silent while both wrote all day as `· Cal`. Migration 083 makes `cairn_vitals` and `cairn_vitals_signals` return each label's `userId` (the writer's user id from `owner_user_id`) and `lastSeenAt`. A warning names the label the writer was last seen under. A second person going quiet on the same runtime is still flagged. A server without 083 sends no `userId`, so each label stays its own actor, as before (CAIRN-409).
+
 ## [0.23.0] — 2026-10-12
 
 - **Cairn is now MIT licensed** (it was the Sustainable Use Licence). `LICENSE-MIT-HISTORY` is gone, and `package.json` says `MIT` (CAIRN-406). 0.23.0 and later are MIT; 0.6.0 to 0.22.6 were released under the Sustainable Use Licence and keep the terms they shipped with. Nothing in an install changes.
