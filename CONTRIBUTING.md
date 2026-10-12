@@ -87,24 +87,8 @@ what protects server-side reads.
 
 ## Licence
 
-Contributions are made under the [Sustainable Use License](./LICENSE), the licence this
-project ships under. You keep the copyright in what you write; you are granting the
-project the right to use it under those terms.
-
-The boundary is a commit, not a date: `303a9f9`, merged 2026-09-19 at 20:18 UTC.
-Everything contributed before it was contributed under MIT and is acknowledged as such —
-see [`LICENSE-MIT-HISTORY`](./LICENSE-MIT-HISTORY).
-
-**A pull request opened before that commit was offered under MIT, whenever it merges.**
-You read the licence that was in the repository when you wrote the patch, and we are not
-going to claim you agreed to one that arrived afterwards. If you would rather your
-contribution were under the current licence instead, say so on the pull request and it
-will be recorded there. This is not hypothetical: [#43](https://github.com/montytorr/cairn/pull/43)
-was opened twenty-one minutes before the licence changed, which is how we found that a
-date and a tag were two different lines and neither one covered an open branch.
-
-If you contributed under MIT and would rather your work were **not** relicensed, say so in
-an issue and it will be honoured.
+Cairn is [MIT licensed](./LICENSE), and contributions are accepted under the same licence:
+what you send in goes out under MIT. You keep the copyright in what you write.
 
 ## Credit
 
@@ -141,7 +125,7 @@ CLI from the latest *published GitHub release*, so it moves on only once that ex
 **Publishing the release moves `production`.** The `production` workflow fast-forwards the
 `production` branch to the tag as soon as a (non-pre-)release is published, and refuses a tag
 that does not descend from it. Nobody pushes `production` by hand. It is what downstream
-installs follow: Dispofi's mirror merges it every morning and deploys when it moved. `main`
+installs follow: a downstream mirror can merge it every morning and deploy when it moved. `main`
 keeps deploying our own instance on every merge, so a merge reaches a downstream only once
 it is released. To re-point it by hand, run the workflow with a tag
 (`gh workflow run production.yml -f tag=v0.14.3`).

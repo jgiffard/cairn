@@ -1,9 +1,9 @@
 # Moving projects between instances
 
 `scripts/move-projects.mjs` moves projects from one Cairn instance to another, with everything
-that hangs off them. It was written for CAIRN-385: personal Cairn (`tasks.montytorr.com`)
+that hangs off them. It was written for CAIRN-385: personal Cairn (`cairn.example.com`)
 keeps AT, BB, CCS, FDE, FLASHB, ONE, OD and TD, and every other project goes to croft
-(`croft.montytorr.com`).
+(`lab.example.com`).
 
 It is dry-run by default. A dry run is the whole move on both databases, checked, then
 rolled back. Ids, numbers, actors and timestamps are kept, so a moved task keeps its ref.
@@ -76,7 +76,7 @@ node scripts/move-projects.mjs \
   --from 'postgresql://…/cairn' --to 'postgresql://…/cairn_lab' \
   --keep AT,BB,CCS,FDE,FLASHB,ONE,OD,TD \
   --move AA,BOTHY,CAIRN,CC,CIVIC,CROFT,DROVE,HOL,HOLC,KDP,MTC,POD,QRY,TRIG \
-  --from-url https://tasks.montytorr.com --to-url https://croft.montytorr.com \
+  --from-url https://cairn.example.com --to-url https://lab.example.com \
   --lab-origin 'postgresql://…/croft_origin' --lab-mapping croft-mapping.json \
   --from-files-dir /srv/cairn/attachments --to-files-dir /srv/cairn-lab/attachments \
   --mapping-file move-mapping.json --report-file move-report.json        # add --apply to write
@@ -136,7 +136,7 @@ node scripts/move-projects.mjs \
   --from 'postgresql://…/cairn_lab' --to 'postgresql://…/cairn' \
   --keep AA,BOTHY,CAIRN,CC,CIVIC,CROFT,DROVE,HOL,HOLC,KDP,LT,MTC,POD,QRY,TRIG \
   --move AOD,BU,TBV,TS,WAWPL \
-  --from-url https://croft.montytorr.com --to-url https://tasks.montytorr.com \
+  --from-url https://lab.example.com --to-url https://cairn.example.com \
   --from-name croft --to-name 'personal Cairn' --task CAIRN-389 \
   --from-files-dir /srv/cairn-lab/attachments --to-files-dir /srv/cairn/attachments
 ```

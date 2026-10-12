@@ -1,29 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import { bodyProblems, MAX_BARE_CODE, UNSTRUCTURED_BODY, WALL_PARAGRAPH } from './markdown-body'
 
-/** A real body an agent filed, trimmed. Every rule has something to say about it. */
+/** A real body's shape, names invented. Every rule has something to say about it. */
 const WALL = `Feasibility answered 2026-09-29 (no code yet).
-WHY EMPTY TODAY: hermes Production → Appels = call.controller.search (hermes src/app/_server/db/controllers/call.controller.js:303-304): non-managers (roles.hermes ∉ MANAGER_ROLES) get aircallCall.internalUserId = me. CS calls carry internalUserId = mutuelle@ (659d6acf…) or nothing (dispofi-ai only writes aircallCall.internalUserId when dealId && qualifyingData; analyseCall.js maps ...) ...
-PROPOSED (query-time, hermes only, no pipeline change, no backfill): for users with roles.hermes = CUSTOMER_SERVICE and an aircallUserId, match { 'user.id': Number(aircallUserId) } instead ...`
+WHY EMPTY TODAY: ledger Reports → Invoices = invoice.controller.search (ledger src/app/_server/db/controllers/invoice.controller.js:303-304): non-managers (roles.ledger ∉ MANAGER_ROLES) get billingRecord.ownerUserId = me. Support invoices carry ownerUserId = billing@ (0a1b2c3d…) or nothing (billing-sync only writes billingRecord.ownerUserId when accountId && approvedTotal; syncInvoice.js maps ...) ...
+PROPOSED (query-time, ledger only, no pipeline change, no backfill): for users with roles.ledger = SUPPORT_AGENT and a billingUserId, match { 'owner.id': Number(billingUserId) } instead ...`
 
 /** The same facts, written as markdown. */
 const REWRITTEN = `Feasibility answered 2026-09-29 (no code yet).
 
 ## Why empty today
 
-hermes Production → Appels is \`call.controller.search\`
-(\`src/app/_server/db/controllers/call.controller.js:303-304\`):
+ledger Reports → Invoices is \`invoice.controller.search\`
+(\`src/app/_server/db/controllers/invoice.controller.js:303-304\`):
 
-- Non-managers (\`roles.hermes\` ∉ \`MANAGER_ROLES\`) get \`aircallCall.internalUserId = me\`.
-- CS calls carry \`internalUserId\` = mutuelle@ (\`659d6acf…\`) or nothing: dispofi-ai only
-  writes \`aircallCall.internalUserId\` when \`dealId && qualifyingData\`; \`analyseCall.js\` maps …
+- Non-managers (\`roles.ledger\` ∉ \`MANAGER_ROLES\`) get \`billingRecord.ownerUserId = me\`.
+- Support invoices carry \`ownerUserId\` = billing@ (\`0a1b2c3d…\`) or nothing: billing-sync only
+  writes \`billingRecord.ownerUserId\` when \`accountId && approvedTotal\`; \`syncInvoice.js\` maps …
 
 ## Proposed
 
-Query-time, hermes only, no pipeline change, no backfill.
+Query-time, ledger only, no pipeline change, no backfill.
 
-For users with \`roles.hermes = CUSTOMER_SERVICE\` and an \`aircallUserId\`, match
-\`{ 'user.id': Number(aircallUserId) }\` instead.
+For users with \`roles.ledger = SUPPORT_AGENT\` and a \`billingUserId\`, match
+\`{ 'owner.id': Number(billingUserId) }\` instead.
 `
 
 const prose = (words: number) =>
@@ -47,11 +47,11 @@ describe('bodyProblems: the body that prompted it (CAIRN-312)', () => {
   it('names the code loose in the prose, in reading order, capped', () => {
     const bare = problems.filter((p) => p.startsWith('Wrap '))
     expect(bare).toEqual([
-      'Wrap `call.controller.search` in backticks — it is code.',
-      'Wrap `src/app/_server/db/controllers/call.controller.js:303-304` in backticks — it is code.',
+      'Wrap `invoice.controller.search` in backticks — it is code.',
+      'Wrap `src/app/_server/db/controllers/invoice.controller.js:303-304` in backticks — it is code.',
       'Wrap `MANAGER_ROLES` in backticks — it is code.',
-      'Wrap `aircallCall.internalUserId` in backticks — it is code.',
-      'Wrap `analyseCall.js` in backticks — it is code.',
+      'Wrap `billingRecord.ownerUserId` in backticks — it is code.',
+      'Wrap `syncInvoice.js` in backticks — it is code.',
     ])
     expect(bare).toHaveLength(MAX_BARE_CODE)
     expect(problems.at(-1)).toMatch(/^…and 2 more like them/)
