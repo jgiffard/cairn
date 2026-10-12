@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.22.6] — 2026-10-12
+
 ### Changed
 
 - The Cairn skill is split into a core `SKILL.md` (the lifecycle, under 8,000 bytes, which is
