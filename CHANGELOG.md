@@ -9,7 +9,7 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
-- Cairn is now MIT licensed (was the Sustainable Use Licence). `LICENSE-MIT-HISTORY` is gone, and `package.json` says `MIT` (CAIRN-406).
+- **Cairn is now MIT licensed** (it was the Sustainable Use Licence). `LICENSE-MIT-HISTORY` is gone, and `package.json` says `MIT` (CAIRN-406). 0.23.0 and later are MIT; 0.6.0 to 0.22.6 were released under the Sustainable Use Licence and keep the terms they shipped with. Nothing in an install changes.
 - `AGENTS.md` cut from 7.9 KB to a short contract that points at the skill's `reference.md` for detail; its early-warning test now fails above 6,000 bytes (CAIRN-405).
 
 ## [0.22.6] — 2026-10-12
@@ -2192,7 +2192,9 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.22.4...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.22.6...HEAD
+[0.22.6]: https://github.com/montytorr/cairn/compare/v0.22.5...v0.22.6
+[0.22.5]: https://github.com/montytorr/cairn/compare/v0.22.4...v0.22.5
 [0.22.4]: https://github.com/montytorr/cairn/compare/v0.22.3...v0.22.4
 [0.22.3]: https://github.com/montytorr/cairn/compare/v0.22.2...v0.22.3
 [0.22.2]: https://github.com/montytorr/cairn/compare/v0.22.1...v0.22.2
