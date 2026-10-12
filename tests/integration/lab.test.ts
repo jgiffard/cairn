@@ -563,10 +563,12 @@ describe('promoting a subject to a project', () => {
     expect(promoted.data.subject).toMatchObject({ stage: { name: 'promoted' }, conclusion: `Promoted to project ${key} (Bun CLI)` })
 
     const log = await call(listLogRoute, `/subjects/${filed.data.ref}/notes`, { ref: filed.data.ref })
-    expect(log.data[0]).toMatchObject({
-      kind: 'decision',
-      note: `Promoted to project ${key} (Bun CLI). It had no open todos to move. Stage: promoted. Concluded and archived: its work is the project's tasks.`,
-    })
+    // The stage note and the decision share the transaction's moment, so find it by kind.
+    expect(log.data.filter((n: { kind: string }) => n.kind === 'decision')).toEqual([
+      expect.objectContaining({
+        note: `Promoted to project ${key} (Bun CLI). It had no open todos to move. Stage: promoted. Concluded and archived: its work is the project's tasks.`,
+      }),
+    ])
   })
 
   it('creates the promoted stage, last on the board, when an administrator removed it', async () => {
