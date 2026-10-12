@@ -797,6 +797,6 @@ Trigger side effects the importer must expect:
   text finds its subject.
 - **Hand-off checks:** tracker and ref together; tracker shape; a `cairn` tracker needs an
   https `handoff_url`. Croft's 35 links to personal Cairn must be given their URL
-  (`https://tasks.montytorr.com/projects/<KEY>/tasks/<n>`) or the insert fails.
+  (`https://<host>/projects/<KEY>/tasks/<n>`) or the insert fails.
 - No activity events are written by triggers; insert `task_activity_events` rows (with
   `subject_id`) yourself if the history should show in the feed.

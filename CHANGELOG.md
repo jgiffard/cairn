@@ -9,6 +9,7 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+- Cairn is now MIT licensed (was the Sustainable Use Licence). `LICENSE-MIT-HISTORY` is gone, and `package.json` says `MIT` (CAIRN-406).
 - `AGENTS.md` cut from 7.9 KB to a short contract that points at the skill's `reference.md` for detail; its early-warning test now fails above 6,000 bytes (CAIRN-405).
 
 ## [0.22.6] — 2026-10-12

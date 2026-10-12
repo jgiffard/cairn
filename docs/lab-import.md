@@ -69,7 +69,7 @@ project, in Croft's order, so `T-13` may become `TRIG-1`. The mapping file recor
 
 The real run is Cal's decision and happens once. In this order:
 
-1. **Take a fresh backup of Croft** (`croft-backup` on clawdius) and check that the file exists
+1. **Take a fresh backup of Croft** (`croft-backup` on its host) and check that the file exists
    and restores. The importer only reads Croft, but it is the only copy of a retired product.
 2. **Put Croft in read-only mode, or stop its writes, for the duration.** A subject or todo
    made after the dump would be left behind, and a number taken after the dry run would not be

@@ -14,7 +14,7 @@ import type { MemoryUse } from '@/lib/api/vitals'
  */
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }))
 vi.mock('@/lib/data', () => ({
-  currentUser: async () => ({ id: 'user-1', email: 'cal@dispofi.fr', role: 'admin' }),
+  currentUser: async () => ({ id: 'user-1', email: 'owner@example.com', role: 'admin' }),
 }))
 
 const vitals = {
