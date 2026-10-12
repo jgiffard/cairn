@@ -98,4 +98,6 @@ Read the one you need, when you need it; the lifecycle above is enough to work.
   parents, duplicates**; **briefing and `next`**; **output, exit codes** (exit 10: several
   instances, never pick one yourself) and rare verbs.
 - `lab.md`: **Lab on** (`cairn lab`)? Exploring an idea is a subject, `LAB-n`. Read it first.
+  Work for an existing project is a task (or a parent task with children), never a Lab
+  subject. A subject is an idea without a project; promote it when it becomes one.
   `cairn handoff` (work leaving this instance) is there too.

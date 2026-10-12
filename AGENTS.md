@@ -101,4 +101,6 @@ It pairs a key per runtime — `CAIRN_API_KEY_CODEX`, `CAIRN_API_KEY_CLAUDE_CODE
 the key *is* the identity.
 
 Full verb reference: `cairn --help`. Machine-readable API: `GET /api/v1/openapi.json`.
-The Lab and hand-off: `skills/cairn/lab.md`, `docs/lab.md`.
+The Lab and hand-off: `skills/cairn/lab.md`, `docs/lab.md`. Work for an existing project is a
+task (or a parent task with children), never a Lab subject. A subject is an idea without a
+project; promote it when it becomes one.

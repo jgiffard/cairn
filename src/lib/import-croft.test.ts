@@ -513,6 +513,49 @@ describe('stages, tags and projects', () => {
     expect(p.notes.join('\n')).toContain('extra')
   })
 
+  it('maps the delivery stages a target retired (084) to promoted, concluding and archiving their subjects', () => {
+    const croft = fixture()
+    const trig = croft.labProjects.find((p) => p.name === 'Trig')
+    if (!trig) throw new Error('no lab project')
+    subject(croft, 14).project_id = trig.id
+    const target = freshTarget()
+    target.stages = [
+      ...target.stages.filter((s) => !['to implement', 'implementing', 'internal testing', 'ready for rollout', 'rolled out'].includes(s.name)),
+      { id: '70000000-0000-4000-8000-0000000000ee', name: 'promoted', category: 'completed', color: '#5f7d8c', position: 9 },
+    ]
+    const promoted = target.stages.at(-1)!
+    const p = run(croft, target)
+
+    expect(p.counts.lab_stages).toMatchObject({ source: 9, insert: 0, map: 5, reuse: 4 })
+    expect(p.rows.lab_stages.insert).toEqual([])
+    expect(p.stages.filter((s) => s.action === 'map').map((s) => s.name)).toEqual([
+      'to implement',
+      'implementing',
+      'internal testing',
+      'ready for rollout',
+      'rolled out',
+    ])
+    const row = (n: number) => p.rows.subjects.find((s) => s.number === n)
+    expect(row(14)).toMatchObject({
+      stage_id: promoted.id,
+      conclusion: 'Promoted to project TRIG (Trig)',
+      archived_at: subject(croft, 14).updated_at,
+      concluded_at: subject(croft, 14).updated_at,
+    })
+    expect(row(11)).toMatchObject({
+      stage_id: promoted.id,
+      conclusion: 'Was in internal testing in Croft, a delivery stage this Lab no longer has (CAIRN-408).',
+    })
+    expect(row(1)).toMatchObject({ archived_at: null, conclusion: null })
+    expect(p.notes.join('\n')).toContain('7 subject(s) in Croft\'s delivery stages')
+  })
+
+  it('reuses a delivery stage the target still has (084 kept it for live subjects)', () => {
+    const p = run()
+    expect(p.counts.lab_stages).toMatchObject({ map: 0, reuse: 9 })
+    expect(p.rows.subjects.find((s) => s.number === 14)?.archived_at).toBeNull()
+  })
+
   it('creates a Cairn project for each lab project, keyed by its cairn hand-off target', () => {
     const p = run()
     expect(p.projects.map((x) => x.key).sort()).toEqual(['CROFT', 'LT', 'TRIG'])

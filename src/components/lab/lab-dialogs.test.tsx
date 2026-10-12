@@ -117,7 +117,7 @@ describe('the Lab’s dialogs', () => {
   })
 
   describe('PromoteSubjectDialog', () => {
-    const render = async (props: { openTodos?: number; stageName?: string | null; onPromoted?: (key: string) => void } = {}) => {
+    const render = async (props: { openTodos?: number; onPromoted?: (key: string) => void } = {}) => {
       const onPromoted = props.onPromoted ?? vi.fn()
       await act(async () =>
         root.render(
@@ -125,7 +125,6 @@ describe('the Lab’s dialogs', () => {
             subjectRef="LAB-12"
             subjectTitle="Evaluate pgvector for recall"
             openTodos={props.openTodos ?? 0}
-            stageName={props.stageName === undefined ? 'implementing' : props.stageName}
             onClose={() => {}}
             onPromoted={onPromoted}
           />,
@@ -140,7 +139,7 @@ describe('the Lab’s dialogs', () => {
       expect(inputs()[0]!.value).toBe('EPR')
       expect(inputs()[1]!.value).toBe('Evaluate pgvector for recall')
       expect(document.body.textContent).toContain('2 open todos move into the project')
-      expect(document.body.textContent).toContain('The subject moves to implementing.')
+      expect(document.body.textContent).toContain('LAB-12 is then concluded as promoted and archived')
     })
 
     it('keeps the button off for a key the server would refuse, and names why', async () => {

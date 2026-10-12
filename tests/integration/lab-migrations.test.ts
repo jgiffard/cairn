@@ -48,7 +48,7 @@ afterAll(async () => {
 })
 
 describe('the Lab migrations', () => {
-  it('reserve LAB on an instance that has no LAB project, and seed the stages, under construction first', async () => {
+  it('reserve LAB on an instance that has no LAB project, and seed the stages: under construction first, promoted last, no delivery stages', async () => {
     const client = await freshDatabase()
     await apply(client, await migrationFiles())
 
@@ -61,11 +61,7 @@ describe('the Lab migrations', () => {
       'exploring:active',
       'done:completed',
       'rejected:dropped',
-      'to implement:planned',
-      'implementing:active',
-      'internal testing:active',
-      'ready for rollout:active',
-      'rolled out:completed',
+      'promoted:completed',
     ])
     expect((await client.query('select enabled from lab_settings')).rows).toEqual([{ enabled: false }])
   })
@@ -144,7 +140,8 @@ describe('the Lab migrations', () => {
       await client.query(`select pg_get_functiondef('activity_feed(uuid, timestamptz, int, text, text, text[])'::regprocedure) as d`)
     ).rows[0].d as string
     expect(feed.split('select * from subject_notes_').length - 1).toBe(1)
-    expect((await client.query('select count(*)::int as n from lab_stages')).rows[0].n).toBe(10)
+    // A second 071 seeds Croft's delivery stages again; the second 084 retires them again.
+    expect((await client.query('select count(*)::int as n from lab_stages')).rows[0].n).toBe(6)
   })
 
   it('never reuse a subject number, and let an explicit one move the counter', async () => {

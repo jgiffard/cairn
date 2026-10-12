@@ -1,4 +1,4 @@
-import { canDeleteSubject, type Stage, type SubjectSummary } from './types'
+import { canDeleteSubject, type SubjectSummary } from './types'
 
 /** The key shape `POST /projects` and promotion both take. */
 export const PROJECT_KEY = /^[A-Z][A-Z0-9]{1,9}$/
@@ -23,12 +23,6 @@ export const suggestProjectKey = (title: string): string => {
   const key = words.length === 1 ? first.slice(0, 4) : words.slice(0, 4).map((w) => w[0]).join('')
   const upper = key.toUpperCase()
   return /^[A-Z]/.test(upper) && upper.length >= 2 ? upper : ''
-}
-
-/** The stage a promotion lands in: `implementing`, else the first active one, else none (the stage stays). */
-export const promotionStage = (stages: Stage[]): Stage | null => {
-  const active = [...stages].filter((s) => s.category === 'active').sort((a, b) => a.position - b.position)
-  return active.find((s) => s.name.toLowerCase() === 'implementing') ?? active[0] ?? null
 }
 
 /** Who may promote, and when it makes sense: the owner or an administrator, on a live subject with no project. */

@@ -14,7 +14,7 @@ import { mutate } from '@/lib/api/mutate'
 import { useMutate } from '@/lib/api/use-mutate'
 import { cn } from '@/lib/utils'
 import { DeleteSubjectDialog } from './delete-subject-dialog'
-import { canPromote, promotionStage } from './promote'
+import { canPromote } from './promote'
 import { ProjectLabel } from './project-label'
 import { PromoteSubjectDialog } from './promote-subject-dialog'
 import { StageBadge } from './stage'
@@ -22,7 +22,7 @@ import { TagChip } from './tag-chip'
 import { filterTags, tagToCreate } from './tag-picker'
 import { useStageMove } from './use-stage-move'
 import {
-  canDeleteSubject, isConcluding, type ProjectRef, type Stage, type Subject, type Tag,
+  canDeleteSubject, isConcluding, type Stage, type Subject, type Tag,
 } from './types'
 
 /**
@@ -176,13 +176,11 @@ export const SubjectProperties = ({
   subject,
   stages,
   tags,
-  projects,
   isAdmin,
 }: {
   subject: Subject
   stages: Stage[]
   tags: Tag[]
-  projects: ProjectRef[]
   isAdmin: boolean
 }) => {
   const router = useRouter()
@@ -321,34 +319,32 @@ export const SubjectProperties = ({
           )}
         </EditableRow>
 
-        <EditableRow
-          label="Project"
-          select={
-            <select
-              value={subject.project?.id ?? ''}
-              aria-label="Project"
-              disabled={busy}
-              onChange={(e) => void patch({ project: e.target.value || null })}
-              className="select-overlay"
-            >
-              <option value="">None</option>
-              {subject.project && !projects.some((p) => p.id === subject.project?.id) ? (
+        {/* A project is set only by promoting (CAIRN-408): work for an existing
+            project is a task. A subject linked before that can still be unlinked. */}
+        {subject.project ? (
+          <EditableRow
+            label="Project"
+            select={
+              <select
+                value={subject.project.id}
+                aria-label="Project"
+                disabled={busy}
+                onChange={(e) => void patch({ project: e.target.value || null })}
+                className="select-overlay"
+              >
+                <option value="">None</option>
                 <option value={subject.project.id}>{subject.project.title}</option>
-              ) : null}
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title}
-                </option>
-              ))}
-            </select>
-          }
-        >
-          {subject.project ? (
+              </select>
+            }
+          >
             <ProjectLabel project={subject.project} className="text-ui" />
-          ) : (
+          </EditableRow>
+        ) : (
+          <div className={ROW}>
+            <span className={ROW_LABEL}>Project</span>
             <span className="text-fg-subtle text-ui">None</span>
-          )}
-        </EditableRow>
+          </div>
+        )}
 
         <div className={cn(ROW, 'h-auto items-start py-1')}>
           <span className={cn(ROW_LABEL, 'pt-[0.2rem]')}>Tags</span>
@@ -461,7 +457,7 @@ export const SubjectProperties = ({
               <FolderPlus size={13} aria-hidden /> Start a project
             </Button>
             <p className="text-fg-subtle text-meta">
-              Links it to a new project and moves its open todos in.
+              Moves its open todos into a new project, then concludes and archives it.
             </p>
           </div>
         ) : null}
@@ -497,7 +493,6 @@ export const SubjectProperties = ({
           subjectRef={subject.ref}
           subjectTitle={subject.title}
           openTodos={subject.todos.open}
-          stageName={promotionStage(stages)?.name ?? null}
           onClose={closePromote}
           onPromoted={promoted}
         />

@@ -176,6 +176,11 @@ const untouched = async (db: string) => {
 
 let fixture: Fixture
 
+/** Croft's delivery stages, which a target migrated through 084 no longer has (CAIRN-408). */
+const DELIVERY = ['to implement', 'implementing', 'internal testing', 'ready for rollout', 'rolled out']
+const deliveryStageIds = () =>
+  new Set((fixture.stages ?? []).filter((s) => DELIVERY.includes(String(s.name))).map((s) => s.id))
+
 beforeAll(async () => {
   // A Croft database: its own schema, then the fixture.
   await createDb(names.croftTemplate)
@@ -305,6 +310,8 @@ describe('--apply', () => {
     expect(rows).toHaveLength(19)
     for (const want of fixture.subjects ?? []) {
       const got = rows.find((r) => r.number === want.number)
+      // In a delivery stage the target retired (084): concluded and archived, checked below.
+      if (deliveryStageIds().has(want.stage_id)) continue
       expect(got, `S-${String(want.number)}`).toMatchObject({
         id: want.id,
         title: want.title,
@@ -320,20 +327,36 @@ describe('--apply', () => {
         expect(got?.[col] ?? null, `S-${String(want.number)} ${col}`).toBe(want[col] ?? null)
       }
     }
-    // Archived subjects are in, and stay archived.
-    expect(rows.filter((r) => r.archived_at !== null)).toHaveLength(2)
+    // Archived subjects are in, and stay archived; the 7 in delivery stages join them.
+    expect(rows.filter((r) => r.archived_at !== null)).toHaveLength(9)
   })
 
-  it('reconciles the seeded stages by name instead of duplicating them', async () => {
-    expect(await count(target, 'lab_stages')).toBe(10)
+  it('puts the subjects of Croft\'s delivery stages in promoted, concluded and archived (CAIRN-408)', async () => {
+    const delivered = (fixture.subjects ?? []).filter((s) => deliveryStageIds().has(s.stage_id))
+    expect(delivered).toHaveLength(7)
+    const rows = await sql(
+      target,
+      `select x.*, s.name as stage from subjects x join lab_stages s on s.id = x.stage_id where x.number = any($1::int[])`,
+      [delivered.map((s) => s.number)],
+    )
+    for (const want of delivered) {
+      const got = rows.find((r) => r.number === want.number)
+      expect(got, `S-${String(want.number)}`).toMatchObject({ id: want.id, title: want.title, stage: 'promoted' })
+      expect(got?.conclusion).toMatch(/^Was in (implementing|internal testing) in Croft/)
+      expect(got?.archived_at).toBe(want.updated_at)
+      expect(got?.concluded_at).toBe(want.updated_at)
+    }
+  })
+
+  it('reconciles the seeded stages by name instead of duplicating them, and does not bring back retired ones', async () => {
+    expect(await count(target, 'lab_stages')).toBe(6)
     const used = await sql(
       target,
       `select s.name, count(*)::int as n from subjects x join lab_stages s on s.id = x.stage_id group by s.name order by s.name`,
     )
     expect(Object.fromEntries(used.map((r) => [r.name, r.n]))).toEqual({
       'to explore': 12,
-      implementing: 5,
-      'internal testing': 2,
+      promoted: 7,
     })
   })
 

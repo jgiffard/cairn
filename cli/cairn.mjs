@@ -3051,7 +3051,10 @@ const LAB_HELP = `  the lab — exploring and proving ideas before they become w
     an idea is a subject (LAB-n), not a task; its todos are ordinary tasks (--subject);
     closing one — a completed or dropped stage — needs a conclusion; work that leaves
     this instance is \`cairn handoff\` (above)
-    cairn idea "<title>" [--body -] [--tag a,b] [--owner me] [--project K]
+    work for an existing project is a task (or a parent task with children), never a Lab
+    subject: cairn add "<title>" --project K. A subject is an idea without a project;
+    promote it when it becomes one
+    cairn idea "<title>" [--body -] [--tag a,b] [--owner me]
                                    file an idea: a subject in the first planned stage
     cairn ideas [--tag t] [--mine] [--project K]    what the lab has not started
     cairn subject list ["<text>"] [--stage S] [--category planned|active|completed|dropped]
@@ -3059,8 +3062,9 @@ const LAB_HELP = `  the lab — exploring and proving ideas before they become w
                                    todos is open/closed; answered: it has a conclusion
     cairn subject show LAB-12 [--full]   conclusion, todos, write-up and log (a digest);
                                    \`cairn show LAB-12\` follows to it
-    cairn subject add "<title>" [--stage S] [--tag a,b] [--owner me] [--project K] [--body -]
-    cairn subject edit LAB-12 [--title T] [--body -] [--owner me|none] [--project K|none]
+    cairn subject add "<title>" [--stage S] [--tag a,b] [--owner me] [--body -]
+    cairn subject edit LAB-12 [--title T] [--body -] [--owner me|none] [--project none]
+                                   --project none unlinks it; a project is set only by promote
     cairn subject stage LAB-12 "<stage>" [--conclusion -]
                                    a completed or dropped stage needs the conclusion:
                                    what the lab concluded, and why
@@ -3077,8 +3081,9 @@ const LAB_HELP = `  the lab — exploring and proving ideas before they become w
     cairn list --subject LAB-12 [--project K]   its todos
     cairn subject mentions LAB-12 [--limit N]   the tasks that name it
     cairn subject promote LAB-12 --key KEY [--title T]
-                                   start a project from it: links it, moves its open todos
-                                   in, sets the stage (the owner's or an administrator's)
+                                   start a project from it: moves its open todos in as the
+                                   project's tasks, then concludes it (stage promoted) and
+                                   archives it, still searchable (the owner's or an admin's)
     cairn subject archive|restore LAB-12        off the board, still searchable
     cairn subject delete LAB-12 --confirm LAB-12 [--detach-todos]
                                    for mistakes; refuses while it has todos, and never
@@ -3880,13 +3885,21 @@ const positionFlag = () => {
   return n
 }
 
-/** The Lab block of the briefing: stage counts, then the caller's own subjects, only when there is any. */
+/**
+ * Croft's delivery stages (retired by migration 084 where they were empty).
+ * Delivery is a project's tasks, so a board that still has them is not
+ * counted in the briefing: the Lab line is exploration only.
+ */
+const DELIVERY_STAGES = new Set(['to implement', 'implementing', 'internal testing', 'ready for rollout', 'rolled out'])
+const isDeliveryStage = (stage) => DELIVERY_STAGES.has(String(stage?.name ?? '').trim().toLowerCase())
+
+/** The Lab block of the briefing: exploration stage counts, then the caller's own subjects, only when there is any. */
 const labBriefing = (lab) => {
   if (!lab || typeof lab !== 'object') return []
   const counted = [...(lab.stages ?? [])]
-    .filter((s) => Number(s.count) > 0 && ['planned', 'active'].includes(s.category))
+    .filter((s) => Number(s.count) > 0 && ['planned', 'active'].includes(s.category) && !isDeliveryStage(s))
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-  const mine = (lab.mine ?? []).slice(0, 3)
+  const mine = (lab.mine ?? []).filter((s) => !isDeliveryStage(s.stage)).slice(0, 3)
   if (!counted.length && !mine.length) return []
   const out = ['', `Lab: ${counted.length ? counted.map((s) => `${s.count} ${s.name}`).join(' · ') : 'nothing open'}`]
   for (const s of mine) {
@@ -3895,6 +3908,7 @@ const labBriefing = (lab) => {
   }
   out.push(
     '  An idea is a subject (cairn idea "<title>"); its todos are tasks (cairn subject todo LAB-n); closing it needs a conclusion.',
+    '  Work for an existing project is a task (cairn add "<title>" --project KEY), never a subject.',
     '  Work that leaves this instance: cairn handoff <ref> --to <instance>:<KEY>|github:<owner>/<repo>.',
   )
   return out
@@ -5262,7 +5276,7 @@ const commands = {
     if (verb === 'add') {
       const title = need(
         positional[1],
-        'usage: cairn subject add "<title>" [--stage S] [--tag a,b] [--owner me] [--project K] [--body -] [--conclusion -]',
+        'usage: cairn subject add "<title>" [--stage S] [--tag a,b] [--owner me] [--body -] [--conclusion -]',
       )
       const body = { title }
       if (flags.body !== undefined) body.body = await resolveValue(need(flags.body, '--body needs text, or - for stdin'))
@@ -5296,7 +5310,7 @@ const commands = {
     if (verb === 'edit') {
       const ref = subjectArg(
         positional[1],
-        'usage: cairn subject edit LAB-12 [--title T] [--body -] [--owner me|none] [--project K|none] [--conclusion -|none]',
+        'usage: cairn subject edit LAB-12 [--title T] [--body -] [--owner me|none] [--project none] [--conclusion -|none]',
       )
       const patch = {}
       if (flags.title !== undefined) patch.title = need(flags.title, '--title needs text')
@@ -5470,7 +5484,8 @@ const commands = {
       )
       for (const m of promoted.moved ?? []) process.stderr.write(`  ${m.from} → ${m.to}  ${truncate(m.title, 70)}\n`)
       process.stderr.write(
-        `${ref} is now project ${project.key ?? body.key}: its open todos are its tasks (cairn list --project ${project.key ?? body.key})\n`,
+        `${ref} is now project ${project.key ?? body.key}: its open todos are its tasks (cairn list --project ${project.key ?? body.key}); ` +
+          `${ref} is concluded (promoted) and archived, still searchable as the why\n`,
       )
       return
     }
@@ -5540,7 +5555,7 @@ const commands = {
 
   /** `cairn idea "<title>"`: a subject, in the first planned stage. */
   async idea() {
-    const title = need(positional[0], 'usage: cairn idea "<title>" [--body -] [--tag a,b] [--owner me] [--project K]')
+    const title = need(positional[0], 'usage: cairn idea "<title>" [--body -] [--tag a,b] [--owner me]')
     if (flags.stage !== undefined || flags.conclusion !== undefined) {
       die('an idea goes in the first planned stage and has no conclusion yet: use cairn subject add for --stage and --conclusion')
     }

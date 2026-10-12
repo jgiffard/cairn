@@ -112,6 +112,13 @@ const subject = async (body: Record<string, unknown>) => {
   return result
 }
 
+/** A subject linked to KEY as subjects were before CAIRN-408: the API links one only by promoting it. */
+const linkedSubject = async (body: Record<string, unknown>) => {
+  const created = await subject(body)
+  await pool().query('update subjects set project_id = $2 where id = $1', [created.data.id, projectId])
+  return created
+}
+
 beforeAll(async () => {
   for (const [id, role] of [[adminId, 'admin'], [memberId, 'member']] as const) {
     await pool().query('insert into app_users (id, email, encrypted_password, role) values ($1,$2,$3,$4)', [
@@ -314,8 +321,7 @@ describe('subjects', () => {
     const tag = await call(createTagRoute, '/lab/tags', {}, { method: 'POST', body: { name: 'Lab-Test-Search', color: '#AABBCC' } })
     expect(tag.data).toMatchObject({ name: 'lab-test-search', color: '#aabbcc' })
 
-    const tagged = await subject({ title: 'Tagged idea', tags: ['lab-test-search'], project: KEY })
-    expect(tagged.data.project).toMatchObject({ key: KEY })
+    const tagged = await linkedSubject({ title: 'Tagged idea', tags: ['lab-test-search'] })
 
     const byTag = await call(listSubjectsRoute, '/subjects?tag=lab-test-search', {})
     expect(byTag.data.map((s: { id: string }) => s.id)).toEqual([tagged.data.id])
@@ -340,6 +346,44 @@ describe('subjects', () => {
   })
 })
 
+describe('a subject is never filed into, or linked to, an existing project (CAIRN-408)', () => {
+  const count = async (title: string) =>
+    (await pool().query<{ n: number }>('select count(*)::int as n from subjects where title = $1', [title])).rows[0]!.n
+
+  it('AC2: refuses POST /subjects with a live project, says it is a task, and creates nothing', async () => {
+    const refused = await subject({ title: 'lab test project work', project: KEY })
+    expect(refused.status).toBe(400)
+    expect(refused.json).toMatchObject({ success: false, code: 'validation_failed', field: 'project', project: KEY })
+    expect(refused.json.error).toContain('work for it is a task, never a Lab subject')
+    expect(refused.json.error).toContain(`cairn add "lab test project work" --project ${KEY}`)
+    expect(refused.json.error).toContain('--parent')
+    expect(await count('lab test project work')).toBe(0)
+
+    expect((await subject({ title: 'lab test unknown project', project: 'NOPEXYZ' })).json.error).toBe('No project NOPEXYZ.')
+    expect((await subject({ title: 'lab test no project', project: null })).status).toBe(201)
+  })
+
+  it('AC2: refuses PATCH with a project, and still unlinks or accepts the project it already has', async () => {
+    const loose = await subject({ title: 'lab test loose idea' })
+    const ref = loose.data.ref
+    const refused = await call(patchSubjectRoute, `/subjects/${ref}`, { ref }, { method: 'PATCH', body: { project: KEY } })
+    expect(refused.status).toBe(400)
+    expect(refused.json.error).toContain(`cairn add "lab test loose idea" --project ${KEY}`)
+    expect((await call(getSubjectRoute, `/subjects/${ref}`, { ref })).data.project).toBeNull()
+
+    const linked = await linkedSubject({ title: 'lab test linked before' })
+    const lref = linked.data.ref
+    // Reads do not break on a subject linked before the rule.
+    expect((await call(getSubjectRoute, `/subjects/${lref}`, { ref: lref })).data.project).toMatchObject({ key: KEY })
+    const same = await call(patchSubjectRoute, `/subjects/${lref}`, { ref: lref }, { method: 'PATCH', body: { project: KEY, title: 'lab test linked, renamed' } })
+    expect(same.status).toBe(200)
+    expect(same.data).toMatchObject({ title: 'lab test linked, renamed', project: { key: KEY } })
+    const unlinked = await call(patchSubjectRoute, `/subjects/${lref}`, { ref: lref }, { method: 'PATCH', body: { project: null } })
+    expect(unlinked.status).toBe(200)
+    expect(unlinked.data.project).toBeNull()
+  })
+})
+
 describe('todos', () => {
   it('files a todo of a subject without a project in the LT home project, and of one with a project there', async () => {
     const loose = await subject({ title: 'No project' })
@@ -353,7 +397,7 @@ describe('todos', () => {
     const settings = await call(getSettings, '/lab/settings', {})
     expect(settings.data.home_project.key).toBe('LT')
 
-    const homed = await subject({ title: 'With a project', project: KEY })
+    const homed = await linkedSubject({ title: 'With a project' })
     const there = await call(addTodoRoute, `/subjects/${homed.data.ref}/todos`, { ref: homed.data.ref }, { method: 'POST', body: { title: 'Build it' } })
     expect(there.data.ref).toMatch(new RegExp(`^${KEY}-\\d+$`))
 
@@ -367,7 +411,7 @@ describe('todos', () => {
   })
 
   it('refuses to delete a subject with todos unless they are detached, and never deletes them', async () => {
-    const parent = await subject({ title: 'Doomed subject', project: KEY })
+    const parent = await linkedSubject({ title: 'Doomed subject' })
     const ref = parent.data.ref
     const todo = await call(addTodoRoute, `/subjects/${ref}/todos`, { ref }, { method: 'POST', body: { title: 'Survives' } })
     await call(patchTaskRoute, `/tasks/${todo.data.ref}`, { ref: todo.data.ref }, {
@@ -429,7 +473,7 @@ describe('promoting a subject to a project', () => {
       )
     ).rows[0]!
 
-  it('creates the project, links the subject, moves open todos only and sets the stage', async () => {
+  it('AC1: creates the project, moves open todos only, and concludes the subject as promoted and archived', async () => {
     const key = newKey()
     const filed = await subject({
       title: 'Evaluate pgvector for recall',
@@ -457,12 +501,23 @@ describe('promoting a subject to a project', () => {
       { from: open.ref, to: `${key}-1`, title: 'Benchmark 1M rows' },
       { from: parked.ref, to: `${key}-2`, title: 'Try IVF' },
     ])
-    expect(promoted.data.stage).toEqual({ from: 'exploring', to: 'implementing' })
+    expect(promoted.data.stage).toEqual({ from: 'exploring', to: 'promoted' })
     expect(promoted.data.subject).toMatchObject({
       project: { key, title: 'Evaluate pgvector for recall' },
-      stage: { name: 'implementing' },
+      stage: { name: 'promoted', category: 'completed' },
+      conclusion: `Promoted to project ${key} (Evaluate pgvector for recall)`,
       todos: { open: 2, done: 1 },
     })
+    expect(promoted.data.subject.archived_at).not.toBeNull()
+    expect(promoted.data.subject.concluded_at).not.toBeNull()
+
+    // Off the board, still searchable as the why.
+    const board = await call(listSubjectsRoute, '/subjects', {})
+    expect(board.data.map((s: { ref: string }) => s.ref)).not.toContain(ref)
+    const history = await call(listSubjectsRoute, `/subjects?project=${key}&archived=include`, {})
+    expect(history.data.map((s: { ref: string }) => s.ref)).toEqual([ref])
+    const found = await call(listSubjectsRoute, `/subjects?q=pgvector&archived=include`, {})
+    expect(found.data.map((s: { ref: string }) => s.ref)).toContain(ref)
 
     expect(await taskRow(open.id)).toMatchObject({ key, number: 1, subject_id: filed.data.id })
     expect(await taskRow(parked.id)).toMatchObject({ key, number: 2, status: 'backlog' })
@@ -473,10 +528,11 @@ describe('promoting a subject to a project', () => {
 
     const log = await call(listLogRoute, `/subjects/${ref}/notes`, { ref })
     const lines = log.data.map((n: { kind: string; note: string }) => [n.kind, n.note])
-    expect(lines).toContainEqual(['stage', 'exploring → implementing'])
+    expect(lines).toContainEqual(['stage', 'exploring → promoted'])
     expect(lines).toContainEqual([
       'decision',
-      `Promoted to project ${key} (Evaluate pgvector for recall). 2 open todos moved: ${open.ref} → ${key}-1, ${parked.ref} → ${key}-2. Stage: implementing.`,
+      `Promoted to project ${key} (Evaluate pgvector for recall). 2 open todos moved: ${open.ref} → ${key}-1, ${parked.ref} → ${key}-2. ` +
+        "Stage: promoted. Concluded and archived: its work is the project's tasks.",
     ])
 
     const events = await pool().query<{ event: string; data: Record<string, unknown>; subject_id: string | null }>(
@@ -485,45 +541,54 @@ describe('promoting a subject to a project', () => {
       [key],
     )
     const byKind = Object.fromEntries(events.rows.map((e) => [e.event, e]))
-    expect(Object.keys(byKind).sort()).toEqual(['project_created', 'subject_promoted', 'subject_stage_changed'])
+    expect(Object.keys(byKind).sort()).toEqual(['project_created', 'subject_archived', 'subject_promoted', 'subject_stage_changed'])
     expect(byKind.subject_promoted).toMatchObject({
       subject_id: filed.data.id,
       data: { ref, title: 'Evaluate pgvector for recall', project: key, moved: 2 },
     })
     expect(byKind.project_created!.data).toMatchObject({ key, from: ref })
-    expect(byKind.subject_stage_changed!.data).toMatchObject({ from: 'exploring', to: 'implementing', category: 'active' })
+    expect(byKind.subject_stage_changed!.data).toMatchObject({ from: 'exploring', to: 'promoted', category: 'completed' })
 
     const rows = (await feed()).filter((r) => r.ref === ref)
     expect(rows).toContainEqual(expect.objectContaining({ kind: 'event', detail: 'subject_promoted' }))
   })
 
-  it('takes a title and a description of its own, and leaves a subject already in the stage where it is', async () => {
+  it('takes a title and a description of its own', async () => {
     const key = newKey()
-    const filed = await subject({ title: 'Try Bun', stage: 'implementing', body: 'Startup time.' })
+    const filed = await subject({ title: 'Try Bun', stage: 'exploring', body: 'Startup time.' })
     const promoted = await promote(filed.data.ref, { key, title: 'Bun CLI', description: 'Ship the CLI on Bun.' })
     expect(promoted.status).toBe(201)
     expect(promoted.data.project).toMatchObject({ key, title: 'Bun CLI', description: 'Ship the CLI on Bun.' })
     expect(promoted.data.moved).toEqual([])
-    expect(promoted.data.stage).toBeNull()
-    expect(promoted.data.subject.stage.name).toBe('implementing')
+    expect(promoted.data.subject).toMatchObject({ stage: { name: 'promoted' }, conclusion: `Promoted to project ${key} (Bun CLI)` })
 
     const log = await call(listLogRoute, `/subjects/${filed.data.ref}/notes`, { ref: filed.data.ref })
-    expect(log.data.filter((n: { kind: string }) => n.kind === 'stage')).toEqual([])
-    expect(log.data[0]).toMatchObject({ kind: 'decision', note: `Promoted to project ${key} (Bun CLI). It had no open todos to move.` })
+    // The stage note and the decision share the transaction's moment, so find it by kind.
+    expect(log.data.filter((n: { kind: string }) => n.kind === 'decision')).toEqual([
+      expect.objectContaining({
+        note: `Promoted to project ${key} (Bun CLI). It had no open todos to move. Stage: promoted. Concluded and archived: its work is the project's tasks.`,
+      }),
+    ])
   })
 
-  it('falls back to the first active stage when there is none called implementing', async () => {
+  it('creates the promoted stage, last on the board, when an administrator removed it', async () => {
     const pool_ = pool()
-    await pool_.query(`update lab_stages set name = 'lab test building' where name = 'implementing'`)
+    await pool_.query(`update lab_stages set name = 'lab test promoted' where lower(name) = 'promoted'`)
     try {
-      const filed = await subject({ title: 'No implementing stage here', stage: 'exploring' })
+      const filed = await subject({ title: 'No promoted stage here', stage: 'exploring' })
       const promoted = await promote(filed.data.ref, { key: newKey() })
       expect(promoted.status).toBe(201)
-      // The first active stage by position is `exploring`, where it already is.
-      expect(promoted.data.stage).toBeNull()
-      expect(promoted.data.subject.stage.name).toBe('exploring')
+      expect(promoted.data.stage).toEqual({ from: 'exploring', to: 'promoted' })
+      const stages = (await pool_.query('select name, category, position from lab_stages order by position desc limit 1')).rows
+      expect(stages).toEqual([expect.objectContaining({ name: 'promoted', category: 'completed' })])
     } finally {
-      await pool_.query(`update lab_stages set name = 'implementing' where name = 'lab test building'`)
+      const old = (await pool_.query(`select id from lab_stages where name = 'lab test promoted'`)).rows[0]
+      const made = (await pool_.query(`select id from lab_stages where name = 'promoted'`)).rows[0]
+      if (old && made) {
+        await pool_.query('update subjects set stage_id = $1 where stage_id = $2', [old.id, made.id])
+        await pool_.query('delete from lab_stages where id = $1', [made.id])
+      }
+      if (old) await pool_.query(`update lab_stages set name = 'promoted' where id = $1`, [old.id])
     }
   })
 
@@ -579,7 +644,7 @@ describe('promoting a subject to a project', () => {
   })
 
   it('refuses a subject that has a project or is archived', async () => {
-    const homed = await subject({ title: 'Already homed', project: KEY })
+    const homed = await linkedSubject({ title: 'Already homed' })
     const second = await promote(homed.data.ref, { key: newKey() })
     expect(second.status).toBe(409)
     expect(second.json).toMatchObject({ code: 'conflict', project: KEY })
@@ -651,7 +716,7 @@ describe('hand-off', () => {
 
   beforeAll(async () => {
     as('admin-agent')
-    const parent = await subject({ title: 'Handed-off work', project: KEY })
+    const parent = await linkedSubject({ title: 'Handed-off work' })
     subjectRef = parent.data.ref
     const todo = await call(addTodoRoute, `/subjects/${subjectRef}/todos`, { ref: subjectRef }, { method: 'POST', body: { title: 'Goes elsewhere' } })
     ref = todo.data.ref
@@ -819,7 +884,7 @@ describe('edges', () => {
   })
 
   it('pins a LAB-n hit in a project-scoped search only when the subject is in that project', async () => {
-    const inside = await subject({ title: 'Scoped pin inside', project: KEY })
+    const inside = await linkedSubject({ title: 'Scoped pin inside' })
     const outside = await subject({ title: 'Scoped pin outside' })
     const scoped = async (ref: string) => (await call(searchRoute, `/search?q=${ref}&project=${KEY}`, {})).data.results
     expect((await scoped(inside.data.ref))[0]).toMatchObject({ kind: 'subject', ref: inside.data.ref })
@@ -838,7 +903,7 @@ describe('edges', () => {
   })
 
   it('keeps subject data out of a hand-off while the Lab is off', async () => {
-    const parent = await subject({ title: 'Quiet while off', project: KEY })
+    const parent = await linkedSubject({ title: 'Quiet while off' })
     const todo = await call(addTodoRoute, `/subjects/${parent.data.ref}/todos`, { ref: parent.data.ref }, { method: 'POST', body: { title: 'Leaves while off' } })
     const taskRef = todo.data.ref
 

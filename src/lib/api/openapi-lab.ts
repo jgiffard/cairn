@@ -388,7 +388,10 @@ export const labPaths = ({ json, body, okResponse, errorResponse }: OpenapiHelpe
         description:
           'Defaults to the first `planned` stage and the caller\'s human as owner. Filing into a ' +
           '`completed` or `dropped` stage needs a `conclusion`, else 400 `conclusion_required` ' +
-          '`{ stage, category }`. `number` is for the importer: admins only (403 otherwise), 409 ' +
+          '`{ stage, category }`. A `project` naming an existing project is refused with 400 ' +
+          '`validation_failed`: work for a project is a task (`POST /projects/{id}/tasks`), never a ' +
+          'subject; a subject gets a project only by being promoted. `null` is accepted. `number` is ' +
+          'for the importer: admins only (403 otherwise), 409 ' +
           `\`conflict\` when taken. Numbers are never reused. ${LAB_OFF}`,
         requestBody: body(json(createSubjectSchema)),
         responses: {
@@ -415,7 +418,9 @@ export const labPaths = ({ json, body, okResponse, errorResponse }: OpenapiHelpe
           'does clearing or changing it while there; otherwise 400 `conclusion_required`. ' +
           '`concluded_at` is set on the way in and cleared on the way out; the conclusion text is ' +
           'kept. A stage move writes a `stage` log note. `archived: true` takes it off the board, ' +
-          'still searchable; `false` restores it. Changing `project` does not move existing todos. ' +
+          'still searchable; `false` restores it. `project: null` unlinks it; setting a project is ' +
+          'refused with 400 `validation_failed` (work for a project is a task; promote links one), ' +
+          'except the one it already has, which changes nothing. ' +
           LAB_OFF,
         requestBody: body(json(updateSubjectSchema)),
         responses: { '200': okResponse('Updated.', subject), '400': errorResponse, '404': errorResponse },
@@ -458,9 +463,10 @@ export const labPaths = ({ json, body, okResponse, errorResponse }: OpenapiHelpe
         description:
           'One transaction: creates the project (`key` is validated as for `POST /projects`, and `LAB` ' +
           'is reserved), links the subject, moves its **open** todos into the project (each takes a ' +
-          'number from it and keeps a note of its old ref; closed todos stay), moves the subject to ' +
-          'the first `active` stage named `implementing`, else the first `active` stage, and writes a ' +
-          '`decision` log note and `subject_promoted`. `title` defaults to the subject\'s, `description` ' +
+          'number from it and keeps a note of its old ref; closed todos stay), then concludes the ' +
+          'subject: it moves to the `completed` stage `promoted` (created if missing), its conclusion ' +
+          'becomes "Promoted to project KEY (title)", and it is archived, still searchable. Writes a ' +
+          '`decision` log note, `subject_promoted` and `subject_archived`. `title` defaults to the subject\'s, `description` ' +
           'to the write-up\'s first section plus "From LAB-n". 409 `conflict` when the subject already ' +
           'has a project, is archived, or the key is taken (live or retired). ' +
           LAB_OFF,

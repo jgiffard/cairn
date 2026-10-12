@@ -24,7 +24,7 @@ import { TagChip } from '@/components/lab/tag-chip'
 import { TodosPanel } from '@/components/lab/todos-panel'
 import { tally } from '@/components/lab/todo-lanes'
 import { parseSubjectRef } from '@/components/lab/types'
-import { getLabSettings, labSource, listLabProjects } from '../../data'
+import { getLabSettings, labSource } from '../../data'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,14 +68,13 @@ const SubjectPage = async ({
   if (!subject) notFound()
   const query = await searchParams
 
-  const [log, todos, humanNotes, files, stages, tags, projects] = await Promise.all([
+  const [log, todos, humanNotes, files, stages, tags] = await Promise.all([
     labSource.notes(subject),
     labSource.todos(subject),
     labSource.humanNotes(subject),
     labSource.attachments(subject),
     labSource.stages(),
     labSource.tags(),
-    listLabProjects(user.id),
   ])
 
   const counts = tally(todos)
@@ -178,7 +177,6 @@ const SubjectPage = async ({
             subject={subject}
             stages={stages}
             tags={tags}
-            projects={projects}
             isAdmin={isAdmin}
           />
         }
