@@ -66,7 +66,7 @@ const fileEnv = (path) => {
  * old was found writing under the wrong identity exactly once, which was
  * enough.
  */
-const VERSION = '0.22.4'
+const VERSION = '0.22.5'
 
 /**
  * Which Cairn this command talks to, on a machine that uses more than one.
