@@ -9,6 +9,15 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **`scripts/backfill-linear-refs.mjs` gives Linear-imported tasks their Linear ref** (CAIRN-414). It reads the `Imported from Linear [KEY-n](url)` footer and sets `external_ref = 'linear.app/KEY-n'` (and an empty `external_url`), so a search for `DIS-2237` finds the task that is DIS-2237. It is a dry run by default (one transaction, rolled back); `--apply` commits and `--project KEY` scopes it. It never overwrites an existing `external_ref`, lists collisions and ids held elsewhere for a human, and leaves `updated_at` unchanged. The connection string is only `--target`.
+
+### Fixed
+
+- **Searching a Linear ref now puts its task first** (CAIRN-413). A ref-shaped query whose key is no project here (`DIS-2237` on an instance whose project is `DISPOF`) is matched against the trailing `KEY-n` of `tasks.external_ref`, and every holder is pinned first, newest first, capped at 5. The trailing ref is the text after the last `/` or `:`, so `linear.app/DIS-2237`, `croft:croft.montytorr.com/T-1`, handoff refs and a bare `LEGACY-373` all resolve, in any case. This works on both search paths and on `cairn check`; a native ref still wins. One-letter keys (`T-1`) are now ref-shaped. Migration 085 indexes the expression. Before this, the task that is DIS-2237 ranked 9th of 11 on dispofi.
+- **The unified search's project filter now drops a pinned ref row from another project**, as the task-only path already did (CAIRN-413).
+
 ## [0.24.0] — 2026-10-12
 
 ### Breaking
