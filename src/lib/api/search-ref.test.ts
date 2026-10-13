@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { NUMBER_QUERY, REF_QUERY } from './search'
 
 /**
  * A ref is an exact address, so searching one must return that task.
@@ -12,14 +13,12 @@ import { describe, expect, it } from 'vitest'
  * ordinary prose starts being treated as an address, tighten it and real refs
  * stop resolving. The database half is covered by the live check in the task.
  */
-const REF_QUERY = /^\s*([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,6})\s*$/
 
 const parse = (q: string) => {
   const m = REF_QUERY.exec(q)
   return m ? `${(m[1] as string).toUpperCase()}-${Number(m[2])}` : null
 }
 
-const NUMBER_QUERY = /^\s*(\d{1,6})\s*$/
 const parseNumber = (q: string) => {
   const m = NUMBER_QUERY.exec(q)
   return m ? Number(m[1]) : null
@@ -30,6 +29,11 @@ describe('which queries are an exact ref', () => {
     expect(parse('CAIRN-131')).toBe('CAIRN-131')
     expect(parse('OD-36')).toBe('OD-36')
     expect(parse('HM-700')).toBe('HM-700')
+  })
+
+  it("accepts another tracker's one-letter key, which only external_ref can hold", () => {
+    expect(parse('T-1')).toBe('T-1')
+    expect(parse('t-12')).toBe('T-12')
   })
 
   it('accepts the spelling a human types', () => {

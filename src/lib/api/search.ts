@@ -1,4 +1,4 @@
-import { admin } from '@/lib/db/client'
+import { admin, pool } from '@/lib/db/client'
 import { issuedUnderFormerKey, lookupFormerKey, type KeyRename } from './project-keys'
 import { isLabEnabled } from './lab-settings'
 import { subjectRefQuery } from './lab-shape'
@@ -106,8 +106,11 @@ export type SearchRow = {
  * So a ref-shaped query is resolved directly and put first, and the full-text
  * pass still runs underneath it — what references this task is a genuinely
  * useful second answer, just not the only one.
+ *
+ * The key may be one letter, which no project here can have: other trackers'
+ * can (Croft's `T-1`), and those are found through `external_ref`.
  */
-const REF_QUERY = /^\s*([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,6})\s*$/
+export const REF_QUERY = /^\s*([A-Za-z][A-Za-z0-9]{0,9})-(\d{1,6})\s*$/
 
 /**
  * A bare number is an address too.
@@ -122,7 +125,7 @@ const REF_QUERY = /^\s*([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,6})\s*$/
  * error, and a handful of same-numbered tasks ahead of it is a nudge where
  * twenty would be an obstruction.
  */
-const NUMBER_QUERY = /^\s*(\d{1,6})\s*$/
+export const NUMBER_QUERY = /^\s*(\d{1,6})\s*$/
 
 /**
  * The same columns a ranked row carries. A row assembled here renders in the
@@ -181,12 +184,7 @@ const tasksByNumber = async (
   return (data ?? []) as unknown as ExactTask[]
 }
 
-const taskByRef = async (_userId: string, q: string): Promise<ExactTask | null> => {
-  const match = REF_QUERY.exec(q)
-  if (!match?.[1] || !match[2]) return null
-  const key = match[1].toUpperCase()
-  const number = Number(match[2])
-
+const taskByProjectRef = async (key: string, number: number): Promise<ExactTask | null> => {
   const columns = EXACT_COLUMNS
 
   const { data } = await admin()
@@ -217,6 +215,58 @@ const taskByRef = async (_userId: string, q: string): Promise<ExactTask | null> 
   // Said, not just done: the caller asked for AC-113 and is handed HOL-113,
   // and without this cannot tell it is the same task.
   return { ...task, requested_ref: `${key}-${number}`, renamed_from: former.rename }
+}
+
+/**
+ * The tasks that are another tracker's `KEY-n`.
+ *
+ * `DIS-2237` on an instance with no DIS project is not a typo: it is a Linear
+ * issue, and the task imported from it carries `linear.app/DIS-2237` in
+ * `external_ref`. Searching it ranked that task 9th of 11 (CAIRN-412), behind
+ * short rows that merely mention the ref, because its only mention was an
+ * import footer at the end of a 25 KB description.
+ *
+ * The ref is the text after the last `/` or `:`, or the whole value, so a
+ * Linear import, a handoff (`cairn.app.dispofi.fr/DISPOF-12`), a Croft link
+ * (`croft:croft.montytorr.com/T-1`) and a bare `LEGACY-373` all resolve. The
+ * expression is the one migration 085 indexes; change one, change both.
+ *
+ * Two trackers can each have a `T-1`, so every holder is returned, newest
+ * first and capped, rather than one being picked silently.
+ */
+const tasksByExternalRef = async (ref: string): Promise<ExactTask[]> => {
+  const { rows } = await pool().query<{ id: string }>(
+    `select id from tasks
+      where external_ref is not null
+        and upper(regexp_replace(external_ref, '^.*[/:]', '')) = $1
+      order by updated_at desc
+      limit $2`,
+    [ref, BARE_NUMBER_LIMIT],
+  )
+  if (rows.length === 0) return []
+
+  const { data } = await admin()
+    .from('tasks')
+    .select(EXACT_COLUMNS)
+    .in('id', rows.map((row) => row.id))
+    .order('updated_at', { ascending: false })
+  return (data ?? []) as unknown as ExactTask[]
+}
+
+/**
+ * What a ref-shaped query names. A native ref wins outright, under its current
+ * key or a former one; only when neither finds a task is the ref read as
+ * another tracker's.
+ */
+const tasksByRef = async (_userId: string, q: string): Promise<ExactTask[]> => {
+  const match = REF_QUERY.exec(q)
+  if (!match?.[1] || !match[2]) return []
+  const key = match[1].toUpperCase()
+  const number = Number(match[2])
+
+  const native = await taskByProjectRef(key, number)
+  if (native) return [native]
+  return tasksByExternalRef(`${key}-${number}`)
 }
 
 /** A subject a `LAB-12` query names, as a search row: above every ranked hit. */
@@ -310,8 +360,8 @@ const rankTasks = async (
 
   // Same rule on the task-only path, which is what the UI uses the moment a
   // type or status filter is set — and what `cairn check --tasks` uses.
-  const byRef = await taskByRef(userId, q)
-  const addressed = byRef ? [byRef] : await tasksByNumber(userId, q, filters.project)
+  const byRef = await tasksByRef(userId, q)
+  const addressed = byRef.length > 0 ? byRef : await tasksByNumber(userId, q, filters.project)
   if (addressed.length === 0) return { rows, widened: rows.some((r) => r.widened) }
 
   // A filter the caller set is a statement about what they want back; an exact
@@ -401,8 +451,13 @@ export const searchAll = async (
   const wantsTasks = !filters.kinds || filters.kinds.includes('task')
   const addressed = wantsTasks
     ? await (async () => {
-        const byRef = await taskByRef(userId, q)
-        return byRef ? [byRef] : await tasksByNumber(userId, q, filters.project)
+        const byRef = await tasksByRef(userId, q)
+        // A project-scoped search pins only that project's tasks, as the
+        // full-text arm returns only those.
+        const inProject = byRef.filter(
+          (task) => !filters.project || keyOfProject(task.project) === filters.project.toUpperCase(),
+        )
+        return byRef.length > 0 ? inProject : await tasksByNumber(userId, q, filters.project)
       })()
     : []
 
