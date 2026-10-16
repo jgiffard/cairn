@@ -18,7 +18,7 @@ const detect = (env: Record<string, string | undefined>) => {
   if (env.CAIRN_AGENT) return env.CAIRN_AGENT.trim().toLowerCase()
   if (env.CLAUDECODE === '1' || env.CLAUDE_CODE_ENTRYPOINT) return 'claude-code'
   const codexHome = env.CODEX_HOME ?? ''
-  if (/openclaw/i.test(codexHome)) return 'openclaw'
+  if (/(^|[\\/])\.openclaw([\\/]|$)/.test(codexHome)) return 'openclaw'
   if (Object.keys(env).some((name) => name.startsWith('OPENCLAW_'))) return 'openclaw'
   if (codexHome || env.CODEX_SANDBOX) return 'codex'
   if (env.CODEX_THREAD_ID || env.CODEX_MANAGED_BY_NPM || env.CODEX_MANAGED_PACKAGE_ROOT) return 'codex'
@@ -54,6 +54,19 @@ describe('detecting the runtime', () => {
 
   it('recognises Codex through the wrapper, which is the path that already worked', () => {
     expect(detect({ CODEX_HOME: '/opt/codex-home' })).toBe('codex')
+  })
+
+  it('recognises Codex in a Drove run named after an OpenClaw repo', () => {
+    expect(
+      detect({
+        CODEX_HOME: `/Users/${'x'}/.drove/runs/openclaw-dashboard-20261016-1559-919d/codex-home`,
+        CODEX_THREAD_ID: 'thread-1',
+      }),
+    ).toBe('codex')
+  })
+
+  it('recognises OpenClaw by its home path segment', () => {
+    expect(detect({ CODEX_HOME: '/root/.openclaw/agents/main/codex-home' })).toBe('openclaw')
   })
 
   it('lets an explicit CAIRN_AGENT win over everything', () => {
