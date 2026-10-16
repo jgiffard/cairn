@@ -9,6 +9,8 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.25.1] — 2026-10-16
+
 ### Fixed
 
 - **Codex seats in Drove runs named after OpenClaw repos keep their Codex identity** (CAIRN-416). Runtime detection now matches a `.openclaw` path segment in `CODEX_HOME`, so a run directory such as `openclaw-dashboard-...` no longer selects OpenClaw's API key.
@@ -2229,7 +2231,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.25.1...HEAD
+[0.25.1]: https://github.com/montytorr/cairn/compare/v0.25.0...v0.25.1
 [0.25.0]: https://github.com/montytorr/cairn/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/montytorr/cairn/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/montytorr/cairn/compare/v0.22.6...v0.23.0
