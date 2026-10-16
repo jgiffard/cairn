@@ -880,18 +880,18 @@ const detectAgent = () => {
   }
 
   // OpenClaw runs Codex underneath, pointed at a CODEX_HOME of its own
-  // (an `.openclaw/.../codex-home` of its own). Testing for
-  // Codex first would therefore file every one of OpenClaw's writes as Codex
-  // -- the same misattribution this exists to fix, pointing the other way.
+  // (an `.openclaw/.../codex-home` of its own). Match a path segment: Drove
+  // names run dirs after the repo, e.g. `openclaw-dashboard-...`. Check this
+  // before Codex so OpenClaw's writes keep their own identity.
   const codexHome = process.env.CODEX_HOME ?? ''
-  if (/openclaw/i.test(codexHome)) return 'openclaw'
+  if (/(^|[\\/])\.openclaw([\\/]|$)/.test(codexHome)) return 'openclaw'
 
   // Any OPENCLAW_* variable at all, rather than two guessed names.
   //
   // The live gateway sets OPENCLAW_SERVICE_MARKER, OPENCLAW_SYSTEMD_UNIT and
   // eight more, and none of them is OPENCLAW_SESSION or OPENCLAW_HOME — the two
   // that were checked here. The whole of OpenClaw's identity therefore rested
-  // on its CODEX_HOME containing the word, and if that ever stopped being true
+  // on its CODEX_HOME identifying OpenClaw, and if that ever stopped being true
   // it would now fall through to the Codex markers below, which OpenClaw also
   // sets, and file every one of its writes as Codex.
   if (Object.keys(process.env).some((name) => name.startsWith('OPENCLAW_'))) return 'openclaw'

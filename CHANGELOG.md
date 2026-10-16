@@ -9,6 +9,10 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Codex seats in Drove runs named after OpenClaw repos keep their Codex identity** (CAIRN-416). Runtime detection now matches a `.openclaw` path segment in `CODEX_HOME`, so a run directory such as `openclaw-dashboard-...` no longer selects OpenClaw's API key.
+
 ## [0.25.0] — 2026-10-13
 
 ### Added
