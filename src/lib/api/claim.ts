@@ -1,4 +1,4 @@
-import { admin } from '@/lib/db/client'
+import { admin, pool } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { actorLabel } from './actor'
 import { CLAIM_LEASE_SECONDS } from '@/lib/utils'
@@ -28,11 +28,27 @@ export const isAnotherSessionsClaim = (
   mine: string | null | undefined,
 ): boolean => Boolean(holder && mine && holder !== mine)
 
+/** Renewals require positive evidence of the same agent and session. */
+export const canRenewClaim = (
+  actor: Pick<Actor, 'actorType' | 'actorId' | 'sessionId'>,
+  task: {
+    claimed_by?: unknown; claimed_session?: unknown; status?: unknown
+    handoff_ref?: unknown; handoff_status?: unknown
+  },
+  holder = actor.actorId,
+): boolean => actor.actorType === 'agent' && Boolean(actor.sessionId) &&
+  task.claimed_by === holder && task.claimed_session === actor.sessionId &&
+  task.status !== 'done' && task.status !== 'cancelled' &&
+  (!task.handoff_ref || task.handoff_status === 'done' || task.handoff_status === 'cancelled')
+
 export const takeTask = async (
   actor: Actor,
-  task: { id: string; status?: unknown; attempt?: unknown; project_id?: unknown },
+  task: {
+    id: string; status?: unknown; attempt?: unknown; project_id?: unknown
+    claimed_by?: unknown; claimed_session?: unknown; handoff_ref?: unknown; handoff_status?: unknown
+  },
   { agent, setDoing = true }: { agent?: string; setDoing?: boolean } = {},
-) => {
+): Promise<{ row: Record<string, unknown> | null; error: string | null }> => {
   const holder = agent
     ? actorLabel('agent', agent, actor.userDisplayName)
     : actor.actorId
@@ -50,7 +66,46 @@ export const takeTask = async (
   })
 
   if (error) return { row: null, error: error.message }
-  if (!data) return { row: data, error: null }
+  if (!data) {
+    if (!canRenewClaim(actor, task, holder)) return { row: null, error: null }
+
+    // Lock the eligible row before reading its previous status. Two concurrent
+    // renewals can both succeed, but only the one changing the status records
+    // that transition. Eligibility is rechecked under the lock if ownership,
+    // status or hand-off changed since the refused RPC. No ownership counters
+    // change, and the audit insert rolls back with the renewal if either fails.
+    try {
+      const { rows } = await pool().query<{ row: Record<string, unknown> }>(
+        `with held as materialized (
+           select id, status from tasks
+            where id = $1 and claimed_by = $2 and claimed_session = $3
+              and status <> all($4::text[])
+              and (handoff_ref is null or handoff_status = any($4::text[]))
+            for update
+         ), renewed as (
+           update tasks t
+              set heartbeat_at = $5::timestamptz,
+                  status = case when $6::boolean then $7 else t.status end
+             from held where t.id = held.id
+           returning t.*
+         ), status_events as (
+           insert into task_activity_events
+             (owner_user_id, project_id, task_id, actor_type, actor_id, event, data)
+           select $8::uuid, r.project_id, r.id, $9, $10, $11,
+                  jsonb_build_object($12::text, h.status, $13::text, r.status, $14::text, $15::text)
+             from renewed r join held h on h.id = r.id
+            where r.status is distinct from h.status
+         )
+         select to_jsonb(renewed) as row from renewed`,
+        [task.id, holder, actor.sessionId, ['done', 'cancelled'], new Date().toISOString(),
+          setDoing, 'doing', actor.userId, actor.actorType, actor.actorId,
+          'status_changed', 'from', 'to', 'via', 'claim'],
+      )
+      return { row: rows[0] ? { ...rows[0].row, renewed: true } : null, error: null }
+    } catch (error) {
+      return { row: null, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
 
   /**
    * Which session took it, stamped after the fact and on purpose.
