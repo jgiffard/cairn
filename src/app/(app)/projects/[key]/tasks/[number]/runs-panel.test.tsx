@@ -12,7 +12,7 @@ const run = (over: Partial<TaskRun> = {}): TaskRun => ({
   commits: [
     {
       sha: 'abcdef1234567890',
-      repo: '/Users/cal/maestro-dev/cairn',
+      repo: '/srv/checkouts/cairn',
       branch: 'feat/runs',
       url: 'https://github.com/o/r/commit/abcdef1',
       at: '2026-10-22T10:00:00.000Z',
@@ -71,6 +71,6 @@ describe('RunsPanel', () => {
   it('shows only the last segment of a local repo path', () => {
     const html = render([run()])
     expect(html).toContain('>cairn<')
-    expect(html).not.toContain('maestro-dev')
+    expect(html).not.toContain('checkouts')
   })
 })
