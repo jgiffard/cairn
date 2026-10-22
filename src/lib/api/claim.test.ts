@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isAnotherSessionsClaim, shouldClaimByWorking } from './claim'
+import { canRenewClaim, isAnotherSessionsClaim, shouldClaimByWorking } from './claim'
 
 /**
  * Writing to a task's work log is working on it.
@@ -76,5 +76,35 @@ describe('whose claim this is', () => {
     // Codex and OpenClaw may not have one. They keep today's behaviour rather
     // than being locked out of releasing anything.
     expect(isAnotherSessionsClaim('session-a', null)).toBe(false)
+  })
+})
+
+describe('same-session renewal eligibility', () => {
+  const caller = { actorType: 'agent' as const, actorId: 'codex · Cal', sessionId: 'session-a' }
+  const held = { claimed_by: caller.actorId, claimed_session: caller.sessionId, status: 'doing' }
+
+  it('requires the same holder and a positively matching session', () => {
+    expect(canRenewClaim(caller, held)).toBe(true)
+    expect(canRenewClaim({ ...caller, sessionId: 'session-b' }, held)).toBe(false)
+    expect(canRenewClaim({ ...caller, sessionId: null }, held)).toBe(false)
+    expect(canRenewClaim(caller, { ...held, claimed_session: null })).toBe(false)
+    expect(canRenewClaim(caller, { ...held, claimed_by: 'codex · Someone else' })).toBe(false)
+    expect(canRenewClaim(caller, { ...held, claimed_by: null })).toBe(false)
+  })
+
+  it('never renews for a human even with the matching label and session', () => {
+    expect(canRenewClaim({ ...caller, actorType: 'human' }, held)).toBe(false)
+  })
+
+  it.each(['done', 'cancelled'])('refuses terminal status %s', (status) => {
+    expect(canRenewClaim(caller, { ...held, status })).toBe(false)
+  })
+
+  it.each([null, 'todo', 'doing', 'unknown'])('refuses open hand-off status %s', (status) => {
+    expect(canRenewClaim(caller, { ...held, handoff_ref: 'EXT-1', handoff_status: status })).toBe(false)
+  })
+
+  it.each(['done', 'cancelled'])('allows a settled hand-off with status %s', (status) => {
+    expect(canRenewClaim(caller, { ...held, handoff_ref: 'EXT-1', handoff_status: status })).toBe(true)
   })
 })

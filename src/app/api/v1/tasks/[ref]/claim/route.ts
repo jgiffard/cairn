@@ -58,8 +58,8 @@ export const POST = route<{ ref: string }, z.infer<typeof claimBody>>({
       const handedOffNow = refuseHandedOff(now, refOfRow(task) ?? params.ref)
       if (handedOffNow) return handedOffNow
 
-      const holder = task.claimed_by as string | null
-      const lastBeat = task.heartbeat_at as string | null
+      const holder = (now ?? task).claimed_by as string | null
+      const lastBeat = (now ?? task).heartbeat_at as string | null
       const agoMinutes = lastBeat
         ? Math.floor((Date.now() - new Date(lastBeat).getTime()) / 60000)
         : null
