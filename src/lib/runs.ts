@@ -20,7 +20,7 @@ export type TaskRun = {
 const string = (value: unknown): string | null => typeof value === 'string' ? value : null
 
 /** Work chronologically for seat appearance; collect delivery evidence newest first. */
-export function groupRuns(rows: readonly RunActivity[]): TaskRun[] {
+export const groupRuns = (rows: readonly RunActivity[]): TaskRun[] => {
   const groups = new Map<string, RunActivity[]>()
   for (const row of [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
     const run = row.data?.run as Record<string, unknown> | undefined

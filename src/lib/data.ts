@@ -1,6 +1,5 @@
 import { groupRuns, type TaskRun, type RunActivity } from '@/lib/runs'
-import { pool, normalizeDatabaseValue } from '@/lib/db/client'
-import { admin } from '@/lib/db/client'
+import { admin, pool, normalizeDatabaseValue } from '@/lib/db/client'
 import { byTitle } from '@/lib/utils'
 import { sessionUser } from '@/lib/auth/session'
 import { withAssignee, withAssignees, type Person } from '@/lib/api/people'

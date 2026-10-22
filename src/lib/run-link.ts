@@ -3,11 +3,11 @@ import type { z } from 'zod'
 import type { evidenceRunSchema } from '@/schemas/task'
 
 /** Serialize run-link retries per task/run, including concurrent requests. */
-export async function recordRunLink(
+export const recordRunLink = async (
   taskId: string,
   actor: { userId: string; actorType: string; actorId: string },
   data: { run: z.infer<typeof evidenceRunSchema> } & Record<string, unknown>,
-) {
+) => {
   const client = await pool().connect()
   try {
     await client.query('begin')

@@ -1088,7 +1088,7 @@ const flags = new Proxy(typedFlags, {
  */
 const KNOWN_FLAGS = new Set([
   'add-label', 'remove-label', 'adopt', 'agent', 'all', 'all-instances', 'allow-dangling', 'also-project', 'archived', 'assignee', 'body',
-  'run', 'runner', 'run-url', 'seat', 'state', 'branch', 'category', 'clear', 'color', 'completed', 'conclusion',
+  'branch', 'category', 'clear', 'color', 'completed', 'conclusion',
   'confirm', 'cwd', 'dangling', 'default', 'days', 'description', 'detach-todos', 'dir', 'dry-run',
   'due', 'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'external-ref', 'external-url', 'file', 'files', 'folder',
   'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'history', 'hours', 'id', 'instance',
@@ -1096,8 +1096,8 @@ const KNOWN_FLAGS = new Set([
   'message', 'mine', 'name', 'next', 'no-checkpoint', 'no-herdr', 'no-hooks', 'no-jobs', 'no-parent',
   'no-skill', 'no-start', 'notify', 'older',
   'orphans', 'output', 'owner', 'parent', 'platform', 'position', 'pretty', 'priority', 'project',
-  'reason', 'related', 'remote', 'repo', 'request', 'resolution', 'runtimes', 'scheduled', 'scope',
-  'session', 'show-toplevel', 'slug', 'stage', 'start', 'started', 'status', 'subject', 'summary',
+  'reason', 'related', 'remote', 'repo', 'request', 'resolution', 'run', 'run-url', 'runner', 'runtimes', 'scheduled', 'scope', 'seat',
+  'session', 'show-toplevel', 'slug', 'stage', 'start', 'started', 'state', 'status', 'subject', 'summary',
   'superseded', 'superseded-by', 'sweep', 'tag', 'task', 'tasks', 'title', 'to', 'tool-calls',
   'type', 'undo', 'unused', 'unverify', 'url', 'verified', 'version',
 ])
@@ -2920,9 +2920,9 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn run-link <ref> <run-id> [--runner NAME] [--state STATE] [--url URL] [--seat NAME]...
     cairn runs <ref> [--json]
     cairn commit <ref> <sha> [--repo PATH] [--branch NAME] [--message TEXT] [--url URL]
-    commit, push, run: [--run ID] [--runner NAME] [--run-url URL] [--seat NAME]...
     cairn push <ref> <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
     cairn run <ref> "<command>" --status passed|failed|skipped [--exit-code N]
+    commit, push, run: [--run ID] [--runner NAME] [--run-url URL] [--seat NAME]...
                                    these three RECORD what you already did;
                                    none of them runs anything. Recording the
                                    same commit twice is one line, not two.
