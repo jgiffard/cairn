@@ -122,7 +122,7 @@ const TaskPage = async ({
   const [
     notes, comments, attachments, relations, duplicateOf, activity, children, parent,
     alsoProjects, allProjects, mentioned, lab, runs,
-  ] =await Promise.all([
+  ] = await Promise.all([
     listNotes(task.id),
     listComments(task.id),
     listAttachments(task.id),
