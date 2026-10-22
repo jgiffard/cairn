@@ -6,7 +6,7 @@ import { ChevronRight } from 'lucide-react'
 import {
   currentUser, getDuplicateOf, getParent, getTask, listActivity, listAlsoProjects,
   listAttachments, listProjects,
-  listChildren, listComments, listNotes, listRelations,
+  listChildren, listComments, listNotes, listRelations, listTaskRuns,
 } from '@/lib/data'
 import { MarkdownEditor } from '@/components/markdown-editor'
 import { MarkdownView } from '@/components/markdown'
@@ -25,6 +25,7 @@ import { AttachmentsPanel } from './attachments-panel'
 import { ActivityPanel } from './activity-panel'
 import { ChildrenPanel } from './children-panel'
 import { MentionsPanel } from './mentions-panel'
+import { RunsPanel } from './runs-panel'
 import { mentionsOf } from '@/lib/api/mentions'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { RedirectNotice } from '@/components/redirect-notice'
@@ -120,8 +121,8 @@ const TaskPage = async ({
 
   const [
     notes, comments, attachments, relations, duplicateOf, activity, children, parent,
-    alsoProjects, allProjects, mentioned, lab,
-  ] = await Promise.all([
+    alsoProjects, allProjects, mentioned, lab, runs,
+  ] =await Promise.all([
     listNotes(task.id),
     listComments(task.id),
     listAttachments(task.id),
@@ -135,6 +136,8 @@ const TaskPage = async ({
     mentionsOf(task.id, 8),
     // Hand-off and subject are not columns the task loader selects.
     loadTaskLabFields(task.id),
+    // Evidence, not the page: a failed load leaves the panel out.
+    listTaskRuns(task.id).catch(() => []),
   ])
 
   // What this task used to be called. An alias that only resolves is half an
@@ -326,6 +329,7 @@ const TaskPage = async ({
                 items={children}
                 projects={allProjects.map((p) => ({ key: p.key, title: p.title }))}
               />
+              <RunsPanel runs={runs} />
               <AttachmentsPanel taskId={task.id} attachments={attachments} />
               <NotesPanel taskId={task.id} notes={notes} />
               <CommentsPanel
