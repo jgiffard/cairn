@@ -88,6 +88,8 @@ Close what you finished (resolution, right `--kind`); `note --kind attempt` what
 `learn` what stays true, scoped; checkpoint what you still hold. Nothing writes your
 checkpoint for you.
 
+`update <ref> --add-label a,b --remove-label c` changes labels atomically; `--label` replaces.
+
 ## Beside this file
 
 Read the one you need, when you need it; the lifecycle above is enough to work.

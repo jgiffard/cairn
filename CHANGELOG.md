@@ -9,6 +9,10 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- **Atomic task label changes** (CAIRN-421). `cairn update <ref> --add-label a,b --remove-label c` adds and removes labels without replacing concurrent changes; repeated flags and other update fields can be combined. PATCH accepts `labelPatch: { add, remove }` and returns the resulting labels plus `added`, `removed`, `alreadyPresent` and `alreadyAbsent` arrays. No-ops succeed without a labels activity event. Replacement `--label` keeps its existing meaning and cannot be mixed with these flags. Migration 086 applies the delta and other requested fields in a transaction, preserving order and refusing results above 20 labels.
+
 ## [0.25.1] — 2026-10-16
 
 ### Fixed
