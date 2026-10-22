@@ -49,6 +49,27 @@ The API refuses `done`/`cancelled` without a resolution (it suggests one from yo
 checkpoint), and refuses a resolution unless the status is closing. Reopening clears the
 resolution; the withdrawn text stays in `history`.
 
+## Changing task labels
+
+`cairn update ACME-42 --add-label a,b --remove-label c` changes only those labels,
+atomically on the server, keeping concurrent additions. Both flags accept comma lists
+and repeated occurrences and combine with other update fields. Existing order stays;
+new labels append in the given order, deduplicated. Names are case-sensitive, 1–50
+characters each, with at most 20 labels in the result. Removing names can make room.
+
+Adding a present label or removing an absent one succeeds as a no-op. Human output
+says what changed or was already so; `--json` returns the task with `labels` and
+`labelPatch: { added, removed, alreadyPresent, alreadyAbsent }` arrays. Retries are safe.
+`--label a,b` still replaces the entire set; `--label none` clears it. Do not mix
+replacement and delta flags, put one name in both add and remove, or use `none` as a delta.
+These delta flags apply only to `update`.
+
+The API equivalent is PATCH `/api/v1/tasks/:ref` with
+`{ "labelPatch": { "add": ["a", "b"], "remove": ["c"] } }`. At least one name is
+required. Empty patches, invalid names, overlap, `labels` with `labelPatch`, and results
+above 20 labels return 400 `validation_failed` without changing the task. Activity
+records `labels_changed` only for an actual change.
+
 ## Knowledge: what we know, not what we did
 
 ```bash

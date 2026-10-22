@@ -1087,7 +1087,7 @@ const flags = new Proxy(typedFlags, {
  * the help text is in this set. Add to both, or the test says so.
  */
 const KNOWN_FLAGS = new Set([
-  'adopt', 'agent', 'all', 'all-instances', 'allow-dangling', 'also-project', 'archived', 'assignee', 'body',
+  'add-label', 'remove-label', 'adopt', 'agent', 'all', 'all-instances', 'allow-dangling', 'also-project', 'archived', 'assignee', 'body',
   'branch', 'category', 'clear', 'color', 'completed', 'conclusion',
   'confirm', 'cwd', 'dangling', 'default', 'days', 'description', 'detach-todos', 'dir', 'dry-run',
   'due', 'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'external-ref', 'external-url', 'file', 'files', 'folder',
@@ -1118,7 +1118,11 @@ for (let i = 0; i < argv.length; i += 1) {
       )
       process.exit(2)
     }
-    if (inline !== undefined) flags[name] = inline
+    if (name === 'add-label' || name === 'remove-label') {
+      const value = inline !== undefined ? inline
+        : argv[i + 1] !== undefined && !argv[i + 1].startsWith('--') ? argv[++i] : true
+      typedFlags[name] = [...(typedFlags[name] ?? []), value]
+    } else if (inline !== undefined) flags[name] = inline
     else if (argv[i + 1] && !argv[i + 1].startsWith('--')) flags[name] = argv[++i]
     else flags[name] = true
   } else positional.push(arg)
@@ -2794,6 +2798,25 @@ const listFlag = (name) => {
   return list.length === 1 && list[0].toLowerCase() === 'none' ? [] : list
 }
 
+/** A delta never clears: every occurrence must name labels. */
+const labelDeltaFlag = (name) => {
+  const values = flags[name]
+  if (values === undefined) return undefined
+  const labels = []
+  for (const value of values) {
+    if (typeof value !== 'string' || !value.trim() || splitList(value).length === 0) {
+      return die(`--${name} needs a value: a comma list of label names`)
+    }
+    const list = splitList(value)
+    if (list.some((label) => label.toLowerCase() === 'none')) {
+      return die(`--${name} does not take none; --label none clears all labels`)
+    }
+    if (list.some((label) => label.length > 50)) return die(`--${name} label names must be 1..50 characters`)
+    labels.push(...list)
+  }
+  return [...new Set(labels)]
+}
+
 /** `--due 2026-11-30`, or `none` to clear it on update; null is what the server takes for "no date". */
 const dueFlag = (verb) => {
   const value = valueFlag('due', ': a date as YYYY-MM-DD' + (verb === 'update' ? ', or none to clear it' : ''))
@@ -2866,6 +2889,7 @@ const HELP = `cairn — agent-first task tracker and shared memory
                                    --body replaces the whole description: edit from show --full
     cairn add|update ... --due YYYY-MM-DD      a due date; update --due none clears it
     cairn add|update ... --label a,b           update replaces the labels; --label none empties them
+    cairn update <ref> --add-label a,b --remove-label c  atomic changes; repeated flags accepted
     cairn add ... --external-ref KEY --external-url URL
                                    where it came from in another tool; filing the same
                                    --external-ref again returns that task, not a second
@@ -4747,6 +4771,15 @@ const commands = {
   async update() {
     const ref = need(positional[0], 'usage: cairn update <ref> --status <s>')
     const body = {}
+    const addLabels = labelDeltaFlag('add-label')
+    const removeLabels = labelDeltaFlag('remove-label')
+    if (addLabels !== undefined || removeLabels !== undefined) {
+      if (flags.label !== undefined) return die('--label cannot be combined with --add-label or --remove-label')
+      if ((addLabels ?? []).some((label) => (removeLabels ?? []).includes(label))) {
+        return die('A label cannot appear in both --add-label and --remove-label')
+      }
+      body.labelPatch = { ...(addLabels ? { add: addLabels } : {}), ...(removeLabels ? { remove: removeLabels } : {}) }
+    }
     const title = valueFlag('title')
     if (title !== undefined) body.title = title
     const text = valueFlag('body', ': text, or - for stdin')
@@ -4784,7 +4817,16 @@ const commands = {
       const subject = subjectFlag(flags.subject, 'update')
       body.subject = subject === 'none' ? null : subject
     }
-    emit(named(await request('PATCH', `/api/v1/tasks/${ref}`, body)))
+    const task = named(await request('PATCH', `/api/v1/tasks/${ref}`, body))
+    if (task.labelPatch && FORMAT !== 'json') {
+      const notes = []
+      for (const [key, phrase] of [['added', 'added'], ['removed', 'removed'], ['alreadyPresent', 'already had'], ['alreadyAbsent', 'already absent']]) {
+        if (task.labelPatch[key]?.length) notes.push(`${phrase} ${task.labelPatch[key].join(', ')}`)
+      }
+      console.log(`${task.ref ?? ref} labels: ${task.labels?.join(', ') || '(none)'} (${notes.join('; ')})`)
+      return
+    }
+    emit(task)
   },
 
   async done() {
@@ -7510,6 +7552,12 @@ const commands = {
 }
 
 const command = positional.shift()
+
+if (command !== 'update') {
+  for (const name of ['add-label', 'remove-label']) {
+    if (typedFlags[name] !== undefined) die(`\`${command ?? 'help'}\` does not take --${name}; use cairn update <ref> --${name} <labels>`, 2)
+  }
+}
 
 if (flags.version || command === 'version') {
   // Asks the server too, and says when they disagree. A stale copy is

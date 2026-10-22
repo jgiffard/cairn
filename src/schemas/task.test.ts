@@ -162,3 +162,24 @@ describe('external refs', () => {
     expect(updateTaskSchema.safeParse({ externalRef: 'has space' }).success).toBe(false)
   })
 })
+
+describe('updateTaskSchema labelPatch', () => {
+  it('accepts deltas without injecting replacement labels', () => {
+    expect(updateTaskSchema.parse({ labelPatch: { add: ['a', 'a'], remove: ['b'] } })).toEqual({ labelPatch: { add: ['a', 'a'], remove: ['b'] } })
+  })
+  it('refuses replacement labels with a delta and names both fields', () => {
+    const parsed = updateTaskSchema.safeParse({ labels: [], labelPatch: { add: ['x'] } })
+    expect(parsed.success).toBe(false)
+    expect(parsed.error?.issues[0]?.message).toContain('labels and labelPatch')
+  })
+  it.each([{}, { add: [] }, { remove: [] }, { add: [], remove: [] }, { add: [''] }, { remove: ['x'.repeat(51)] }, { add: ['x'], remove: ['x'] }])('refuses invalid labelPatch %j', (labelPatch) => {
+    expect(updateTaskSchema.safeParse({ labelPatch }).success).toBe(false)
+  })
+  it('keeps the replacement label name rules and case-sensitive matching', () => {
+    for (const name of ['', 'x'.repeat(51)]) {
+      expect(updateTaskSchema.safeParse({ labels: [name] }).success).toBe(false)
+      expect(updateTaskSchema.safeParse({ labelPatch: { add: [name] } }).success).toBe(false)
+    }
+    expect(updateTaskSchema.safeParse({ labelPatch: { add: ['X'], remove: ['x'] } }).success).toBe(true)
+  })
+})

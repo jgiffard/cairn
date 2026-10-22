@@ -11,12 +11,19 @@ import { mentionsOf } from '@/lib/api/mentions'
 import { peopleByIds, resolveAssignee, withAssignee } from '@/lib/api/people'
 import { removeAttachments } from '@/lib/attachments'
 import { refuseUnreadableBody } from '@/lib/api/task-body'
+import type { TaskPatch } from '@/lib/api/task-patch'
 import { isTerminal, updateTaskSchema, RESOLUTION_KINDS } from '@/schemas/task'
 import { parseSubjectRef, refuseHandedOff } from '@/lib/api/lab-shape'
 import { isLabEnabled } from '@/lib/api/lab-settings'
 import { getSubjectByNumber, noSuchSubject, resolveSubject } from '@/lib/api/subjects'
 
 export const dynamic = 'force-dynamic'
+
+// Ordinary updates and label deltas return the same columns and database
+// normalization. Raw RPC snapshots are only for summaries and activity diffs.
+const PATCH_RESPONSE_FIELDS =
+  'id, number, title, type, status, priority, labels, assignee_user_id, resolution, resolution_kind, external_ref, external_url, subject_id, ' +
+  'handoff_tracker, handoff_ref, handoff_url, handoff_status, handoff_synced_at, updated_at'
 
 /**
  * One task, and — when the ref went through a key the project used to have —
@@ -97,7 +104,7 @@ const suggestResolution = async (taskId: string, checkpoint: unknown) => {
  * A task names the subject it is a todo of (`LAB-12`), or `null` to unlink.
  * Read only while the Lab is on (docs/lab.md).
  */
-const patchBody = updateTaskSchema.extend({ subject: z.string().trim().min(1).max(60).nullable().optional() })
+const patchBody = updateTaskSchema.safeExtend({ subject: z.string().trim().min(1).max(60).nullable().optional() })
 
 export const PATCH = route<{ ref: string }, z.infer<typeof patchBody>>({
   schema: patchBody,
@@ -167,7 +174,7 @@ export const PATCH = route<{ ref: string }, z.infer<typeof patchBody>>({
       )
     }
 
-    const patch: Record<string, unknown> = {}
+    const patch: TaskPatch = {}
     if (body.title !== undefined) patch.title = body.title
     if (body.description !== undefined) patch.description = body.description
     if (body.type !== undefined) patch.type = body.type
@@ -270,65 +277,61 @@ export const PATCH = route<{ ref: string }, z.infer<typeof patchBody>>({
       patch.resolved_by = null
     }
 
-    // Moving happens before the field update so a failure here does not leave
-    // half a change applied. It is its own operation, not a column: the
-    // number comes from the target project's counter.
+    // Resolve every requested project before any writes. Label deltas defer
+    // moves and links to the same transaction as the atomic field update.
     let moved: { ref: string; from: string } | null = null
+    let moveTarget: string | null = null
+    const current = task.project as { key?: string } | { key?: string }[] | undefined
+    const from = (Array.isArray(current) ? current[0] : current)?.key ?? ''
     if (body.project) {
       // Through a retired key too: moving work "to AC" means to the project
       // AC became, not "no such project".
       const target = (await resolveProject(body.project))?.project
-
       if (!target) return fail('not_found', `No project ${body.project}.`)
-
-      const current = task.project as { key?: string } | { key?: string }[] | undefined
-      const from = (Array.isArray(current) ? current[0] : current)?.key ?? ''
-
-      if (target.id !== (task.project_id ?? null) && from !== target.key) {
-        const { data: result, error: moveError } = await admin().rpc('move_task', {
-          p_owner: actor.userId,
-          p_task: task.id,
-          p_project: target.id,
-        })
-        if (moveError) return fail('internal_error', moveError.message)
-        const row = (result as { number: number; project_key: string }[] | null)?.[0]
-        if (row) moved = { ref: `${row.project_key}-${row.number}`, from }
-      }
+      if (target.id !== (task.project_id ?? null) && from !== target.key) moveTarget = target.id
     }
 
     // Secondary project links. Replaced wholesale, because an explicit list is
     // a statement about where this work belongs, not an addition to it.
     let alsoProjects: string[] | null = null
+    let alsoProjectIds: string[] | null = null
     if (body.alsoProjects !== undefined) {
       const requested = [...new Set((body.alsoProjects ?? []).map((k) => k.toUpperCase()))]
-
       // A retired key links the project it became, and is reported under its
       // live key so the response does not repeat the old one back as current.
       const { found, missing } = await projectsForKeys(requested)
       if (missing.length > 0) return fail('not_found', `No such project: ${missing.join(', ')}`)
       const byLive = new Map([...found.values()].map((p) => [p.key, p.id]))
-      const keys = [...byLive.keys()]
-
-      const { error: clearError } = await admin()
-        .from('task_projects')
-        .delete()
-        .eq('task_id', task.id)
-      if (clearError) return fail('internal_error', clearError.message)
-
-      if (keys.length > 0) {
-        const { error: linkError } = await admin()
-          .from('task_projects')
-          .insert(keys.map((k) => ({ task_id: task.id, project_id: byLive.get(k)! })))
-        if (linkError) {
-          // The trigger refuses a link to the task's own home project, which
-          // would list it twice in one place.
-          return fail('validation_failed', linkError.message)
-        }
+      alsoProjects = [...byLive.keys()]
+      alsoProjectIds = [...byLive.values()]
+      // The trigger refuses a link to the task's own home project, which
+      // would list it twice in one place. Refuse before doing any writes.
+      if (alsoProjectIds.includes(moveTarget ?? String(task.project_id))) {
+        return fail('validation_failed', 'A secondary project cannot be the task home project.')
       }
-      alsoProjects = keys
     }
 
-    if (Object.keys(patch).length === 0) {
+    if (!body.labelPatch) {
+      if (moveTarget) {
+        const { data: result, error: moveError } = await admin().rpc('move_task', {
+          p_owner: actor.userId, p_task: task.id, p_project: moveTarget,
+        })
+        if (moveError) return failFromDb(moveError)
+        const row = (result as { number: number; project_key: string }[] | null)?.[0]
+        if (row) moved = { ref: `${row.project_key}-${row.number}`, from }
+      }
+      if (alsoProjectIds) {
+        const { error: clearError } = await admin().from('task_projects').delete().eq('task_id', task.id)
+        if (clearError) return failFromDb(clearError)
+        if (alsoProjectIds.length > 0) {
+          const { error: linkError } = await admin().from('task_projects')
+            .insert(alsoProjectIds.map((id) => ({ task_id: task.id, project_id: id })))
+          if (linkError) return failFromDb(linkError)
+        }
+      }
+    }
+
+    if (Object.keys(patch).length === 0 && !body.labelPatch) {
       if (alsoProjects) return ok({ ...(await withAssignee(task)), alsoProjects })
       if (moved) {
         return ok({
@@ -341,13 +344,44 @@ export const PATCH = route<{ ref: string }, z.infer<typeof patchBody>>({
       return fail('validation_failed', 'No fields to update.')
     }
 
-    const { data, error } = await admin()
-      .from('tasks')
-      .update(patch)
-      .eq('id', task.id)
-      .select('id, number, title, type, status, priority, labels, assignee_user_id, resolution, resolution_kind, external_ref, external_url, subject_id, ' +
-        'handoff_tracker, handoff_ref, handoff_url, handoff_status, handoff_synced_at, updated_at')
-      .single()
+    let before: Record<string, unknown> = task
+    let labelPatch: Record<string, string[]> | undefined
+    let result
+    if (body.labelPatch) {
+      const atomic = await admin().rpc('patch_task_labels', {
+        p_task: task.id,
+        p_add: body.labelPatch.add ?? [],
+        p_remove: body.labelPatch.remove ?? [],
+        p_patch: JSON.stringify(patch),
+        p_owner: actor.userId,
+        p_project: moveTarget,
+        p_also_projects: alsoProjectIds,
+      })
+      const delta = atomic.data as {
+        before: Record<string, unknown>; after: Record<string, unknown>;
+        labelPatch: Record<string, string[]>; moved: { ref: string } | null;
+      } | null
+      if (!atomic.error && !delta) return fail('not_found', `No task ${params.ref}.`)
+      if (delta) {
+        before = delta.before
+        patch.labels = delta.after.labels
+        labelPatch = delta.labelPatch
+        if (delta.moved) moved = { ref: delta.moved.ref, from }
+      }
+      result = atomic.error ? { data: null, error: atomic.error } : await admin()
+        .from('tasks')
+        .select(PATCH_RESPONSE_FIELDS)
+        .eq('id', task.id)
+        .single()
+    } else {
+      result = await admin()
+        .from('tasks')
+        .update(patch)
+        .eq('id', task.id)
+        .select(PATCH_RESPONSE_FIELDS)
+        .single()
+    }
+    const { data, error } = result
 
     if (error?.code === '23505' && error.message.includes('tasks_external_ref_key')) {
       const { data: holder } = await admin()
@@ -374,7 +408,9 @@ export const PATCH = route<{ ref: string }, z.infer<typeof patchBody>>({
       })
     }
 
-    const events = diffTaskEvents(actor, task.id, task, patch)
+    if (!data) return fail('not_found', `No task ${params.ref}.`)
+
+    const events = diffTaskEvents(actor, task.id, before, patch)
     const reassigned = events.find((e) => e.event === 'assignee_changed')
     if (reassigned) {
       // Ids for filtering, names for reading: the feed shows who, not a uuid.
@@ -401,7 +437,10 @@ export const PATCH = route<{ ref: string }, z.infer<typeof patchBody>>({
     }
 
     const named = await withAssignee(data)
-    return ok(alsoProjects ? { ...named, alsoProjects } : named)
+    return ok({ ...named, ...(alsoProjects ? { alsoProjects } : {}),
+      ...(labelPatch ? { labelPatch } : {}),
+      ...(moved ? { ref: moved.ref, moved, note: `Ref changed from ${moved.from}-${task.number} to ${moved.ref}; anything referring to the old one is now stale.` } : {}),
+    })
   },
 })
 

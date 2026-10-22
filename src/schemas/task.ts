@@ -84,6 +84,8 @@ export const externalUrlField = z
   .url()
   .refine((value) => /^https?:\/\//i.test(value), 'an external url must be http(s)')
 
+const labelName = z.string().min(1).max(50)
+
 /**
  * Field definitions WITHOUT defaults.
  *
@@ -100,7 +102,7 @@ const taskFields = z.object({
   type: taskType,
   status: taskStatus,
   priority: taskPriority,
-  labels: z.array(z.string().min(1).max(50)).max(20),
+  labels: z.array(labelName).max(20),
   dueDate: z.string().date(),
 })
 
@@ -120,7 +122,7 @@ export const createTaskSchema = taskFields
     type: taskType.default('feature'),
     status: taskStatus.default('backlog'),
     priority: taskPriority.default('medium'),
-    labels: z.array(z.string().min(1).max(50)).max(20).default([]),
+    labels: z.array(labelName).max(20).default([]),
     /** File it under an existing task. A ref (`CAI-42`) or uuid. */
     parentRef: z.string().min(2).max(60).optional(),
     /**
@@ -157,8 +159,27 @@ export const createTaskSchema = taskFields
     })
   })
 
+/** Refuse contradictory or empty label changes before any writes. */
+const validateLabelPatch = (value: { labels?: string[]; labelPatch?: { add?: string[]; remove?: string[] } }, ctx: z.RefinementCtx) => {
+  if (!value.labelPatch) return
+  const { add = [], remove = [] } = value.labelPatch
+  if (value.labels !== undefined) {
+    ctx.addIssue({ code: 'custom', path: ['labelPatch'], message: 'labels and labelPatch cannot be combined.' })
+  }
+  if (add.length + remove.length === 0) {
+    ctx.addIssue({ code: 'custom', path: ['labelPatch'], message: 'labelPatch needs at least one name in add or remove.' })
+  }
+  if (add.some((name) => remove.includes(name))) {
+    ctx.addIssue({ code: 'custom', path: ['labelPatch'], message: 'A label cannot appear in both labelPatch.add and labelPatch.remove.' })
+  }
+}
+
 /** Partial update. No defaults, so absent fields stay absent. */
 export const updateTaskSchema = taskFields.partial().extend({
+  labelPatch: z.object({
+    add: z.array(labelName).optional(),
+    remove: z.array(labelName).optional(),
+  }).optional(),
   resolution: z.string().max(100_000).optional(),
   resolutionKind: resolutionKind.optional(),
   /**
@@ -187,7 +208,7 @@ export const updateTaskSchema = taskFields.partial().extend({
   /** Where it came from in another tool. `null` clears it. */
   externalRef: externalRefField.nullable().optional(),
   externalUrl: externalUrlField.nullable().optional(),
-})
+}).superRefine(validateLabelPatch)
 
 export const createNoteSchema = z.object({
   note: z.string().min(1).max(100_000),
