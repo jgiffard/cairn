@@ -147,3 +147,11 @@ describe('openapi spec: external refs', () => {
     expect(names).toContain('external_ref')
   })
 })
+
+it('documents run links, run metadata and the grouped runs read', () => {
+  const spec = openapiSpec()
+  const schema = spec.paths['/tasks/{ref}/activity'].post.requestBody.content['application/json'].schema
+  expect(JSON.stringify(schema)).toContain('run_link')
+  expect(JSON.stringify(schema)).toContain('"run"')
+  expect(spec.paths['/tasks/{ref}/runs'].get.responses['404']).toBeDefined()
+})

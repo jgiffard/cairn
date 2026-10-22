@@ -195,3 +195,9 @@ Requires `cairn` on PATH and a key per runtime (`~/.cairn/env`; a person pairs t
 **Exit 10: several Cairn instances, none known here.** Ask the user which, run the `cairn
 route add …` it prints, retry. Never pick one yourself. Stale/ambiguous project keys exit 10;
 use `--instance` only when certain.
+
+A runner such as Drove can link a task with
+`cairn run-link CAIRN-1 r1 --runner drove --state up --url https://runner.example/r1 --seat worker-a`.
+Tag delivery evidence with `cairn commit|push|run ... --run r1` (optional
+`--runner`, `--run-url`, repeated `--seat`). Read grouped commits, PRs and checks
+with `cairn runs CAIRN-1 --json`. Identical run-link retries return the existing row.

@@ -1558,3 +1558,9 @@ that wrote the code had already been set up in a way that hid it.
 ## Licence
 
 [MIT](./LICENSE).
+
+A runner such as Drove can link a task with
+`cairn run-link CAIRN-1 r1 --runner drove --state up --url https://runner.example/r1 --seat worker-a`.
+Tag delivery evidence with `cairn commit|push|run ... --run r1` (optional
+`--runner`, `--run-url`, repeated `--seat`). Read grouped commits, PRs and checks
+with `cairn runs CAIRN-1 --json`. Identical run-link retries return the existing row.

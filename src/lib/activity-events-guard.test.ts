@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { ACTIVITY_EVIDENCE_EVENTS } from '@/schemas/task'
 
 /**
  * The database's list of allowed activity events must contain every event the
@@ -34,7 +35,7 @@ const allowedByDatabase = () => {
 }
 
 const emittedByCode = () => {
-  const events = new Set<string>()
+  const events = new Set<string>(ACTIVITY_EVIDENCE_EVENTS)
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name)

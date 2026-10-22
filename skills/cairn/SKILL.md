@@ -103,3 +103,5 @@ Read the one you need, when you need it; the lifecycle above is enough to work.
   Work for an existing project is a task (or a parent task with children), never a Lab
   subject. A subject is an idea without a project; promote it when it becomes one.
   `cairn handoff` (work leaving this instance) is there too.
+
+Use `run-link <ref> <run-id>` for a runner such as Drove; tag `commit`, `push` and `run` with `--run <id>`. `runs <ref> --json` reads grouped delivery evidence (reference.md).

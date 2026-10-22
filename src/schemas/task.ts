@@ -216,8 +216,22 @@ export const createNoteSchema = z.object({
   facts: z.array(z.string().min(1).max(500)).max(50).optional(),
 })
 
-export const ACTIVITY_EVIDENCE_EVENTS = ['git_commit', 'git_push', 'run_result'] as const
+export const ACTIVITY_EVIDENCE_EVENTS = ['git_commit', 'git_push', 'run_result', 'run_link'] as const
 export const activityEvidenceEvent = z.enum(ACTIVITY_EVIDENCE_EVENTS)
+
+const evidenceUrl = z.string().url().max(2_000).refine(
+  (value) => /^https?:/i.test(value),
+  'expected an http: or https: URL',
+).describe('HTTP or HTTPS URL only, at most 2000 characters')
+const runSlug = z.string().regex(/^[a-z][a-z0-9-]{0,39}$/)
+export const evidenceRunSchema = z.object({
+  id: z.string().min(1).max(120).regex(/^[A-Za-z0-9._:-]+$/),
+  runner: runSlug.optional(),
+  url: evidenceUrl.optional(),
+  state: runSlug.optional(),
+  seat: z.string().max(64).optional(),
+  seats: z.array(z.string().max(64)).max(50).optional(),
+})
 
 /**
  * Structured delivery evidence agents can attach to a task timeline.
@@ -236,7 +250,8 @@ export const createActivityEvidenceSchema = z
     repo: z.string().min(1).max(300).optional(),
     branch: z.string().min(1).max(250).optional(),
     message: z.string().max(500).optional(),
-    url: z.string().url().max(2_000).optional(),
+    url: evidenceUrl.optional(),
+    run: evidenceRunSchema.optional(),
     remote: z.string().min(1).max(250).optional(),
     command: z.string().min(1).max(2_000).optional(),
     status: z.enum(['passed', 'failed', 'skipped']).optional(),
@@ -254,6 +269,9 @@ export const createActivityEvidenceSchema = z
       if (value[field] === undefined) {
         ctx.addIssue({ code: 'custom', path: [field], message: why })
       }
+    }
+    if (value.event === 'run_link' && !value.run) {
+      ctx.addIssue({ code: 'custom', path: ['run', 'id'], message: 'a run_link requires run.id' })
     }
     if (value.event === 'git_commit') require('sha', 'a git_commit must name the commit it records')
     if (value.event === 'git_push') require('sha', 'a git_push must name the commit it pushed')

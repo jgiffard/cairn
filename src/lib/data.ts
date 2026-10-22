@@ -1,3 +1,5 @@
+import { groupRuns, type TaskRun, type RunActivity } from '@/lib/runs'
+import { pool, normalizeDatabaseValue } from '@/lib/db/client'
 import { admin } from '@/lib/db/client'
 import { byTitle } from '@/lib/utils'
 import { sessionUser } from '@/lib/auth/session'
@@ -565,4 +567,15 @@ export const listRelations = async (taskId: string): Promise<Relation[]> => {
     project_key: (Array.isArray(row.project) ? row.project[0]?.key : row.project?.key) ?? '',
     direction: ids.find((i) => i.id === row.id)?.direction ?? 'blocked-by',
   }))
+}
+
+/** Filter run-tagged rows before limiting, independently of activity pagination. */
+export const listTaskRuns = async (taskId: string): Promise<TaskRun[]> => {
+  const { rows } = await pool().query(
+    `select event, data, created_at from task_activity_events
+     where task_id = $1 and data->'run'->>'id' is not null
+     order by created_at desc, id desc limit 500`,
+    [taskId],
+  )
+  return groupRuns(normalizeDatabaseValue(rows) as RunActivity[])
 }

@@ -9,6 +9,10 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- Generic run links and run-tagged delivery evidence, grouped task runs API and CLI reads, for a runner such as Drove. Run links are retry-safe; evidence URLs accept only HTTP(S).
+
 ### Fixed
 
 - **Reclaiming a task from the same agent session renews its lease** (CAIRN-425, CAIRN-420). A matching holder and `X-Cairn-Session` now succeed with `renewed: true`, preserving the attempt and ownership generation. Other sessions, callers without a session, closed tasks and open hand-offs remain refused.
