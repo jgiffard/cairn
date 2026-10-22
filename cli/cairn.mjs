@@ -1096,8 +1096,8 @@ const KNOWN_FLAGS = new Set([
   'message', 'mine', 'name', 'next', 'no-checkpoint', 'no-herdr', 'no-hooks', 'no-jobs', 'no-parent',
   'no-skill', 'no-start', 'notify', 'older',
   'orphans', 'output', 'owner', 'parent', 'platform', 'position', 'pretty', 'priority', 'project',
-  'reason', 'related', 'remote', 'repo', 'request', 'resolution', 'runtimes', 'scheduled', 'scope',
-  'session', 'show-toplevel', 'slug', 'stage', 'start', 'started', 'status', 'subject', 'summary',
+  'reason', 'related', 'remote', 'repo', 'request', 'resolution', 'run', 'run-url', 'runner', 'runtimes', 'scheduled', 'scope', 'seat',
+  'session', 'show-toplevel', 'slug', 'stage', 'start', 'started', 'state', 'status', 'subject', 'summary',
   'superseded', 'superseded-by', 'sweep', 'tag', 'task', 'tasks', 'title', 'to', 'tool-calls',
   'type', 'undo', 'unused', 'unverify', 'url', 'verified', 'version',
 ])
@@ -1122,6 +1122,10 @@ for (let i = 0; i < argv.length; i += 1) {
       const value = inline !== undefined ? inline
         : argv[i + 1] !== undefined && !argv[i + 1].startsWith('--') ? argv[++i] : true
       typedFlags[name] = [...(typedFlags[name] ?? []), value]
+    } else if (name === 'seat') {
+      const value = inline !== undefined ? inline
+        : argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : true
+      typedFlags.seat = [...(typedFlags.seat ?? []), value]
     } else if (inline !== undefined) flags[name] = inline
     else if (argv[i + 1] && !argv[i + 1].startsWith('--')) flags[name] = argv[++i]
     else flags[name] = true
@@ -1880,6 +1884,21 @@ const refreshProjectKeys = async (force) => {
 
 /** What a task route answers for `LAB-12`: the subject lives elsewhere. */
 const SUBJECT_HREF = /^\/api\/v1\/subjects\/LAB-\d+$/i
+
+const evidenceRun = (id, link = false) => {
+  if (id === undefined) return undefined
+  if (typeof id !== 'string' || !/^[A-Za-z0-9._:-]{1,120}$/.test(id)) die('run id must be 1..120 letters, digits, dots, underscores, colons or hyphens')
+  const run = { id }
+  if (flags.runner) run.runner = flags.runner
+  const url = link ? flags.url : flags['run-url']
+  if (url) run.url = url
+  if (link && flags.state) run.state = flags.state
+  if (flags.seat) {
+    if (flags.seat.some((seat) => typeof seat !== 'string' || seat.length > 64)) die('--seat needs a name of at most 64 characters')
+    run.seats = flags.seat
+  }
+  return run
+}
 
 const request = async (method, path, body, { soft = false, onError } = {}) => {
   requireKey()
@@ -2898,9 +2917,12 @@ const HELP = `cairn — agent-first task tracker and shared memory
     cairn update <ref> --also-project HM,AT      work that spans several projects
     cairn update <ref> --project OTHER      moves it; the ref changes
     cairn note <ref> "<text>"|- | --body <text|-> [--kind note|finding|decision|attempt|handoff]
+    cairn run-link <ref> <run-id> [--runner NAME] [--state STATE] [--url URL] [--seat NAME]...
+    cairn runs <ref> [--json]
     cairn commit <ref> <sha> [--repo PATH] [--branch NAME] [--message TEXT] [--url URL]
     cairn push <ref> <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
     cairn run <ref> "<command>" --status passed|failed|skipped [--exit-code N]
+    commit, push, run: [--run ID] [--runner NAME] [--run-url URL] [--seat NAME]...
                                    these three RECORD what you already did;
                                    none of them runs anything. Recording the
                                    same commit twice is one line, not two.
@@ -4841,10 +4863,27 @@ const commands = {
     return closeTask('cancelled', 'wont-fix')
   },
 
+  async 'run-link'() {
+    const ref = need(positional[0], 'usage: cairn run-link <ref> <run-id>')
+    const run = evidenceRun(need(positional[1], 'a run id is required'), true)
+    return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, { event: 'run_link', run }, {
+      onError: (payload, status) => {
+        if ([400, 422].includes(status) && /run_link|event/.test(JSON.stringify(payload))) {
+          die('This server does not support run_link; update the Cairn server and apply its migrations.')
+        }
+      },
+    }))
+  },
+
+  async runs() {
+    const ref = need(positional[0], 'usage: cairn runs <ref> [--json]')
+    return emit(await request('GET', `/api/v1/tasks/${ref}/runs`))
+  },
+
   async commit() {
     const ref = need(positional[0], 'usage: cairn commit <ref> <sha> [--repo PATH]')
     const sha = need(positional[1], 'a commit SHA is required')
-    const payload = { event: 'git_commit', sha }
+    const payload = { event: 'git_commit', sha, run: evidenceRun(flags.run) }
     if (flags.repo) payload.repo = flags.repo
     if (flags.branch) payload.branch = flags.branch
     if (flags.message) payload.message = await resolveValue(flags.message)
@@ -4855,7 +4894,7 @@ const commands = {
   async push() {
     const ref = need(positional[0], 'usage: cairn push <ref> <sha> [--repo PATH]')
     const sha = need(positional[1], 'the pushed commit SHA is required')
-    const payload = { event: 'git_push', sha }
+    const payload = { event: 'git_push', sha, run: evidenceRun(flags.run) }
     if (flags.repo) payload.repo = flags.repo
     if (flags.branch) payload.branch = flags.branch
     if (flags.remote) payload.remote = flags.remote
@@ -4870,7 +4909,7 @@ const commands = {
     if (!['passed', 'failed', 'skipped'].includes(status)) {
       die('--status must be passed, failed, or skipped')
     }
-    const payload = { event: 'run_result', command, status }
+    const payload = { event: 'run_result', command, status, run: evidenceRun(flags.run) }
     for (const [flag, field] of [['exit-code', 'exitCode'], ['duration-ms', 'durationMs']]) {
       if (flags[flag] !== undefined) payload[field] = Number(flags[flag])
     }

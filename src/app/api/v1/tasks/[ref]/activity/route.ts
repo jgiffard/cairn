@@ -1,3 +1,4 @@
+import { recordRunLink } from '@/lib/run-link'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
@@ -44,6 +45,10 @@ export const POST = route<{ ref: string }, z.infer<typeof createActivityEvidence
     if (archived) return archived
 
     const { event, ...data } = body
+    if (event === 'run_link' && data.run) {
+      const result = await recordRunLink(task.id, actor, { ...data, run: data.run })
+      return ok(result.row, { status: result.duplicate ? 200 : 201 })
+    }
     const { data: row, error } = await admin()
       .from('task_activity_events')
       .insert({

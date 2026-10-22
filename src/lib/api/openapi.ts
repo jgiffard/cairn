@@ -885,6 +885,14 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('{count, closed, children}.'), '404': errorResponse },
       },
     },
+    '/tasks/{ref}/runs': {
+      parameters: [refParam],
+      get: {
+        summary: 'Runs grouped from up to 500 run-tagged activity rows, newest lastAt first',
+        description: 'Each run has id, runner, url, state (latest run_link), seats, commits (deduped by sha), prs, checks, firstAt and lastAt. Untagged activity is ignored.',
+        responses: { '200': okResponse('Grouped runs.'), '404': errorResponse },
+      },
+    },
     '/tasks/{ref}/activity': {
       parameters: [refParam],
       get: {
@@ -898,9 +906,9 @@ export const openapiSpec = () => ({
       post: {
         summary: 'Record git delivery or command-run evidence',
         description:
-          'Appends a structured git_commit, git_push, or run_result event to the task history.',
+          'Appends a structured git_commit, git_push, run_result, or run_link event (run_link requires run.id) to the task history.',
         requestBody: body(json(createActivityEvidenceSchema)),
-        responses: { '201': okResponse('Evidence recorded.'), '404': errorResponse, '409': errorResponse },
+        responses: { '200': okResponse('Identical run_link retry; existing evidence returned.'), '201': okResponse('Evidence recorded.'), '404': errorResponse, '409': errorResponse },
       },
     },
     '/tasks/{ref}/dependencies': {

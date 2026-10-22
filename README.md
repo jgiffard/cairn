@@ -426,6 +426,9 @@ and `--resolution -` read from stdin, so long markdown stays off argv.
 | `cairn note <ref> "…" --kind attempt` | Append to the work log — `note · attempt · finding · decision · handoff`; text may be `-` or `--body` |
 | `cairn commit <ref> <sha>` · `cairn push <ref> <sha>` | Record delivery evidence in the task history |
 | `cairn run <ref> "<command>" --status passed\|failed\|skipped` | Record a command result in the task history |
+| `cairn run-link <ref> <run-id> --runner NAME --state STATE --url URL --seat NAME` | Link a runner such as Drove to the task; repeat `--seat` for multiple seats. Identical retries return the existing row |
+| `--run ID` on `commit`, `push`, `run` | Tag evidence with its run; optional `--runner`, `--run-url` and repeated `--seat` describe it |
+| `cairn runs <ref> [--json]` | Read runs grouped from delivery evidence, including commits, PRs and checks |
 | `cairn comment <ref> "…"` | Leave something for the human |
 | `cairn comment edit <ref> <id> "…"` | Rewrite a comment you wrote (ids: `cairn comments <ref>`); the server refuses anyone else's, and the comment shows an "edited" marker |
 | `cairn attach <ref> <file>` · `cairn files <ref>` | Attachments |
