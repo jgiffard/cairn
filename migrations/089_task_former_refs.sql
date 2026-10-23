@@ -49,7 +49,8 @@ begin
 
   insert into task_former_refs (project_id, number, task_id)
   values (v_old_project, v_old_number, p_task)
-  on conflict (project_id, number) do update set task_id = excluded.task_id, moved_at = now();
+  on conflict on constraint task_former_refs_pkey
+  do update set task_id = excluded.task_id, moved_at = now();
 
   update tasks set project_id = p_project, number = v_next where tasks.id = p_task;
   return query select p_task, v_next, v_key;
