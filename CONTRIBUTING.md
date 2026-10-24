@@ -104,6 +104,12 @@ Semantic versioning, and pre-1.0: the schema, API and CLI are stable in practice
 minor bump may still change them. Anything that breaks an existing install is called out
 under **Breaking** in [`CHANGELOG.md`](./CHANGELOG.md), with what to do about it.
 
+Main deploys only under an untagged version or under a version whose tag has the same
+tree as HEAD (including a merge with that tree).
+The version must also be at least as new as the newest release tag.
+Otherwise the deploy guard refuses: cut the next release with `drove release <next patch> --prepare`
+in a Drove run or `node scripts/release.mjs <next patch> --confirm`, then publish it.
+
 Cutting a release is [`scripts/release.mjs`](./scripts/release.mjs):
 
 ```bash

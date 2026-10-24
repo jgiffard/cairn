@@ -31,7 +31,7 @@ jobs:
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: [self-hosted, cairn]
-    timeout-minutes: 2
+    timeout-minutes: 5
     outputs:
       current: ${{ steps.tip.outputs.current }}
     steps:
@@ -50,6 +50,34 @@ jobs:
           else
             echo "current=false" >> "$GITHUB_OUTPUT"
             echo "::notice::main is at ${tip:0:7}; ${SHA:0:7} is superseded, and the run for ${tip:0:7} deploys it"
+          fi
+
+      # The version identifies the tag agents sync from. Check before the
+      # deploy job starts, so refusal cannot trigger its rollback either.
+      - uses: actions/checkout@v4
+        if: steps.tip.outputs.current == 'true'
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: guard deploy version
+        if: steps.tip.outputs.current == 'true'
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if message=$(node scripts/deploy-version-guard.mjs 2>&1); then
+            echo "$message"
+          else
+            # Escape workflow command data so the full refusal is annotated.
+            annotation="${message//%/%25}"
+            annotation="${annotation//$'\r'/%0D}"
+            annotation="${annotation//$'\n'/%0A}"
+            echo "::error::$annotation"
+            line="${message//$'\n'/ }"
+            sudo /usr/local/bin/cairn-discord-send "🛑 Cairn deploy refused \`${SHA:0:7}\` $line" || echo "::warning::Discord refusal notification failed"
+            exit 1
           fi
 
   deploy:
