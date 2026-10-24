@@ -653,7 +653,25 @@ time limit — needs five settings instead of the compose file's extra services:
 | `CAIRN_SSE_MAX_SECONDS=100` | nothing — App Runner ends every request at 120s, so live-update streams close first and reconnect cleanly |
 | `HOSTNAME=0.0.0.0` | nothing — the image sets it, but App Runner overrides `HOSTNAME` with the instance's name, so Next listens on one interface and the health check fails. Set it again on the service |
 
-Behind a proxy, rate limits key on the address the nearest proxy appended to
+Authenticated API calls have a bucket per key and `X-Cairn-Session`: 600 requests in a
+burst, refilling at 10 per second. Many agent sessions can share a machine's API key;
+a shared ceiling of 3000 requests, refilling at 50 per second, still bounds the whole key.
+Calls without a session share one fallback bucket on that key. Set these optional values
+in the server's environment file and restart to change the limits:
+
+| Setting | Default |
+|---|---|
+| `CAIRN_RATE_BURST` | 600 per session |
+| `CAIRN_RATE_PER_SECOND` | 10 per session |
+| `CAIRN_RATE_KEY_BURST` | 5 × the session burst (3000) |
+| `CAIRN_RATE_KEY_PER_SECOND` | 5 × the session refill (50) |
+
+Missing, non-numeric, zero or negative values fall back to those defaults; none disables
+the limit. A refused call consumes no tokens and returns 429 with matching integer
+seconds in the `Retry-After` header and JSON `retryAfter` field. The CLI waits and retries
+a 429 up to three times; the MCP server inherits this through the CLI.
+
+Behind a proxy, unauthenticated address rate limits key on the address the nearest proxy appended to
 `X-Forwarded-For` — never the first entry, which the client writes. Set
 `CAIRN_TRUSTED_PROXY_HOPS` if more than one proxy appends. Failed logins are also capped per
 account (30 in 15 minutes, looser than the per-address 8 so a known email cannot be locked

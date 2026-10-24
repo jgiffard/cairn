@@ -18,6 +18,12 @@
 #   CAIRN_ENV_FILE       the app's environment file (default: .env.local)
 #   CAIRN_ATTACHMENTS    the host directory for attachments
 #                        (default: /srv/cairn/attachments)
+#
+# Optional API rate limits, in the app's env file (read at startup):
+#   CAIRN_RATE_BURST           per-session burst (default: 600)
+#   CAIRN_RATE_PER_SECOND      per-session refill (default: 10)
+#   CAIRN_RATE_KEY_BURST       shared key ceiling (default: 5x session burst, 3000)
+#   CAIRN_RATE_KEY_PER_SECOND  shared key refill (default: 5x session refill, 50)
 # ---------------------------------------------------------------------------
 
 services:
