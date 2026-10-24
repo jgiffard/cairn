@@ -9,18 +9,19 @@ out under **Breaking** with what to do about it.
 
 ## [Unreleased]
 
+## [0.25.2] — 2026-10-24
+
 ### Added
 
 - Generic run links and run-tagged delivery evidence, grouped task runs API and CLI reads, for a runner such as Drove. Run links are retry-safe; evidence URLs accept only HTTP(S).
+- **Atomic task label changes** (CAIRN-421). `cairn update <ref> --add-label a,b --remove-label c` adds and removes labels without replacing concurrent changes; repeated flags and other update fields can be combined. PATCH accepts `labelPatch: { add, remove }` and returns the resulting labels plus `added`, `removed`, `alreadyPresent` and `alreadyAbsent` arrays. No-ops succeed without a labels activity event. Replacement `--label` keeps its existing meaning and cannot be mixed with these flags. Migration 086 applies the delta and other requested fields in a transaction, preserving order and refusing results above 20 labels.
 
 ### Fixed
 
 - **Agent sessions sharing one API key no longer crowd each other out** (CAIRN-432). Higher, configurable API limits give each session its own bucket under a shared per-key ceiling. A 429 includes `Retry-After` as well as JSON `retryAfter`; the CLI now waits and retries up to three times, which also covers the MCP server that shells out to it.
 - **Reclaiming a task from the same agent session renews its lease** (CAIRN-425, CAIRN-420). A matching holder and `X-Cairn-Session` now succeed with `renewed: true`, preserving the attempt and ownership generation. Other sessions, callers without a session, closed tasks and open hand-offs remain refused.
-
-### Added
-
-- **Atomic task label changes** (CAIRN-421). `cairn update <ref> --add-label a,b --remove-label c` adds and removes labels without replacing concurrent changes; repeated flags and other update fields can be combined. PATCH accepts `labelPatch: { add, remove }` and returns the resulting labels plus `added`, `removed`, `alreadyPresent` and `alreadyAbsent` arrays. No-ops succeed without a labels activity event. Replacement `--label` keeps its existing meaning and cannot be mixed with these flags. Migration 086 applies the delta and other requested fields in a transaction, preserving order and refusing results above 20 labels.
+- **The CLI's staleness warning now names a command that updates the file that is running** (CAIRN-435, CAIRN-437). The agent-files job writes only `~/.local/bin/cairn` and the managed copies, so for any other file the old `launchctl kickstart` advice changed nothing; the warning now says so and names the managed copy to run or copy over it. A managed copy, or a symlink to one, still gets the per-host command, and the same release with the same CLI hash stays silent whatever the server's build commit says.
+- **Deploys refuse to reuse a release version for a different tree** (CAIRN-435, CAIRN-436). The version guard runs before the deploy job starts, keeping the server's advertised CLI and the files agents sync from its tag in step; cut and publish the next release to deploy new code.
 
 ## [0.25.1] — 2026-10-16
 
@@ -2244,7 +2245,8 @@ which it became something somebody else could reasonably run.
   vitals, sweep transcripts from runtimes that have no session-end event.
 - Backup and restore-drill scripts, because an untested backup is not a backup.
 
-[Unreleased]: https://github.com/montytorr/cairn/compare/v0.25.1...HEAD
+[Unreleased]: https://github.com/montytorr/cairn/compare/v0.25.2...HEAD
+[0.25.2]: https://github.com/montytorr/cairn/compare/v0.25.1...v0.25.2
 [0.25.1]: https://github.com/montytorr/cairn/compare/v0.25.0...v0.25.1
 [0.25.0]: https://github.com/montytorr/cairn/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/montytorr/cairn/compare/v0.23.0...v0.24.0
