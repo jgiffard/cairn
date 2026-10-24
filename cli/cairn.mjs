@@ -313,6 +313,57 @@ const neverReachedInstance = (name) => {
 }
 
 /**
+ * A 429 is refused before any route handler runs, so waiting it out and
+ * sending the same request again is safe for every verb, writes included.
+ *
+ * A machine's agents share one API key's limits, and a single 429 used to
+ * become a failed `cairn add`. Wait what the server asks (the Retry-After
+ * header, else the JSON `retryAfter`, else 1s), never longer than the cap so a
+ * huge value cannot hang a session-end hook, plus up to 50% jitter so agents
+ * that were refused together do not come back together. Counted apart from
+ * RETRIES: a restarting container and a busy bucket are different problems.
+ *
+ * Function declarations, not consts: the project-key refresh near the top of
+ * the file runs before the constants further down are initialised.
+ */
+function rateRetries() { return 3 }
+function rateWaitMs(retryAfterSeconds) {
+  const cap = Number(process.env.CAIRN_RATE_RETRY_MAX_MS ?? 5_000)
+  const base = Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0 ? retryAfterSeconds * 1000 : 1_000
+  return Math.min(base * (1 + Math.random() * 0.5), cap)
+}
+/** Seconds the server asked for, from the header first; reads the body only without one. */
+async function rateRetryAfter(res) {
+  const header = res.headers.get('retry-after')
+  if (header !== null && header.trim() !== '' && Number.isFinite(Number(header))) {
+    await res.body?.cancel().catch(() => {})
+    return Number(header)
+  }
+  try {
+    const seconds = Number(JSON.parse(await res.text())?.retryAfter)
+    return Number.isFinite(seconds) ? seconds : NaN
+  } catch {
+    return NaN
+  }
+}
+/** Sleeps for the wait a 429 asked for; resolves early when `signal` aborts. */
+async function waitOutRateLimit(res, signal) {
+  const ms = rateWaitMs(await rateRetryAfter(res))
+  await new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true })
+  })
+}
+/** `fetch` that waits and retries a 429. `send` builds a fresh request each attempt. */
+async function fetchRateLimited(send, signal) {
+  for (let limited = 0; ; limited += 1) {
+    const res = await send()
+    if (res.status !== 429 || limited >= rateRetries() || signal?.aborted) return res
+    await waitOutRateLimit(res, signal)
+  }
+}
+
+/**
  * A fixed, short budget for finding out whether a stale cache is merely old
  * or genuinely unreachable, tried only for instances resolveRoute already
  * knows are stale. Not CAIRN_DEADLINE_MS: that constant is not defined yet
@@ -346,10 +397,11 @@ const refreshInstanceKeysFor = async (name, instances) => {
   const key = env.CAIRN_API_KEY || Object.entries(env).find(([k]) => k.startsWith('CAIRN_API_KEY_'))?.[1]
   if (!key) return false
   try {
-    const res = await fetch(`${url}/api/v1/projects`, {
-      headers: { Authorization: `Bearer ${key}` },
-      signal: AbortSignal.timeout(ROUTE_REFRESH_TIMEOUT_MS),
-    })
+    const signal = AbortSignal.timeout(ROUTE_REFRESH_TIMEOUT_MS)
+    const res = await fetchRateLimited(
+      () => fetch(`${url}/api/v1/projects`, { headers: { Authorization: `Bearer ${key}` }, signal }),
+      signal,
+    )
     if (!res.ok) return false
     const payload = await res.json()
     if (!payload?.success || !Array.isArray(payload.data)) return false
@@ -1762,7 +1814,8 @@ const flushOutbox = async () => withReplayLock(async () => {
       haltDrain = true
       break // still unreachable
     }
-    if (TRANSIENT.has(res.status)) {
+    // A 429 is the server asking for time, not refusing the write: keep it queued.
+    if (TRANSIENT.has(res.status) || res.status === 429) {
       haltDrain = true
       break
     }
@@ -1864,11 +1917,12 @@ const refreshProjectKeys = async (force) => {
     // Active projects only, with the keys they used to have. An archived
     // project is history: when a project moves to another instance, the copy
     // left behind is archived, and it must not keep claiming the moved refs.
-    const res = await fetch(`${BASE}/api/v1/projects`, {
-      headers: authHeaders(),
-      // A hint, so never allowed to hold up the answer longer than the answer itself could.
-      signal: AbortSignal.timeout(Math.min(DEADLINE_MS, 3_000)),
-    })
+    // A hint, so never allowed to hold up the answer longer than the answer itself could.
+    const signal = AbortSignal.timeout(Math.min(DEADLINE_MS, 3_000))
+    const res = await fetchRateLimited(
+      () => fetch(`${BASE}/api/v1/projects`, { headers: authHeaders(), signal }),
+      signal,
+    )
     const payload = await res.json()
     if (!payload?.success || !Array.isArray(payload.data)) return
     const keys = [...new Set(payload.data.flatMap((p) => [p.key, ...(p.former_keys ?? []).map((f) => f.key)]).filter(Boolean))]
@@ -1916,6 +1970,7 @@ const request = async (method, path, body, { soft = false, onError } = {}) => {
     if (isCheckpoint) body.checkpointVersion = taskState.checkpointVersion
   }
   let res
+  let rateLimited = 0
   const startedAt = Date.now()
   const spent = () => Date.now() - startedAt
 
@@ -1951,6 +2006,15 @@ const request = async (method, path, body, { soft = false, onError } = {}) => {
         return giveUp(`${BASE} returned ${res.status} — it is probably restarting`)
       }
       await sleep(500 * 2 ** attempt)
+      continue
+    }
+    // Not an outage, so it neither uses up RETRIES nor the write deadline, and
+    // it is never put in the outbox: after the last retry the server's own
+    // error is reported below, with a non-zero exit.
+    if (res.status === 429 && rateLimited < rateRetries()) {
+      rateLimited += 1
+      await waitOutRateLimit(res)
+      attempt -= 1
       continue
     }
     break
@@ -2077,14 +2141,17 @@ const upload = async (path, filePath) => {
   requireKey()
   if (!existsSync(filePath)) die(`no such file: ${filePath}`)
 
-  const form = new FormData()
-  // Let fetch set the multipart boundary; do not send a Content-Type header.
-  form.append('file', new Blob([readFileSync(filePath)], { type: mimeOf(filePath) }), basename(filePath))
-
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: form,
+  const bytes = readFileSync(filePath)
+  // A body is spent by one attempt, so each retry builds its own form.
+  const res = await fetchRateLimited(() => {
+    const form = new FormData()
+    // Let fetch set the multipart boundary; do not send a Content-Type header.
+    form.append('file', new Blob([bytes], { type: mimeOf(filePath) }), basename(filePath))
+    return fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: form,
+    })
   }).catch((error) => die(`cannot reach ${BASE}: ${error.message}`))
 
   const payload = await res.json().catch(() => null)
