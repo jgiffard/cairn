@@ -54,6 +54,10 @@ const errorResponse = {
               'Present on resolution_required. Drawn from the last checkpoint or most ' +
               'recent finding note, so the caller can confirm rather than invent.',
           },
+          retryAfter: {
+            type: 'integer', minimum: 1,
+            description: 'Present on rate_limited: seconds to wait before retrying.',
+          },
           problems: {
             type: 'array',
             items: { type: 'string' },
@@ -67,6 +71,33 @@ const errorResponse = {
       },
     },
   },
+}
+
+const rateLimitedResponse = {
+  ...errorResponse,
+  description: 'Session budget or shared key ceiling exceeded. Wait before retrying.',
+  headers: {
+    'Retry-After': {
+      description: 'Whole seconds to wait, equal to the JSON retryAfter field.',
+      schema: { type: 'integer', minimum: 1 },
+    },
+  },
+}
+
+// Every authenticated operation goes through the same rate-limited wrapper.
+// Explicitly unauthenticated operations keep their separate address limits.
+const withRateLimitResponses = <T extends Record<string, object>>(paths: T): T => {
+  for (const path of Object.values(paths)) {
+    for (const method of ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']) {
+      const operation = (path as Record<string, {
+        security?: unknown[]; responses?: Record<string, unknown>
+      }>)[method]
+      if (operation?.responses && operation.security?.length !== 0) {
+        operation.responses['429'] = rateLimitedResponse
+      }
+    }
+  }
+  return paths
 }
 
 /**
@@ -470,6 +501,14 @@ export const openapiSpec = () => ({
       'an estimated token cost, so you can open only what matters. Do not re-debug',
       'something already answered.',
       '',
+      '## Rate limits',
+      '',
+      'Authenticated calls use a bucket per API key and `X-Cairn-Session` (600 burst,',
+      '10 requests/second), under a shared key ceiling (3000 burst, 50/second).',
+      'Calls without a session share one fallback bucket on that key. Limits are',
+      'configurable at server startup. A 429 includes integer seconds in both',
+      '`Retry-After` and JSON `retryAfter`; wait that long before retrying.',
+      '',
       '## Closing a task',
       '',
       '`done` and `cancelled` are refused without a `resolution`. The rejection includes',
@@ -506,7 +545,7 @@ export const openapiSpec = () => ({
       },
     },
   },
-  paths: {
+  paths: withRateLimitResponses({
     '/health': {
       get: {
         summary: 'Liveness probe',
@@ -1761,6 +1800,6 @@ export const openapiSpec = () => ({
       },
     },
     ...labPaths({ json, body, okResponse, errorResponse }),
-  },
+  }),
   'x-resolution-kinds': [...RESOLUTION_KINDS],
 })

@@ -96,11 +96,11 @@ export const route = <P = Record<string, string>, B = unknown>(config: Config<P,
         return fail('forbidden', 'Browser mutations must come from the Cairn origin.')
       }
 
-      const limit = checkRateLimit(actor.rateKey)
+      const limit = checkRateLimit(actor.rateKey, actor.sessionId)
       if (!limit.allowed) {
         return fail('rate_limited', `Too many requests. Retry in ${limit.retryAfter}s.`, {
           retryAfter: limit.retryAfter,
-        })
+        }, { headers: { 'Retry-After': String(limit.retryAfter) } })
       }
 
       let body = {} as B

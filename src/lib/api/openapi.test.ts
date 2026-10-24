@@ -67,6 +67,26 @@ describe('openapi spec', () => {
     expect(spec.paths['/health'].get.security).toEqual([])
   })
 
+  it('documents Retry-After on authenticated 429 responses without changing unauthenticated responses', () => {
+    for (const methods of Object.values(spec.paths)) {
+      for (const method of ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']) {
+        const operation = (methods as Record<string, {
+          security?: unknown[]; responses?: Record<string, unknown>
+        }>)[method]
+        if (!operation?.responses) continue
+        if (operation.security?.length === 0) {
+          expect(operation.responses['429'] ?? {}).not.toHaveProperty('headers.Retry-After')
+        } else {
+          expect(operation.responses['429']).toMatchObject({
+            headers: {
+              'Retry-After': { schema: { type: 'integer', minimum: 1 } },
+            },
+          })
+        }
+      }
+    }
+  })
+
   it('documents suggestedResolution on the failure envelope', () => {
     const err = spec.paths['/tasks/{ref}'].patch.responses['400'].content['application/json']
       .schema as { properties: Record<string, unknown> }

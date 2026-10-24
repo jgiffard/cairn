@@ -15,6 +15,7 @@ out under **Breaking** with what to do about it.
 
 ### Fixed
 
+- **Agent sessions sharing one API key no longer crowd each other out** (CAIRN-432). Higher, configurable API limits give each session its own bucket under a shared per-key ceiling. A 429 includes `Retry-After` as well as JSON `retryAfter`; the CLI now waits and retries up to three times, which also covers the MCP server that shells out to it.
 - **Reclaiming a task from the same agent session renews its lease** (CAIRN-425, CAIRN-420). A matching holder and `X-Cairn-Session` now succeed with `renewed: true`, preserving the attempt and ownership generation. Other sessions, callers without a session, closed tasks and open hand-offs remain refused.
 
 ### Added
