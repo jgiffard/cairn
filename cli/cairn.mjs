@@ -1276,18 +1276,44 @@ const installedAt = () => {
   }
 }
 
+const realOrSelf = (path) => {
+  try { return realpathSync(path) } catch { return path }
+}
+
+const shellQuote = (path) => (/^[\w@%+=:,./-]+$/.test(path) ? path : `'${path.replaceAll("'", "'\\''")}'`)
+
+/** Copies the agent-files job writes: ~/.local/bin/cairn plus the managed paths (scripts/sync-agent-files.mjs). */
+const managedCopies = () => [join(homedir(), '.local/bin/cairn'), ...managedCliPaths()]
+
 /**
- * The exact command that brings this machine's copy up to date, chosen by what
- * is installed here rather than by a guess about which host this is.
+ * The exact command that brings the RUNNING file up to date, chosen by what is
+ * installed here rather than by a guess about which host this is. The agent-files
+ * job writes only its own copies, so for any other file its command changes nothing.
  */
 const updateCommand = () => {
+  const running = process.argv[1]
+  let managed = true
+  try {
+    if (running) {
+      const real = realOrSelf(running)
+      managed = managedCopies().some((p) => realOrSelf(p) === real)
+    }
+  } catch {
+    managed = true
+  }
+  if (!managed) {
+    const target = managedCopies().find((p) => existsSync(p))
+    return target
+      ? `this file is not one the agent-files job updates — run ${shellQuote(target)} instead, or after the sync copy it over this one: cp ${shellQuote(target)} ${shellQuote(running)}`
+      : `this file is not one the agent-files job updates — copy cli/cairn.mjs from the deployed commit over ${shellQuote(running)}`
+  }
   const home = homedir()
   const agent = join(home, 'Library/LaunchAgents/com.cairn.agent-files.plist')
   if (process.platform === 'darwin' && existsSync(agent)) {
     return `launchctl kickstart gui/${process.getuid()}/com.cairn.agent-files`
   }
   const own = join(home, '.cairn/maintenance/install-cron.mjs')
-  if (existsSync(own)) return `node ${own} --run agent-files`
+  if (existsSync(own)) return `node ${shellQuote(own)} --run agent-files`
   // The server's job lives in root's crontab, which is the one --run reads.
   const shared = '/opt/cairn-maintenance/install-cron.mjs'
   if (existsSync(shared)) {
@@ -1295,9 +1321,9 @@ const updateCommand = () => {
   }
   const sync = join(home, '.cairn/maintenance/sync-agent-files.mjs')
   if (existsSync(sync)) {
-    return `node ${sync} --source release`
+    return `node ${shellQuote(sync)} --source release`
   }
-  return `copy cli/cairn.mjs from the deployed commit over ${process.argv[1] ?? 'this file'}`
+  return `copy cli/cairn.mjs from the deployed commit over ${shellQuote(running ?? 'this file')}`
 }
 
 /** One line, or null when the two agree or the server offers nothing to compare. */
