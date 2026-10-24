@@ -298,7 +298,11 @@ describe('which side of a drift is newer', () => {
     const agent = join(home, 'Library/LaunchAgents/com.cairn.agent-files.plist')
     await mkdir(dirname(agent), { recursive: true })
     await writeFile(agent, '')
-    const { stderr } = await run('node', [CLI, 'projects'], { PATH: BASE_PATH, HOME: home, CAIRN_BASE_URL: base })
+    // The job only updates the copies it writes, so run one of those.
+    const managed = join(home, '.local/bin/cairn')
+    await mkdir(dirname(managed), { recursive: true })
+    await writeFile(managed, await readFile(CLI, 'utf8'))
+    const { stderr } = await run('node', [managed, 'projects'], { PATH: BASE_PATH, HOME: home, CAIRN_BASE_URL: base })
     expect(stderr).toContain(
       process.platform === 'darwin'
         ? 'launchctl kickstart gui/'
