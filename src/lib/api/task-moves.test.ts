@@ -10,42 +10,29 @@ type Tables = {
   project_former_keys: Record<string, unknown>[]
   task_former_refs: Record<string, unknown>[]
 }
-const scope = globalThis as typeof globalThis & { __cairnPool?: unknown; __cairnJsonColumns?: unknown }
-let prior: { pool: unknown; json: unknown }
-let statements: { sql: string; values: unknown[] }[] = []
+const scope = globalThis as typeof globalThis & { __cairnPool?: unknown }
+let prior: unknown
 
+// The one query lookupMovedRef sends, answered from the tables: the key names
+// a project by its live key or a retired one, then the alias by number.
 const install = (tables: Tables) => {
-  statements = []
-  scope.__cairnJsonColumns = Promise.resolve(new Set<string>())
   scope.__cairnPool = {
-    connect: async () => ({
-      query: async (sql: string, values: unknown[] = []) => {
-        statements.push({ sql, values })
-        if (/from "task_former_refs"/.test(sql)) {
-          const rows = tables.task_former_refs.filter(
-            (row) => row.project_id === values[0] && row.number === values[1],
-          )
-          return { rows, rowCount: rows.length }
-        }
-        const table = /from "project_former_keys"/.test(sql) ? 'project_former_keys' : 'projects'
-        const rows = tables[table].filter((row) => {
-          if (/\."key" = \$1/.test(sql)) return row.key === values[0]
-          if (/\."id" = \$1/.test(sql)) return row.id === values[0]
-          return true
-        })
-        return { rows, rowCount: rows.length }
-      },
-      release: () => {},
-    }),
+    query: async (_sql: string, [key, number]: [string, number]) => {
+      const projects = new Set([
+        ...tables.projects.filter((row) => row.key === key).map((row) => row.id),
+        ...tables.project_former_keys.filter((row) => row.key === key).map((row) => row.project_id),
+      ])
+      const rows = tables.task_former_refs.filter((row) => projects.has(row.project_id) && row.number === number)
+      return { rows, rowCount: rows.length }
+    },
   }
 }
 
 beforeEach(() => {
-  prior = { pool: scope.__cairnPool, json: scope.__cairnJsonColumns }
+  prior = scope.__cairnPool
 })
 afterEach(() => {
-  scope.__cairnPool = prior.pool
-  scope.__cairnJsonColumns = prior.json
+  scope.__cairnPool = prior
 })
 
 const TABLES: Tables = {
