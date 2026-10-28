@@ -80,10 +80,10 @@ export const ok = <T>(data: T, init?: ResponseInit) =>
  * enum value, the list of valid ones. An agent that gets told what is
  * acceptable can retry correctly; one that just gets "400" cannot.
  */
-export const fail = (code: ApiError, error: string, extra?: Record<string, unknown>) =>
+export const fail = (code: ApiError, error: string, extra?: Record<string, unknown>, init?: ResponseInit) =>
   NextResponse.json(
     { success: false, error, code, ...extra },
-    withVersion({ status: STATUS[code] }),
+    withVersion({ ...init, status: STATUS[code] }),
   )
 
 export const failValidation = (issues: unknown) =>
